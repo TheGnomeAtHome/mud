@@ -73,13 +73,6 @@ mud/
    - `inventory` - Check your items
    - `help` - See all commands
 
-## 🤖 Bot Commands (Admin Only)
-
-- `startbots [count]` - Spawn test bots (default: 3)
-- `stopbots` - Stop bot activity
-- `listbots` - View active bots
-- `killbots` - Remove all bots
-
 ## 🔧 Development Setup
 
 1. Clone the repository:
