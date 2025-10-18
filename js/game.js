@@ -1649,7 +1649,8 @@ export function initializeGameLogic(dependencies) {
                                 transaction.update(targetPlayerRef, {
                                     roomId: 'start',
                                     hp: defenderData.maxHp,
-                                    money: Math.floor((defenderData.money || 0) * 0.9)
+                                    money: Math.floor((defenderData.money || 0) * 0.9),
+                                    inventory: [] // Clear inventory on death
                                 });
                                 
                                 // Notify defender
@@ -1657,7 +1658,7 @@ export function initializeGameLogic(dependencies) {
                                     senderId: 'system',
                                     senderName: 'System',
                                     roomId: 'start',
-                                    text: `You were defeated by ${playerName}! You lost 10% of your gold.`,
+                                    text: `You were defeated by ${playerName}! You lost all your items and 10% of your gold.`,
                                     timestamp: serverTimestamp()
                                 });
                                 
@@ -1701,11 +1702,12 @@ export function initializeGameLogic(dependencies) {
                                 }
                                 
                                 if (!attackerDodged && newAttackerHp <= 0) {
-                                    combatMessages.push({ msg: `You have been defeated! You respawn at the Nexus.`, type: 'error' });
+                                    combatMessages.push({ msg: `You have been defeated! You respawn at the Nexus and lose all your items.`, type: 'error' });
                                     transaction.update(attackerRef, {
                                         roomId: 'start',
                                         hp: attackerData.maxHp,
-                                        money: Math.floor((attackerData.money || 0) * 0.9)
+                                        money: Math.floor((attackerData.money || 0) * 0.9),
+                                        inventory: [] // Clear inventory on death
                                     });
                                 } else {
                                     transaction.update(attackerRef, { hp: newAttackerHp });
@@ -1916,11 +1918,12 @@ export function initializeGameLogic(dependencies) {
                         }
 
                         if (!playerDodged && newPlayerHp <= 0) {
-                            combatMessages.push({ msg: `You have been defeated! You respawn at the Nexus with a gold penalty.`, type: 'error' });
+                            combatMessages.push({ msg: `You have been defeated! You respawn at the Nexus and lose all your items.`, type: 'error' });
                             transaction.update(playerRef, {
                                 roomId: 'start',
                                 hp: playerData.maxHp,
-                                money: Math.floor((playerData.money || 0) * 0.9)
+                                money: Math.floor((playerData.money || 0) * 0.9),
+                                inventory: [] // Clear inventory on death
                             });
                         } else {
                             transaction.update(playerRef, { hp: newPlayerHp });
