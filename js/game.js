@@ -872,6 +872,50 @@ export function initializeGameLogic(dependencies) {
                     logToTerminal(`(Container system not yet implemented - will allow item storage in future updates)`, 'game');
                     break;
 
+                case 'spellbook':
+                    // Spellbook - teaches a spell when used
+                    const teachSpell = specialData.teachSpell; // spell ID to teach
+                    if (!teachSpell) {
+                        logToTerminal(`${itemData.name} appears to be blank.`, 'error');
+                        break;
+                    }
+
+                    // Check if spell exists
+                    const spellToLearn = gameSpells[teachSpell];
+                    if (!spellToLearn) {
+                        logToTerminal(`${itemData.name} contains unknown magic.`, 'error');
+                        break;
+                    }
+
+                    // Check if player already knows the spell
+                    const currentKnownSpells = playerData.knownSpells || [];
+                    if (currentKnownSpells.includes(teachSpell)) {
+                        logToTerminal(`You already know ${spellToLearn.name}. The book's magic fades.`, 'game');
+                        // Still consume the item
+                        const updatedInv = playerData.inventory.filter(item => 
+                            item.id !== inventoryItem.id || item.name !== inventoryItem.name
+                        );
+                        await updateDoc(playerRef, { inventory: updatedInv });
+                        break;
+                    }
+
+                    // Teach the spell
+                    await updateDoc(playerRef, {
+                        knownSpells: arrayUnion(teachSpell),
+                        inventory: playerData.inventory.filter(item => 
+                            item.id !== inventoryItem.id || item.name !== inventoryItem.name
+                        )
+                    });
+
+                    logToTerminal(`You study ${itemData.name} intently. The magical words burn themselves into your mind!`, 'system');
+                    logToTerminal(`You have learned ${spellToLearn.name}!`, 'success');
+                    logToTerminal(`${spellToLearn.description}`, 'game');
+                    logToTerminal(`MP Cost: ${spellToLearn.mpCost} | Target: ${spellToLearn.targetType}`, 'game');
+                    
+                    // The book is consumed after learning
+                    logToTerminal(`The book crumbles to dust as its knowledge transfers to you.`, 'system');
+                    break;
+
                 default:
                     logToTerminal(`You're not sure how to use ${itemData.name}.`, 'error');
             }
