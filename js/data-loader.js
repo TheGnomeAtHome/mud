@@ -11,7 +11,8 @@ export function initializeDataLoader(firebase, appId) {
         gamePlayers: {},
         activeMonsters: {},
         gameClasses: {},
-        gameSpells: {}
+        gameSpells: {},
+        gameGuilds: {}
     };
     
     const unsubscribers = [];
@@ -33,7 +34,7 @@ export function initializeDataLoader(firebase, appId) {
         isLoading = true;
         loadPromise = new Promise((resolve, reject) => {
             let loadedCount = 0;
-            const expectedCount = 8;
+            const expectedCount = 9;
             
             function checkComplete() {
                 loadedCount++;
@@ -117,6 +118,16 @@ export function initializeDataLoader(firebase, appId) {
                 checkComplete();
             }, reject);
             unsubscribers.push(spellsUnsub);
+            
+            // Load guilds
+            const guildsUnsub = onSnapshot(collection(db, `/artifacts/${appId}/public/data/mud-guilds`), (snapshot) => {
+                gameData.gameGuilds = {};
+                snapshot.forEach(doc => {
+                    gameData.gameGuilds[doc.id] = { id: doc.id, ...doc.data() };
+                });
+                checkComplete();
+            }, reject);
+            unsubscribers.push(guildsUnsub);
         });
         
         return loadPromise;

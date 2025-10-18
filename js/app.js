@@ -332,7 +332,7 @@ export async function initializeApp() {
             return;
         }
         
-        const { gameWorld, gameItems, gameNpcs, gameMonsters, gamePlayers, activeMonsters, gameClasses, gameSpells } = dataLoader.gameData;
+        const { gameWorld, gameItems, gameNpcs, gameMonsters, gamePlayers, activeMonsters, gameClasses, gameSpells, gameGuilds } = dataLoader.gameData;
         
         // Check if player should be admin - either already is, or if there are no admins
         let shouldBeAdmin = playerData.isAdmin || false;
@@ -385,6 +385,7 @@ export async function initializeApp() {
             gamePlayers,
             activeMonsters,
             gameSpells,
+            gameGuilds,
             logToTerminal,
             callGeminiForText,
             parseCommandWithGemini,

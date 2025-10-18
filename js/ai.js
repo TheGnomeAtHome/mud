@@ -68,7 +68,7 @@ export async function parseCommandWithGemini(command, logToTerminal) {
 User command: "${command}"
 
 Rules:
-- The action must be one of: "go", "get", "drop", "examine", "say", "buy", "attack", "ask_dm", "talk", "ask_npc", "look", "inventory", "who", "score", "stats", "help", "logout", "use", "drink", "consume", "eat", "read", "cast", "spells", "spell", "learn", "unknown"
+- The action must be one of: "go", "get", "drop", "examine", "say", "buy", "attack", "ask_dm", "talk", "ask_npc", "look", "inventory", "who", "score", "stats", "help", "logout", "use", "drink", "consume", "eat", "read", "cast", "spells", "spell", "learn", "guild", "guilds", "gc", "unknown"
 - For movement: "go north" -> {"action": "go", "target": "north"}
 - For items: "get torch" -> {"action": "get", "target": "torch"}
 - For NPCs: "talk to guard" -> {"action": "talk", "npc_target": "guard"}
@@ -85,6 +85,10 @@ Rules:
 - For spells: "cast fireball goblin" -> {"action": "cast", "target": "fireball", "npc_target": "goblin"}
 - For learning: "learn fireball" -> {"action": "learn", "target": "fireball"}
 - For spell list: "spells" -> {"action": "spells"}
+- For guilds: "guild" -> {"action": "guild"}
+- For guilds: "guild create Dragons" -> {"action": "guild", "target": "create", "npc_target": "Dragons"}
+- For guilds: "guild invite John" -> {"action": "guild", "target": "invite", "npc_target": "John"}
+- For guild chat: "gc Hello everyone" -> {"action": "gc", "target": "Hello everyone"}
 - Accept synonyms: "purchase"="buy", "fight"="attack", "speak"="talk", "consume"="use", "eat"="use", "drink"="use", "magic"="spells"
 
 Respond with ONLY valid JSON in this exact format:

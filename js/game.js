@@ -13,6 +13,7 @@ export function initializeGameLogic(dependencies) {
         gamePlayers,
         activeMonsters,
         gameSpells,
+        gameGuilds,
         logToTerminal,
         callGeminiForText,
         parseCommandWithGemini,
@@ -1324,6 +1325,13 @@ export function initializeGameLogic(dependencies) {
                     logToTerminal(`=== ${targetPlayer.name} ===`, 'system');
                     logToTerminal(`Level ${targetPlayer.level || 1} ${targetPlayer.class || 'Adventurer'}`, 'game');
                     
+                    // Show guild if in one
+                    if (targetPlayer.guildId && gameGuilds[targetPlayer.guildId]) {
+                        const playerGuild = gameGuilds[targetPlayer.guildId];
+                        const guildRank = playerGuild.members[Object.keys(gamePlayers).find(id => gamePlayers[id].name === targetPlayer.name)]?.rank || 'member';
+                        logToTerminal(`Guild: ${playerGuild.name} (${guildRank})`, 'game');
+                    }
+                    
                     // Show HP status
                     const hpPercent = ((targetPlayer.hp || 0) / (targetPlayer.maxHp || 100)) * 100;
                     let healthStatus = 'Healthy';
@@ -1960,11 +1968,17 @@ export function initializeGameLogic(dependencies) {
                     const playerClass = player.class || 'Adventurer';
                     const playerRace = player.race || 'Human';
                     
+                    // Show guild tag if in a guild
+                    let guildTag = '';
+                    if (player.guildId && gameGuilds[player.guildId]) {
+                        guildTag = ` <${gameGuilds[player.guildId].name}>`;
+                    }
+                    
                     let hpColor = 'game';
                     if (hpPercent < 30) hpColor = 'error';
                     else if (hpPercent < 70) hpColor = 'combat-log';
                     
-                    logToTerminal(`${player.name}${isBot} - ${playerRace} ${playerClass} - Level ${player.level} ${levelName} - HP: ${hp}/${maxHp} - ${roomName}`, hpColor);
+                    logToTerminal(`${player.name}${isBot}${guildTag} - ${playerRace} ${playerClass} - Level ${player.level} ${levelName} - HP: ${hp}/${maxHp} - ${roomName}`, hpColor);
                 });
                 break;
             case 'ask_dm':
@@ -2420,6 +2434,335 @@ export function initializeGameLogic(dependencies) {
                     logToTerminal("Error loading news feed.", 'error');
                 }
                 break;
+            
+            // ===== GUILD COMMANDS =====
+            case 'guild':
+            case 'guilds':
+                // Main guild command - show guild info or subcommands
+                if (!target) {
+                    // Show player's guild info or available commands
+                    const pDocGuild = await getDoc(playerRef);
+                    const pDataGuild = pDocGuild.data();
+                    const playerGuildId = pDataGuild.guildId;
+                    
+                    if (playerGuildId) {
+                        const guild = gameGuilds[playerGuildId];
+                        if (guild) {
+                            logToTerminal(`=== ${guild.name} ===`, 'system');
+                            logToTerminal(`${guild.description || 'A mighty guild'}`, 'game');
+                            logToTerminal(`Leader: ${guild.leader}`, 'game');
+                            logToTerminal(`Members: ${Object.keys(guild.members || {}).length}`, 'game');
+                            logToTerminal(`Treasury: ${guild.treasury || 0} gold`, 'game');
+                            if (guild.motto) logToTerminal(`Motto: "${guild.motto}"`, 'game');
+                            
+                            logToTerminal(`\nMembers:`, 'system');
+                            Object.entries(guild.members || {}).forEach(([memberId, memberData]) => {
+                                const rankSymbol = memberData.rank === 'leader' ? '👑' : memberData.rank === 'officer' ? '⭐' : '•';
+                                logToTerminal(`${rankSymbol} ${memberData.name} (${memberData.rank})`, 'game');
+                            });
+                        } else {
+                            logToTerminal("Your guild data seems corrupted.", 'error');
+                        }
+                    } else {
+                        logToTerminal("You are not in a guild.", 'game');
+                        logToTerminal("Commands: 'guild create [name]', 'guild list'", 'system');
+                    }
+                } else {
+                    // Handle subcommands
+                    const subCommand = target.toLowerCase();
+                    const guildArg = npc_target || "";
+                    
+                    switch (subCommand) {
+                        case 'create':
+                            if (!guildArg) {
+                                logToTerminal("Usage: guild create [guild name]", 'error');
+                                break;
+                            }
+                            
+                            const pDocCreate = await getDoc(playerRef);
+                            const pDataCreate = pDocCreate.data();
+                            
+                            if (pDataCreate.guildId) {
+                                logToTerminal("You're already in a guild. Leave it first with 'guild leave'.", 'error');
+                                break;
+                            }
+                            
+                            // Check if guild name is taken
+                            const existingGuild = Object.values(gameGuilds).find(g => 
+                                g.name.toLowerCase() === guildArg.toLowerCase()
+                            );
+                            
+                            if (existingGuild) {
+                                logToTerminal("A guild with that name already exists.", 'error');
+                                break;
+                            }
+                            
+                            // Create the guild
+                            const guildId = `guild-${Date.now()}`;
+                            const guildRef = doc(db, `/artifacts/${appId}/public/data/mud-guilds/${guildId}`);
+                            
+                            await setDoc(guildRef, {
+                                name: guildArg,
+                                leader: playerName,
+                                leaderId: userId,
+                                members: {
+                                    [userId]: {
+                                        name: playerName,
+                                        rank: 'leader',
+                                        joinedAt: serverTimestamp()
+                                    }
+                                },
+                                treasury: 0,
+                                createdAt: serverTimestamp()
+                            });
+                            
+                            // Update player's guild
+                            await updateDoc(playerRef, { guildId: guildId });
+                            
+                            logToTerminal(`Guild "${guildArg}" has been created! You are the guild leader.`, 'success');
+                            logToTerminal("Use 'guild invite [player]' to invite members.", 'system');
+                            break;
+                        
+                        case 'list':
+                            const allGuilds = Object.values(gameGuilds);
+                            if (allGuilds.length === 0) {
+                                logToTerminal("No guilds exist yet. Be the first! Use 'guild create [name]'", 'game');
+                            } else {
+                                logToTerminal("=== Active Guilds ===", 'system');
+                                allGuilds.forEach(g => {
+                                    const memberCount = Object.keys(g.members || {}).length;
+                                    logToTerminal(`${g.name} - ${memberCount} members (Leader: ${g.leader})`, 'game');
+                                });
+                            }
+                            break;
+                        
+                        case 'invite':
+                            if (!guildArg) {
+                                logToTerminal("Usage: guild invite [player name]", 'error');
+                                break;
+                            }
+                            
+                            const pDocInvite = await getDoc(playerRef);
+                            const pDataInvite = pDocInvite.data();
+                            const inviterGuildId = pDataInvite.guildId;
+                            
+                            if (!inviterGuildId) {
+                                logToTerminal("You're not in a guild.", 'error');
+                                break;
+                            }
+                            
+                            const inviterGuild = gameGuilds[inviterGuildId];
+                            const inviterMember = inviterGuild.members[userId];
+                            
+                            if (!inviterMember || (inviterMember.rank !== 'leader' && inviterMember.rank !== 'officer')) {
+                                logToTerminal("Only guild leaders and officers can invite members.", 'error');
+                                break;
+                            }
+                            
+                            // Find target player
+                            const targetPlayerEntry = Object.entries(gamePlayers).find(([id, p]) => 
+                                p.name.toLowerCase() === guildArg.toLowerCase()
+                            );
+                            
+                            if (!targetPlayerEntry) {
+                                logToTerminal(`Player "${guildArg}" not found.`, 'error');
+                                break;
+                            }
+                            
+                            const [targetPlayerId, targetPlayer] = targetPlayerEntry;
+                            
+                            if (targetPlayer.guildId) {
+                                logToTerminal(`${targetPlayer.name} is already in a guild.`, 'error');
+                                break;
+                            }
+                            
+                            // Add invite to target player's pending invites
+                            const targetPlayerRef = doc(db, `/artifacts/${appId}/public/data/mud-players/${targetPlayerId}`);
+                            await updateDoc(targetPlayerRef, {
+                                guildInvites: arrayUnion({
+                                    guildId: inviterGuildId,
+                                    guildName: inviterGuild.name,
+                                    invitedBy: playerName,
+                                    timestamp: Date.now()
+                                })
+                            });
+                            
+                            logToTerminal(`Guild invitation sent to ${targetPlayer.name}.`, 'success');
+                            
+                            // Notify the target player
+                            await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                                senderId: userId,
+                                senderName: playerName,
+                                roomId: targetPlayer.roomId,
+                                text: `You have been invited to join "${inviterGuild.name}" by ${playerName}. Use 'guild accept ${inviterGuild.name}' to join.`,
+                                recipientId: targetPlayerId,
+                                timestamp: serverTimestamp()
+                            });
+                            break;
+                        
+                        case 'accept':
+                            if (!guildArg) {
+                                logToTerminal("Usage: guild accept [guild name]", 'error');
+                                break;
+                            }
+                            
+                            const pDocAccept = await getDoc(playerRef);
+                            const pDataAccept = pDocAccept.data();
+                            const pendingInvites = pDataAccept.guildInvites || [];
+                            
+                            const matchingInvite = pendingInvites.find(inv => 
+                                inv.guildName.toLowerCase() === guildArg.toLowerCase()
+                            );
+                            
+                            if (!matchingInvite) {
+                                logToTerminal(`You don't have an invitation from "${guildArg}".`, 'error');
+                                break;
+                            }
+                            
+                            if (pDataAccept.guildId) {
+                                logToTerminal("You're already in a guild. Leave it first with 'guild leave'.", 'error');
+                                break;
+                            }
+                            
+                            // Add player to guild
+                            const acceptGuildRef = doc(db, `/artifacts/${appId}/public/data/mud-guilds/${matchingInvite.guildId}`);
+                            await updateDoc(acceptGuildRef, {
+                                [`members.${userId}`]: {
+                                    name: playerName,
+                                    rank: 'member',
+                                    joinedAt: serverTimestamp()
+                                }
+                            });
+                            
+                            // Update player
+                            await updateDoc(playerRef, {
+                                guildId: matchingInvite.guildId,
+                                guildInvites: arrayRemove(matchingInvite)
+                            });
+                            
+                            logToTerminal(`You have joined "${matchingInvite.guildName}"!`, 'success');
+                            break;
+                        
+                        case 'leave':
+                            const pDocLeave = await getDoc(playerRef);
+                            const pDataLeave = pDocLeave.data();
+                            const leaveGuildId = pDataLeave.guildId;
+                            
+                            if (!leaveGuildId) {
+                                logToTerminal("You're not in a guild.", 'error');
+                                break;
+                            }
+                            
+                            const leaveGuild = gameGuilds[leaveGuildId];
+                            
+                            if (leaveGuild.leaderId === userId) {
+                                logToTerminal("You're the guild leader. Use 'guild disband' to disband the guild, or promote another member first.", 'error');
+                                break;
+                            }
+                            
+                            // Remove from guild
+                            const leaveGuildRef = doc(db, `/artifacts/${appId}/public/data/mud-guilds/${leaveGuildId}`);
+                            await updateDoc(leaveGuildRef, {
+                                [`members.${userId}`]: deleteDoc
+                            });
+                            
+                            await updateDoc(playerRef, {
+                                guildId: ""
+                            });
+                            
+                            logToTerminal(`You have left "${leaveGuild.name}".`, 'system');
+                            break;
+                        
+                        case 'chat':
+                        case 'gc':
+                            if (!guildArg) {
+                                logToTerminal("Usage: guild chat [message] or gc [message]", 'error');
+                                break;
+                            }
+                            
+                            const pDocChat = await getDoc(playerRef);
+                            const pDataChat = pDocChat.data();
+                            const chatGuildId = pDataChat.guildId;
+                            
+                            if (!chatGuildId) {
+                                logToTerminal("You're not in a guild.", 'error');
+                                break;
+                            }
+                            
+                            const chatGuild = gameGuilds[chatGuildId];
+                            
+                            // Send message to all guild members
+                            const guildMemberIds = Object.keys(chatGuild.members || {});
+                            
+                            for (const memberId of guildMemberIds) {
+                                const memberPlayer = gamePlayers[memberId];
+                                if (memberPlayer) {
+                                    await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                                        senderId: userId,
+                                        senderName: playerName,
+                                        roomId: memberPlayer.roomId,
+                                        text: `[Guild] ${playerName}: ${guildArg}`,
+                                        recipientId: memberId,
+                                        isGuildChat: true,
+                                        timestamp: serverTimestamp()
+                                    });
+                                }
+                            }
+                            
+                            logToTerminal(`[Guild] You: ${guildArg}`, 'system');
+                            break;
+                        
+                        default:
+                            logToTerminal("Guild commands: create, list, invite, accept, leave, chat (or gc)", 'system');
+                            logToTerminal("Usage examples:", 'game');
+                            logToTerminal("  guild create My Awesome Guild", 'game');
+                            logToTerminal("  guild list", 'game');
+                            logToTerminal("  guild invite PlayerName", 'game');
+                            logToTerminal("  guild chat Hello everyone!", 'game');
+                            logToTerminal("  gc Quick message! (short for guild chat)", 'game');
+                    }
+                }
+                break;
+            
+            case 'gc':
+                // Shortcut for guild chat
+                if (!target) {
+                    logToTerminal("Usage: gc [message]", 'error');
+                    break;
+                }
+                
+                const fullMessage = target + (npc_target ? " " + npc_target : "");
+                
+                const pDocGC = await getDoc(playerRef);
+                const pDataGC = pDocGC.data();
+                const gcGuildId = pDataGC.guildId;
+                
+                if (!gcGuildId) {
+                    logToTerminal("You're not in a guild.", 'error');
+                    break;
+                }
+                
+                const gcGuild = gameGuilds[gcGuildId];
+                const guildMemberIds = Object.keys(gcGuild.members || {});
+                
+                for (const memberId of guildMemberIds) {
+                    const memberPlayer = gamePlayers[memberId];
+                    if (memberPlayer) {
+                        await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                            senderId: userId,
+                            senderName: playerName,
+                            roomId: memberPlayer.roomId,
+                            text: `[Guild] ${playerName}: ${fullMessage}`,
+                            recipientId: memberId,
+                            isGuildChat: true,
+                            timestamp: serverTimestamp()
+                        });
+                    }
+                }
+                
+                logToTerminal(`[Guild] You: ${fullMessage}`, 'system');
+                break;
+            
             case 'help':
                 logToTerminal("--- Help ---", "system");
                 logToTerminal("You can now type commands in natural language!", "system");
@@ -2427,6 +2770,7 @@ export function initializeGameLogic(dependencies) {
                 logToTerminal("Core commands: look, go, get, drop, inventory, examine, talk to, ask...about, buy...from, attack, who, say, score, stats, logout, forceadmin.", "system");
                 logToTerminal("Combat: 'attack [monster]' or 'attack [player]' - Fight monsters or other players! PvP combat is active.", "system");
                 logToTerminal("Magic: 'spells' to view your spells, 'cast [spell name] [target]' to cast spells.", "system");
+                logToTerminal("Guilds: 'guild' to view your guild, 'guild create [name]' to make one, 'guild list' to see all guilds, 'gc [message]' for guild chat.", "system");
                 logToTerminal("Emotes: wave, dance, laugh, smile, nod, bow, clap, cheer, cry, sigh, shrug, grin, frown, wink, yawn, stretch, jump, sit, stand, kneel, salute, think, ponder, scratch.", "system");
                 logToTerminal("Or use 'emote [action]' for custom actions!", "system");
                 logToTerminal("Special: 'examine frame' to view the leaderboard!", "system");
