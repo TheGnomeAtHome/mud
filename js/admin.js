@@ -26,6 +26,7 @@ export function initializeAdminPanel({
     gameMonsters,
     gamePlayers,
     gameClasses,
+    gameSpells,
     logToTerminal,
     firestoreFunctions
 }) {
@@ -36,7 +37,8 @@ export function initializeAdminPanel({
         npcs: Object.keys(gameNpcs).length,
         monsters: Object.keys(gameMonsters).length,
         players: Object.keys(gamePlayers).length,
-        classes: Object.keys(gameClasses).length
+        classes: Object.keys(gameClasses).length,
+        spells: Object.keys(gameSpells).length
     });
     
     const { doc, setDoc, updateDoc, deleteDoc, arrayUnion } = firestoreFunctions;
@@ -50,6 +52,7 @@ export function initializeAdminPanel({
         'npc-tab-btn': document.getElementById('npc-editor-panel'),
         'monster-tab-btn': document.getElementById('monster-editor-panel'),
         'player-tab-btn': document.getElementById('player-editor-panel'),
+        'spell-tab-btn': document.getElementById('spell-editor-panel'),
         'class-tab-btn': document.getElementById('class-editor-panel'),
         'levels-tab-btn': document.getElementById('levels-editor-panel'),
         'actions-tab-btn': document.getElementById('actions-editor-panel'),
@@ -1270,6 +1273,166 @@ export function initializeAdminPanel({
         }
     });
 
+    // ========== SPELL EDITOR ==========
+    const spellSelect = document.getElementById('spell-select');
+    const adminSpellStatus = document.getElementById('admin-spell-status');
+    
+    // Spell form fields
+    const spellIdInput = document.getElementById('spell-id');
+    const spellNameInput = document.getElementById('spell-name');
+    const spellSchoolSelect = document.getElementById('spell-school');
+    const spellDescInput = document.getElementById('spell-description');
+    const spellMpCostInput = document.getElementById('spell-mp-cost');
+    const spellLevelReqInput = document.getElementById('spell-level-req');
+    const spellClassReqInput = document.getElementById('spell-class-req');
+    const spellTargetTypeSelect = document.getElementById('spell-target-type');
+    const spellRangeSelect = document.getElementById('spell-range');
+    const spellDamageInput = document.getElementById('spell-damage');
+    const spellHealingInput = document.getElementById('spell-healing');
+    const spellDurationInput = document.getElementById('spell-duration');
+    const spellCooldownInput = document.getElementById('spell-cooldown');
+    const spellStatEffectsInput = document.getElementById('spell-stat-effects');
+    const spellSpecialEffectsInput = document.getElementById('spell-special-effects');
+    
+    // Populate spell selector
+    function populateSpellSelector() {
+        const currentVal = spellSelect.value;
+        spellSelect.innerHTML = '<option value="">-- Create New Spell --</option>';
+        Object.entries(gameSpells).sort((a, b) => a[1].name?.localeCompare(b[1].name)).forEach(([id, spell]) => {
+            const option = document.createElement('option');
+            option.value = id;
+            option.textContent = spell.name || id;
+            spellSelect.appendChild(option);
+        });
+        if (currentVal) spellSelect.value = currentVal;
+    }
+    
+    // Load spell data into form
+    function loadSpellData(spellId) {
+        const spell = gameSpells[spellId];
+        if (!spell) {
+            clearSpellForm();
+            return;
+        }
+        
+        spellIdInput.value = spellId;
+        spellNameInput.value = spell.name || '';
+        spellSchoolSelect.value = spell.school || 'evocation';
+        spellDescInput.value = spell.description || '';
+        spellMpCostInput.value = spell.mpCost || 10;
+        spellLevelReqInput.value = spell.levelRequired || 1;
+        spellClassReqInput.value = spell.classRequired || 'any';
+        spellTargetTypeSelect.value = spell.targetType || 'single-enemy';
+        spellRangeSelect.value = spell.range || 'close';
+        spellDamageInput.value = spell.damage || 0;
+        spellHealingInput.value = spell.healing || 0;
+        spellDurationInput.value = spell.duration || 0;
+        spellCooldownInput.value = spell.cooldown || 0;
+        spellStatEffectsInput.value = spell.statEffects ? JSON.stringify(spell.statEffects, null, 2) : '{}';
+        spellSpecialEffectsInput.value = spell.specialEffects || '';
+    }
+    
+    function clearSpellForm() {
+        spellIdInput.value = '';
+        spellNameInput.value = '';
+        spellSchoolSelect.value = 'evocation';
+        spellDescInput.value = '';
+        spellMpCostInput.value = '10';
+        spellLevelReqInput.value = '1';
+        spellClassReqInput.value = 'any';
+        spellTargetTypeSelect.value = 'single-enemy';
+        spellRangeSelect.value = 'close';
+        spellDamageInput.value = '0';
+        spellHealingInput.value = '0';
+        spellDurationInput.value = '0';
+        spellCooldownInput.value = '0';
+        spellStatEffectsInput.value = '{}';
+        spellSpecialEffectsInput.value = '';
+    }
+    
+    // Spell selector change event
+    spellSelect.addEventListener('change', () => {
+        const spellId = spellSelect.value;
+        if (spellId && gameSpells[spellId]) {
+            loadSpellData(spellId);
+        } else {
+            clearSpellForm();
+        }
+    });
+    
+    // New spell button
+    document.getElementById('new-spell-btn').addEventListener('click', () => {
+        spellSelect.value = '';
+        clearSpellForm();
+        adminSpellStatus.textContent = '';
+    });
+    
+    // Save spell button
+    document.getElementById('save-spell-btn').addEventListener('click', async () => {
+        const spellId = spellIdInput.value.trim().toLowerCase().replace(/\s+/g, '-');
+        if (!spellId) {
+            adminSpellStatus.textContent = 'Error: Spell ID is required.';
+            return;
+        }
+        
+        // Parse stat effects JSON
+        let statEffects = {};
+        try {
+            statEffects = JSON.parse(spellStatEffectsInput.value || '{}');
+        } catch (e) {
+            adminSpellStatus.textContent = 'Error: Invalid JSON in stat effects field.';
+            return;
+        }
+        
+        const spellData = {
+            id: spellId,
+            name: spellNameInput.value.trim() || spellId,
+            school: spellSchoolSelect.value,
+            description: spellDescInput.value.trim(),
+            mpCost: parseInt(spellMpCostInput.value) || 10,
+            levelRequired: parseInt(spellLevelReqInput.value) || 1,
+            classRequired: spellClassReqInput.value.trim() || 'any',
+            targetType: spellTargetTypeSelect.value,
+            range: spellRangeSelect.value,
+            damage: parseInt(spellDamageInput.value) || 0,
+            healing: parseInt(spellHealingInput.value) || 0,
+            duration: parseInt(spellDurationInput.value) || 0,
+            cooldown: parseInt(spellCooldownInput.value) || 0,
+            statEffects: statEffects,
+            specialEffects: spellSpecialEffectsInput.value.trim()
+        };
+        
+        try {
+            await setDoc(doc(db, `/artifacts/${appId}/public/data/mud-spells/${spellId}`), spellData);
+            adminSpellStatus.textContent = `Spell "${spellData.name}" saved successfully!`;
+            populateSpellSelector();
+            spellSelect.value = spellId;
+        } catch (error) {
+            adminSpellStatus.textContent = `Error saving spell: ${error.message}`;
+        }
+    });
+    
+    // Delete spell button
+    document.getElementById('delete-spell-btn').addEventListener('click', async () => {
+        const spellId = spellIdInput.value.trim();
+        if (!spellId) {
+            adminSpellStatus.textContent = 'Error: No spell selected to delete.';
+            return;
+        }
+        
+        if (confirm(`Are you sure you want to delete the spell "${spellNameInput.value}"?`)) {
+            try {
+                await deleteDoc(doc(db, `/artifacts/${appId}/public/data/mud-spells/${spellId}`));
+                adminSpellStatus.textContent = `Spell deleted successfully.`;
+                clearSpellForm();
+                populateSpellSelector();
+                spellSelect.value = '';
+            } catch (error) {
+                adminSpellStatus.textContent = `Error deleting spell: ${error.message}`;
+            }
+        }
+    });
+
     // ========== CLASS EDITOR ==========
     const classSelect = document.getElementById('class-select');
     const adminClassStatus = document.getElementById('admin-class-status');
@@ -1742,6 +1905,7 @@ export function initializeAdminPanel({
         populateNpcSelector,
         populateMonsterSelector,
         populatePlayerSelector,
+        populateSpellSelector,
         populateRoomItemsSelector,
         populateRoomNpcsSelector,
         populateRoomMonsterSelector,

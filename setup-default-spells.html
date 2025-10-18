@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup Default Spells - MUD</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background: #000;
+            color: #0f0;
+            padding: 20px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        h1 { color: #ff0; text-shadow: 2px 2px #f00; }
+        .status { margin: 10px 0; padding: 10px; border: 1px solid #0f0; }
+        button {
+            background: #0f0;
+            color: #000;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            cursor: pointer;
+            margin: 10px 5px;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+        }
+        button:hover { background: #0ff; }
+        .spell-list { margin: 20px 0; }
+        .spell-item {
+            background: #111;
+            border: 1px solid #0f0;
+            padding: 10px;
+            margin: 5px 0;
+        }
+        .spell-name { color: #ff0; font-weight: bold; }
+        .spell-school { color: #0ff; font-style: italic; }
+        .spell-desc { color: #0f0; margin: 5px 0; }
+        .spell-stats { color: #888; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <h1>🔮 Setup Default Spells</h1>
+    <p>This script will create a complete set of starter spells for your MUD game.</p>
+    
+    <div class="status" id="status">Ready to create spells...</div>
+    
+    <button onclick="createAllSpells()">Create All Default Spells</button>
+    <button onclick="location.href='mud.html'">Return to Game</button>
+    
+    <div class="spell-list" id="spell-list">
+        <h2>Spells to be Created:</h2>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getFirestore, doc, setDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCxlPIOexempyCmO3Ljs_T00-Tr_YjNY0o",
+            authDomain: "artifact-1b17c.firebaseapp.com",
+            projectId: "artifact-1b17c",
+            storageBucket: "artifact-1b17c.appspot.com",
+            messagingSenderId: "207174998358",
+            appId: "1:207174998358:web:69e80cc7aeeabca8c51f1b"
+        };
+        
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const APP_ID = 'mud-game-v1';
+        
+        // Default spells to create
+        const defaultSpells = [
+            // Healing Spells (Restoration)
+            {
+                id: 'minor-heal',
+                name: 'Minor Heal',
+                school: 'restoration',
+                description: 'A basic healing spell that restores a small amount of health.',
+                mpCost: 10,
+                levelRequired: 1,
+                classRequired: 'any',
+                targetType: 'self',
+                range: 'touch',
+                damage: 0,
+                healing: 25,
+                duration: 0,
+                cooldown: 0,
+                statEffects: {},
+                specialEffects: 'Warm light surrounds you, mending minor wounds.'
+            },
+            {
+                id: 'heal',
+                name: 'Heal',
+                school: 'restoration',
+                description: 'Restores a moderate amount of health to yourself.',
+                mpCost: 25,
+                levelRequired: 5,
+                classRequired: 'any',
+                targetType: 'self',
+                range: 'touch',
+                damage: 0,
+                healing: 60,
+                duration: 0,
+                cooldown: 0,
+                statEffects: {},
+                specialEffects: 'Healing energy flows through your body.'
+            },
+            {
+                id: 'greater-heal',
+                name: 'Greater Heal',
+                school: 'restoration',
+                description: 'A powerful healing spell that restores significant health.',
+                mpCost: 50,
+                levelRequired: 10,
+                classRequired: 'Priest',
+                targetType: 'self',
+                range: 'touch',
+                damage: 0,
+                healing: 120,
+                duration: 0,
+                cooldown: 0,
+                statEffects: {},
+                specialEffects: 'Divine light envelops you, healing grievous wounds.'
+            },
+            
+            // Fire Spells (Evocation)
+            {
+                id: 'fire-bolt',
+                name: 'Fire Bolt',
+                school: 'evocation',
+                description: 'Launch a small bolt of fire at an enemy.',
+                mpCost: 15,
+                levelRequired: 1,
+                classRequired: 'any',
+                targetType: 'single-enemy',
+                range: 'close',
+                damage: 20,
+                healing: 0,
+                duration: 0,
+                cooldown: 0,
+                statEffects: {},
+                specialEffects: 'A streak of flame shoots from your hand!'
+            },
+            {
+                id: 'fireball',
+                name: 'Fireball',
+                school: 'evocation',
+                description: 'Hurl an explosive ball of fire at your enemies.',
+                mpCost: 35,
+                levelRequired: 8,
+                classRequired: 'Wizard',
+                targetType: 'single-enemy',
+                range: 'close',
+                damage: 50,
+                healing: 0,
+                duration: 0,
+                cooldown: 1,
+                statEffects: {},
+                specialEffects: 'The fireball explodes on impact, scorching everything nearby!'
+            },
+            {
+                id: 'meteor-swarm',
+                name: 'Meteor Swarm',
+                school: 'evocation',
+                description: 'Rain down flaming meteors on all enemies in the area.',
+                mpCost: 80,
+                levelRequired: 15,
+                classRequired: 'Wizard',
+                targetType: 'all-enemies',
+                range: 'close',
+                damage: 65,
+                healing: 0,
+                duration: 0,
+                cooldown: 3,
+                statEffects: {},
+                specialEffects: 'Blazing meteors crash down from above, leaving devastation in their wake!'
+            },
+            
+            // Ice Spells (Evocation)
+            {
+                id: 'frost-bolt',
+                name: 'Frost Bolt',
+                school: 'evocation',
+                description: 'Launch a shard of ice at an enemy.',
+                mpCost: 15,
+                levelRequired: 1,
+                classRequired: 'any',
+                targetType: 'single-enemy',
+                range: 'close',
+                damage: 18,
+                healing: 0,
+                duration: 0,
+                cooldown: 0,
+                statEffects: {},
+                specialEffects: 'A freezing projectile strikes your foe!'
+            },
+            {
+                id: 'ice-storm',
+                name: 'Ice Storm',
+                school: 'evocation',
+                description: 'Summon a blizzard to damage all enemies.',
+                mpCost: 60,
+                levelRequired: 12,
+                classRequired: 'Wizard',
+                targetType: 'all-enemies',
+                range: 'close',
+                damage: 45,
+                healing: 0,
+                duration: 0,
+                cooldown: 2,
+                statEffects: {},
+                specialEffects: 'Freezing winds and icy shards batter your enemies!'
+            },
+            
+            // Lightning Spells (Evocation)
+            {
+                id: 'lightning-bolt',
+                name: 'Lightning Bolt',
+                school: 'evocation',
+                description: 'Strike an enemy with a bolt of lightning.',
+                mpCost: 20,
+                levelRequired: 5,
+                classRequired: 'any',
+                targetType: 'single-enemy',
+                range: 'close',
+                damage: 35,
+                healing: 0,
+                duration: 0,
+                cooldown: 0,
+                statEffects: {},
+                specialEffects: 'Lightning crackles through the air!'
+            },
+            {
+                id: 'chain-lightning',
+                name: 'Chain Lightning',
+                school: 'evocation',
+                description: 'Lightning that arcs between multiple enemies.',
+                mpCost: 70,
+                levelRequired: 14,
+                classRequired: 'Wizard',
+                targetType: 'all-enemies',
+                range: 'close',
+                damage: 55,
+                healing: 0,
+                duration: 0,
+                cooldown: 2,
+                statEffects: {},
+                specialEffects: 'Electricity jumps from foe to foe with devastating power!'
+            },
+            
+            // Buff Spells (Enchantment)
+            {
+                id: 'strength-boost',
+                name: 'Strength Boost',
+                school: 'enchantment',
+                description: 'Temporarily increases your strength.',
+                mpCost: 20,
+                levelRequired: 3,
+                classRequired: 'any',
+                targetType: 'self',
+                range: 'touch',
+                damage: 0,
+                healing: 0,
+                duration: 5,
+                cooldown: 0,
+                statEffects: { str: 5 },
+                specialEffects: 'You feel power surge through your muscles!'
+            },
+            {
+                id: 'shield',
+                name: 'Magical Shield',
+                school: 'abjuration',
+                description: 'Conjure a magical shield to protect yourself.',
+                mpCost: 25,
+                levelRequired: 4,
+                classRequired: 'any',
+                targetType: 'self',
+                range: 'touch',
+                damage: 0,
+                healing: 0,
+                duration: 5,
+                cooldown: 0,
+                statEffects: { def: 10 },
+                specialEffects: 'A shimmering barrier forms around you.'
+            },
+            
+            // Necromancy Spells
+            {
+                id: 'drain-life',
+                name: 'Drain Life',
+                school: 'necromancy',
+                description: 'Drain life force from an enemy to heal yourself.',
+                mpCost: 30,
+                levelRequired: 7,
+                classRequired: 'any',
+                targetType: 'single-enemy',
+                range: 'close',
+                damage: 30,
+                healing: 15,
+                duration: 0,
+                cooldown: 1,
+                statEffects: {},
+                specialEffects: 'Dark energy drains your enemy, restoring your vitality.'
+            },
+            
+            // Ranger/Nature Spells
+            {
+                id: 'natures-blessing',
+                name: "Nature's Blessing",
+                school: 'restoration',
+                description: 'Call upon nature to heal and invigorate you.',
+                mpCost: 30,
+                levelRequired: 6,
+                classRequired: 'Ranger',
+                targetType: 'self',
+                range: 'touch',
+                damage: 0,
+                healing: 50,
+                duration: 0,
+                cooldown: 0,
+                statEffects: {},
+                specialEffects: 'Natural energy flows through you, mending wounds.'
+            },
+            
+            // Holy Spells (For Paladin/Priest)
+            {
+                id: 'smite',
+                name: 'Smite',
+                school: 'evocation',
+                description: 'Strike an enemy with holy power.',
+                mpCost: 25,
+                levelRequired: 5,
+                classRequired: 'Paladin',
+                targetType: 'single-enemy',
+                range: 'touch',
+                damage: 40,
+                healing: 0,
+                duration: 0,
+                cooldown: 0,
+                statEffects: {},
+                specialEffects: 'Holy light burns away the darkness!'
+            },
+            {
+                id: 'holy-light',
+                name: 'Holy Light',
+                school: 'restoration',
+                description: 'Channel divine energy to heal yourself.',
+                mpCost: 20,
+                levelRequired: 3,
+                classRequired: 'Paladin',
+                targetType: 'self',
+                range: 'touch',
+                damage: 0,
+                healing: 45,
+                duration: 0,
+                cooldown: 0,
+                statEffects: {},
+                specialEffects: 'Divine radiance heals your wounds.'
+            }
+        ];
+        
+        // Display spells in list
+        function displaySpells() {
+            const listDiv = document.getElementById('spell-list');
+            listDiv.innerHTML = '<h2>Spells to be Created:</h2>';
+            
+            defaultSpells.forEach(spell => {
+                const spellDiv = document.createElement('div');
+                spellDiv.className = 'spell-item';
+                spellDiv.innerHTML = `
+                    <div class="spell-name">${spell.name} (${spell.id})</div>
+                    <div class="spell-school">${spell.school} - Level ${spell.levelRequired}</div>
+                    <div class="spell-desc">${spell.description}</div>
+                    <div class="spell-stats">
+                        MP Cost: ${spell.mpCost} | Target: ${spell.targetType} | 
+                        ${spell.damage > 0 ? `Damage: ${spell.damage}` : ''} 
+                        ${spell.healing > 0 ? `Healing: ${spell.healing}` : ''}
+                        ${spell.cooldown > 0 ? `| Cooldown: ${spell.cooldown}` : ''}
+                    </div>
+                `;
+                listDiv.appendChild(spellDiv);
+            });
+        }
+        
+        displaySpells();
+        
+        // Create all spells
+        window.createAllSpells = async function() {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = 'Creating spells...<br>';
+            
+            let created = 0;
+            let errors = 0;
+            
+            for (const spell of defaultSpells) {
+                try {
+                    await setDoc(doc(db, `/artifacts/${APP_ID}/public/data/mud-spells/${spell.id}`), spell);
+                    statusDiv.innerHTML += `✓ Created ${spell.name}<br>`;
+                    created++;
+                } catch (error) {
+                    statusDiv.innerHTML += `✗ Error creating ${spell.name}: ${error.message}<br>`;
+                    errors++;
+                }
+            }
+            
+            statusDiv.innerHTML += `<br><strong>Complete!</strong><br>Created: ${created} spells<br>Errors: ${errors}<br>`;
+            statusDiv.innerHTML += `<br>You can now use the admin panel to view and edit these spells.`;
+        };
+    </script>
+</body>
+</html>

@@ -12,6 +12,7 @@ export function initializeGameLogic(dependencies) {
         gameMonsters,
         gamePlayers,
         activeMonsters,
+        gameSpells,
         logToTerminal,
         callGeminiForText,
         parseCommandWithGemini,
@@ -1689,6 +1690,239 @@ export function initializeGameLogic(dependencies) {
                 logToTerminal(`Gold: ${money}`, 'game');
                 logToTerminal(`Score: ${score}`, 'game');
                 break;
+            case 'spells':
+            case 'spell':
+            case 'magic':
+                const pDocSpells = await getDoc(playerRef);
+                const pDataSpells = pDocSpells.data();
+                const knownSpells = pDataSpells.knownSpells || [];
+                
+                if (knownSpells.length === 0) {
+                    logToTerminal("You don't know any spells yet.", 'game');
+                    logToTerminal("Spells can be learned from NPCs, found in books, or gained by leveling up.", 'system');
+                } else {
+                    logToTerminal("--- Your Spells ---", 'system');
+                    logToTerminal(`MP: ${pDataSpells.mp || 0} / ${pDataSpells.maxMp || 0}`, 'game');
+                    logToTerminal("", 'game');
+                    
+                    knownSpells.forEach(spellId => {
+                        const spell = gameSpells[spellId];
+                        if (spell) {
+                            const costStr = `${spell.mpCost} MP`;
+                            const targetStr = spell.targetType ? ` [${spell.targetType}]` : '';
+                            logToTerminal(`✨ ${spell.name} - ${costStr}${targetStr}`, 'game');
+                            logToTerminal(`   ${spell.description}`, 'game');
+                            if (spell.damage > 0) logToTerminal(`   Damage: ${spell.damage}`, 'game');
+                            if (spell.healing > 0) logToTerminal(`   Healing: ${spell.healing}`, 'game');
+                            if (spell.cooldown > 0) logToTerminal(`   Cooldown: ${spell.cooldown} turns`, 'game');
+                        }
+                    });
+                    
+                    logToTerminal("", 'game');
+                    logToTerminal("Cast a spell with: cast [spell name] [target]", 'system');
+                }
+                break;
+            case 'cast':
+                if (!parsedCommand.target) {
+                    logToTerminal("Cast which spell? (Type 'spells' to see your known spells)", 'error');
+                    break;
+                }
+                
+                // Get player data
+                const pDocCast = await getDoc(playerRef);
+                const pDataCast = pDocCast.data();
+                const knownSpellsCast = pDataCast.knownSpells || [];
+                const currentMp = pDataCast.mp || 0;
+                const currentHp = pDataCast.hp || 0;
+                const maxHpCast = pDataCast.maxHp || 100;
+                
+                // Find the spell
+                const spellName = parsedCommand.target.toLowerCase();
+                const spellId = knownSpellsCast.find(id => {
+                    const spell = gameSpells[id];
+                    return spell && spell.name.toLowerCase() === spellName;
+                });
+                
+                if (!spellId) {
+                    logToTerminal(`You don't know the spell "${parsedCommand.target}".`, 'error');
+                    break;
+                }
+                
+                const spell = gameSpells[spellId];
+                
+                // Check MP cost
+                if (currentMp < spell.mpCost) {
+                    logToTerminal(`You don't have enough MP to cast ${spell.name}. (Need ${spell.mpCost}, have ${currentMp})`, 'error');
+                    break;
+                }
+                
+                // Handle different target types
+                let spellTargetName = parsedCommand.npc_target || "";
+                let castSuccess = false;
+                
+                switch (spell.targetType) {
+                    case 'self':
+                        // Apply spell effects to self
+                        if (spell.healing > 0) {
+                            const newHp = Math.min(currentHp + spell.healing, maxHpCast);
+                            const healAmount = newHp - currentHp;
+                            await updateDoc(playerRef, {
+                                hp: newHp,
+                                mp: currentMp - spell.mpCost
+                            });
+                            logToTerminal(`You cast ${spell.name}!`, 'magic');
+                            logToTerminal(`You heal yourself for ${healAmount} HP!`, 'success');
+                        } else if (spell.statEffects && Object.keys(spell.statEffects).length > 0) {
+                            logToTerminal(`You cast ${spell.name}!`, 'magic');
+                            logToTerminal(`${spell.description}`, 'game');
+                            // TODO: Implement stat buff system with duration
+                            await updateDoc(playerRef, { mp: currentMp - spell.mpCost });
+                        }
+                        castSuccess = true;
+                        break;
+                        
+                    case 'single-enemy':
+                        // Find monster in room
+                        const monstersInRoom = Object.values(activeMonsters).filter(m => m.roomId === currentPlayerRoomId);
+                        let targetMonster = null;
+                        
+                        if (spellTargetName) {
+                            targetMonster = monstersInRoom.find(m => 
+                                gameMonsters[m.monsterId]?.name.toLowerCase().includes(spellTargetName.toLowerCase())
+                            );
+                        } else if (monstersInRoom.length > 0) {
+                            targetMonster = monstersInRoom[0]; // Target first monster if no name given
+                        }
+                        
+                        if (!targetMonster) {
+                            logToTerminal("There is no such enemy here to target.", 'error');
+                            break;
+                        }
+                        
+                        // Apply damage
+                        const monsterTemplate = gameMonsters[targetMonster.monsterId];
+                        const newMonsterHp = targetMonster.hp - spell.damage;
+                        
+                        logToTerminal(`You cast ${spell.name} at ${monsterTemplate.name}!`, 'magic');
+                        logToTerminal(`${spell.name} deals ${spell.damage} damage!`, 'combat');
+                        
+                        if (newMonsterHp <= 0) {
+                            // Monster defeated
+                            await deleteDoc(doc(db, `/artifacts/${appId}/public/data/mud-active-monsters/${targetMonster.id}`));
+                            logToTerminal(`${monsterTemplate.name} is destroyed by your magic!`, 'success');
+                            
+                            // Grant XP
+                            const xpGain = monsterTemplate.xpReward || 10;
+                            await updateDoc(playerRef, {
+                                xp: (pDataCast.xp || 0) + xpGain,
+                                mp: currentMp - spell.mpCost
+                            });
+                            logToTerminal(`You gained ${xpGain} XP!`, 'success');
+                            await checkLevelUp();
+                        } else {
+                            // Monster survives
+                            await updateDoc(doc(db, `/artifacts/${appId}/public/data/mud-active-monsters/${targetMonster.id}`), {
+                                hp: newMonsterHp
+                            });
+                            await updateDoc(playerRef, { mp: currentMp - spell.mpCost });
+                        }
+                        castSuccess = true;
+                        break;
+                        
+                    case 'single-ally':
+                        // Find player in room to heal
+                        if (!spellTargetName) {
+                            // No target specified, heal self
+                            const newHpAlly = Math.min(currentHp + spell.healing, maxHpCast);
+                            const healAmountAlly = newHpAlly - currentHp;
+                            await updateDoc(playerRef, {
+                                hp: newHpAlly,
+                                mp: currentMp - spell.mpCost
+                            });
+                            logToTerminal(`You cast ${spell.name} on yourself!`, 'magic');
+                            logToTerminal(`You heal yourself for ${healAmountAlly} HP!`, 'success');
+                            castSuccess = true;
+                        } else {
+                            logToTerminal("Healing other players is not yet implemented.", 'error');
+                        }
+                        break;
+                        
+                    case 'all-enemies':
+                        const allMonstersInRoom = Object.values(activeMonsters).filter(m => m.roomId === currentPlayerRoomId);
+                        if (allMonstersInRoom.length === 0) {
+                            logToTerminal("There are no enemies here to target.", 'error');
+                            break;
+                        }
+                        
+                        logToTerminal(`You cast ${spell.name}!`, 'magic');
+                        logToTerminal(`${spell.description}`, 'game');
+                        
+                        for (const monster of allMonstersInRoom) {
+                            const monsterTpl = gameMonsters[monster.monsterId];
+                            const newHpAoE = monster.hp - spell.damage;
+                            logToTerminal(`${monsterTpl.name} takes ${spell.damage} damage!`, 'combat');
+                            
+                            if (newHpAoE <= 0) {
+                                await deleteDoc(doc(db, `/artifacts/${appId}/public/data/mud-active-monsters/${monster.id}`));
+                                logToTerminal(`${monsterTpl.name} is destroyed!`, 'success');
+                            } else {
+                                await updateDoc(doc(db, `/artifacts/${appId}/public/data/mud-active-monsters/${monster.id}`), {
+                                    hp: newHpAoE
+                                });
+                            }
+                        }
+                        
+                        await updateDoc(playerRef, { mp: currentMp - spell.mpCost });
+                        castSuccess = true;
+                        break;
+                        
+                    default:
+                        logToTerminal("This spell type is not yet implemented.", 'error');
+                        break;
+                }
+                
+                if (castSuccess && spell.specialEffects) {
+                    logToTerminal(spell.specialEffects, 'game');
+                }
+                break;
+            case 'learn':
+                if (!parsedCommand.target) {
+                    logToTerminal("Learn which spell?", 'error');
+                    break;
+                }
+                
+                // Admin command to learn any spell
+                const pDocLearn = await getDoc(playerRef);
+                const pDataLearn = pDocLearn.data();
+                
+                if (!pDataLearn.isAdmin) {
+                    logToTerminal("You can only learn spells from NPCs, books, or by leveling up.", 'error');
+                    break;
+                }
+                
+                const learnSpellName = parsedCommand.target.toLowerCase();
+                const learnSpellId = Object.keys(gameSpells).find(id => 
+                    gameSpells[id].name.toLowerCase() === learnSpellName || id.toLowerCase() === learnSpellName
+                );
+                
+                if (!learnSpellId) {
+                    logToTerminal(`Spell "${parsedCommand.target}" not found.`, 'error');
+                    break;
+                }
+                
+                const currentKnownSpells = pDataLearn.knownSpells || [];
+                if (currentKnownSpells.includes(learnSpellId)) {
+                    logToTerminal(`You already know ${gameSpells[learnSpellId].name}.`, 'error');
+                    break;
+                }
+                
+                await updateDoc(playerRef, {
+                    knownSpells: arrayUnion(learnSpellId)
+                });
+                
+                logToTerminal(`You have learned ${gameSpells[learnSpellId].name}!`, 'success');
+                logToTerminal(`${gameSpells[learnSpellId].description}`, 'game');
+                break;
             case 'stats':
                 const pDocStats = await getDoc(playerRef);
                 const pDataStats = pDocStats.data();
@@ -1734,12 +1968,14 @@ export function initializeGameLogic(dependencies) {
                 logToTerminal("After talking to an AI character, you can reply just by typing.", "system");
                 logToTerminal("Core commands: look, go, get, drop, inventory, examine, talk to, ask...about, buy...from, attack, who, say, score, stats, logout, forceadmin.", "system");
                 logToTerminal("Combat: 'attack [monster]' or 'attack [player]' - Fight monsters or other players! PvP combat is active.", "system");
+                logToTerminal("Magic: 'spells' to view your spells, 'cast [spell name] [target]' to cast spells.", "system");
                 logToTerminal("Emotes: wave, dance, laugh, smile, nod, bow, clap, cheer, cry, sigh, shrug, grin, frown, wink, yawn, stretch, jump, sit, stand, kneel, salute, think, ponder, scratch.", "system");
                 logToTerminal("Or use 'emote [action]' for custom actions!", "system");
                 logToTerminal("Special: 'examine frame' to view the leaderboard!", "system");
                 logToTerminal("Test AI: Type 'test ai' to check if AI is working.", "system");
                 if (gamePlayers[userId]?.isAdmin) {
-                    logToTerminal("--- Admin Bot Commands ---", "system");
+                    logToTerminal("--- Admin Commands ---", "system");
+                    logToTerminal("learn [spell name] - Learn any spell instantly", "system");
                     logToTerminal("startbots [count] - Start bot system (default: 3 bots)", "system");
                     logToTerminal("stopbots - Stop bot system", "system");
                     logToTerminal("spawnbot - Manually spawn one bot", "system");

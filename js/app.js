@@ -294,6 +294,7 @@ export async function initializeApp() {
             description: description || 'A mysterious adventurer.',
             roomId: 'start',
             inventory: [],
+            knownSpells: [], // Player starts with no spells
             money: 100,
             hp: maxHp,
             maxHp: maxHp,
@@ -331,7 +332,7 @@ export async function initializeApp() {
             return;
         }
         
-        const { gameWorld, gameItems, gameNpcs, gameMonsters, gamePlayers, activeMonsters, gameClasses } = dataLoader.gameData;
+        const { gameWorld, gameItems, gameNpcs, gameMonsters, gamePlayers, activeMonsters, gameClasses, gameSpells } = dataLoader.gameData;
         
         // Check if player should be admin - either already is, or if there are no admins
         let shouldBeAdmin = playerData.isAdmin || false;
@@ -367,6 +368,7 @@ export async function initializeApp() {
             gameMonsters,
             gamePlayers,
             gameClasses,
+            gameSpells,
             logToTerminal,
             firestoreFunctions
         });
@@ -382,6 +384,7 @@ export async function initializeApp() {
             gameMonsters,
             gamePlayers,
             activeMonsters,
+            gameSpells,
             logToTerminal,
             callGeminiForText,
             parseCommandWithGemini,

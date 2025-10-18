@@ -55,6 +55,7 @@
             <button id="npc-tab-btn" class="admin-tab px-4 py-2 text-lg">NPCs</button>
             <button id="monster-tab-btn" class="admin-tab px-4 py-2 text-lg">Monsters</button>
             <button id="player-tab-btn" class="admin-tab px-4 py-2 text-lg">Players</button>
+            <button id="spell-tab-btn" class="admin-tab px-4 py-2 text-lg">✨ Spells</button>
             <button id="class-tab-btn" class="admin-tab px-4 py-2 text-lg">⚔️ Classes</button>
             <button id="levels-tab-btn" class="admin-tab px-4 py-2 text-lg">⬆️ Levels</button>
             <button id="actions-tab-btn" class="admin-tab px-4 py-2 text-lg">🎭 Actions</button>
@@ -99,6 +100,12 @@
                         <h3 class="text-lg text-red-400 mb-2">👹 Monsters</h3>
                         <p class="text-sm text-gray-400 mb-3">3 monsters: Wolf, Goblin, Skeleton</p>
                         <button id="setup-monsters-btn" class="bg-red-500 text-white px-4 py-2 rounded w-full">Create Monsters</button>
+                    </div>
+
+                    <div class="border border-cyan-500 rounded p-4 bg-black bg-opacity-50">
+                        <h3 class="text-lg text-cyan-400 mb-2">✨ Spells</h3>
+                        <p class="text-sm text-gray-400 mb-3">17 spells: Healing, damage, buffs for all classes</p>
+                        <button onclick="window.open('setup-default-spells.html', '_blank')" class="bg-cyan-500 text-white px-4 py-2 rounded w-full">Create Spells</button>
                     </div>
 
                     <div class="border border-orange-500 rounded p-4 bg-black bg-opacity-50 md:col-span-2">
@@ -601,6 +608,130 @@
                     </div>
                 </div>
                 <div id="admin-player-status" class="text-center mt-2 text-sm"></div>
+            </div>
+
+            <!-- Spell Editor -->
+            <div id="spell-editor-panel" class="hidden">
+                <h2 class="text-2xl text-yellow-400 text-center text-shadow mb-4">✨ Spell Editor</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label for="spell-select" class="block mb-1">Select Spell to Edit</label>
+                        <select id="spell-select" class="admin-input"></select>
+                    </div>
+                    <div>
+                        <label for="spell-id" class="block mb-1">Spell ID (no spaces, e.g., "fireball")</label>
+                        <input type="text" id="spell-id" class="admin-input" placeholder="fireball">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="spell-name" class="block mb-1">Spell Name</label>
+                        <input type="text" id="spell-name" class="admin-input" placeholder="Fireball">
+                    </div>
+                    <div>
+                        <label for="spell-school" class="block mb-1">School of Magic</label>
+                        <select id="spell-school" class="admin-input">
+                            <option value="evocation">Evocation (Damage)</option>
+                            <option value="restoration">Restoration (Healing)</option>
+                            <option value="abjuration">Abjuration (Protection)</option>
+                            <option value="enchantment">Enchantment (Buffs)</option>
+                            <option value="necromancy">Necromancy (Death/Drain)</option>
+                            <option value="conjuration">Conjuration (Summon)</option>
+                            <option value="illusion">Illusion (Deception)</option>
+                            <option value="transmutation">Transmutation (Transform)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="mt-2">
+                    <label for="spell-description" class="block mb-1">Description</label>
+                    <textarea id="spell-description" class="admin-input" rows="2" placeholder="A powerful blast of fire..."></textarea>
+                </div>
+
+                <fieldset class="border border-gray-500 p-3 mt-3">
+                    <legend class="text-yellow-400">Spell Requirements</legend>
+                    <div class="grid grid-cols-3 gap-3">
+                        <div>
+                            <label for="spell-mp-cost" class="block text-sm">MP Cost</label>
+                            <input type="number" id="spell-mp-cost" class="admin-input" value="10" min="0">
+                        </div>
+                        <div>
+                            <label for="spell-level-req" class="block text-sm">Level Required</label>
+                            <input type="number" id="spell-level-req" class="admin-input" value="1" min="1">
+                        </div>
+                        <div>
+                            <label for="spell-class-req" class="block text-sm">Class Requirement</label>
+                            <input type="text" id="spell-class-req" class="admin-input" placeholder="any or class name">
+                        </div>
+                    </div>
+                </fieldset>
+
+                <fieldset class="border border-gray-500 p-3 mt-3">
+                    <legend class="text-yellow-400">Targeting</legend>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label for="spell-target-type" class="block text-sm">Target Type</label>
+                            <select id="spell-target-type" class="admin-input">
+                                <option value="self">Self</option>
+                                <option value="single-enemy">Single Enemy</option>
+                                <option value="single-ally">Single Ally</option>
+                                <option value="all-enemies">All Enemies in Room</option>
+                                <option value="all-allies">All Allies in Room</option>
+                                <option value="area">Area Effect</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="spell-range" class="block text-sm">Range</label>
+                            <select id="spell-range" class="admin-input">
+                                <option value="touch">Touch</option>
+                                <option value="close">Close (same room)</option>
+                                <option value="medium">Medium (1 room away)</option>
+                                <option value="far">Far (2+ rooms away)</option>
+                            </select>
+                        </div>
+                    </div>
+                </fieldset>
+
+                <fieldset class="border border-gray-500 p-3 mt-3">
+                    <legend class="text-yellow-400">Effects</legend>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div>
+                            <label for="spell-damage" class="block text-sm">Damage (0 = none)</label>
+                            <input type="number" id="spell-damage" class="admin-input" value="0" min="0">
+                        </div>
+                        <div>
+                            <label for="spell-healing" class="block text-sm">Healing (0 = none)</label>
+                            <input type="number" id="spell-healing" class="admin-input" value="0" min="0">
+                        </div>
+                        <div>
+                            <label for="spell-duration" class="block text-sm">Duration (turns, 0 = instant)</label>
+                            <input type="number" id="spell-duration" class="admin-input" value="0" min="0">
+                        </div>
+                        <div>
+                            <label for="spell-cooldown" class="block text-sm">Cooldown (turns, 0 = none)</label>
+                            <input type="number" id="spell-cooldown" class="admin-input" value="0" min="0">
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <label for="spell-stat-effects" class="block text-sm">Stat Effects (JSON, e.g., {"str": 5, "def": -2})</label>
+                        <textarea id="spell-stat-effects" class="admin-input font-mono text-sm" rows="2" placeholder='{"str": 5, "dex": 3}'></textarea>
+                    </div>
+                    <div class="mt-2">
+                        <label for="spell-special-effects" class="block text-sm">Special Effects (text description)</label>
+                        <input type="text" id="spell-special-effects" class="admin-input" placeholder="Burns the target, dealing 5 damage per turn">
+                    </div>
+                </fieldset>
+
+                <div class="flex justify-between items-center mt-4">
+                    <div>
+                        <button id="save-spell-btn" class="bg-green-500 text-white px-4 py-2 rounded">💾 Save Spell</button>
+                        <button id="new-spell-btn" class="bg-blue-500 text-white px-4 py-2 rounded ml-2">➕ New Spell</button>
+                    </div>
+                    <button id="delete-spell-btn" class="bg-red-600 text-white px-4 py-2 rounded">🗑️ Delete Spell</button>
+                </div>
+                <div id="admin-spell-status" class="text-center mt-2 text-sm"></div>
             </div>
 
             <!-- Class Editor -->
