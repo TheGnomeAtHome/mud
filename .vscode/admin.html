@@ -1,0 +1,276 @@
+
+<div id="admin-panel" class="hidden w-full max-w-4xl h-[85vh] border-2 border-yellow-400 bg-black bg-opacity-80 rounded-lg p-4 flex-col gap-2">
+    <div class="flex justify-center flex-wrap gap-4 border-b border-yellow-400 mb-4">
+        <button id="room-tab-btn" class="admin-tab active px-4 py-2 text-lg">Rooms</button>
+        <button id="item-tab-btn" class="admin-tab px-4 py-2 text-lg">Items</button>
+        <button id="npc-tab-btn" class="admin-tab px-4 py-2 text-lg">NPCs</button>
+        <button id="monster-tab-btn" class="admin-tab px-4 py-2 text-lg">Monsters</button>
+        <button id="player-tab-btn" class="admin-tab px-4 py-2 text-lg">Players</button>
+    </div>
+
+    <div id="admin-content" class="overflow-y-auto flex-grow">
+        <!-- Room Editor -->
+        <div id="room-editor-panel">
+             <h2 class="text-2xl text-yellow-400 text-center text-shadow mb-4">Room Editor</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="room-select" class="block mb-1">Select Room to Edit</label>
+                    <select id="room-select" class="admin-input"></select>
+                </div>
+                <div>
+                    <label for="room-id" class="block mb-1">Room ID (no spaces)</label>
+                    <input type="text" id="room-id" class="admin-input">
+                </div>
+            </div>
+            <div>
+                <label for="room-name" class="block mb-1 mt-2">Room Name</label>
+                <input type="text" id="room-name" class="admin-input">
+            </div>
+            <div>
+                <label for="room-desc" class="block mb-1 mt-2">Description</label>
+                <textarea id="room-desc" class="admin-input" rows="2"></textarea>
+                <div class="flex gap-2 mt-1">
+                     <input type="text" id="room-desc-keywords" class="admin-input flex-grow" placeholder="Keywords: e.g., dark, spooky, cavern">
+                     <button id="generate-desc-btn" class="gemini-btn">Generate with AI ✨</button>
+                </div>
+            </div>
+            <div>
+                <label for="room-exits" class="block mb-1 mt-2">Exits (JSON: {"direction": "roomId"})</label>
+                <textarea id="room-exits" class="admin-input" rows="2"></textarea>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block mb-1 mt-2">Items in Room</label>
+                    <div id="room-items-selector" class="admin-input h-20 overflow-y-auto"></div>
+                </div>
+                <div>
+                    <label class="block mb-1 mt-2">NPCs in Room</label>
+                    <div id="room-npcs-selector" class="admin-input h-20 overflow-y-auto"></div>
+                </div>
+            </div>
+             <div>
+                <label class="block mb-1 mt-2">Monster Spawns</label>
+                <div id="room-monsters-selector" class="admin-input h-20 overflow-y-auto"></div>
+            </div>
+            <div>
+                <label for="room-details" class="block mb-1 mt-2">Details (JSON: {"target": "desc"})</label>
+                <textarea id="room-details" class="admin-input" rows="1"></textarea>
+            </div>
+            <div class="flex justify-between mt-4">
+                <div>
+                    <button id="save-room-btn" class="bg-yellow-400 text-black px-4 py-2 rounded">Save Changes</button>
+                    <button id="new-room-btn" class="bg-cyan-400 text-black px-4 py-2 rounded">New Room</button>
+                </div>
+                <button id="delete-room-btn" class="bg-red-600 text-white px-4 py-2 rounded">Delete Room</button>
+            </div>
+            <div id="admin-room-status" class="text-center mt-2 text-sm"></div>
+        </div>
+
+        <!-- Item Editor -->
+        <div id="item-editor-panel" class="hidden">
+             <h2 class="text-2xl text-yellow-400 text-center text-shadow mb-4">Item Editor</h2>
+             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="item-select" class="block mb-1">Select Item to Edit</label>
+                    <select id="item-select" class="admin-input"></select>
+                </div>
+                <div>
+                    <label for="item-id" class="block mb-1">Item ID (no spaces)</label>
+                    <input type="text" id="item-id" class="admin-input">
+                </div>
+            </div>
+             <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label for="item-name" class="block mb-1 mt-2">Item Name (e.g., a rusty key)</label>
+                    <input type="text" id="item-name" class="admin-input">
+                </div>
+                <div>
+                    <label for="item-cost" class="block mb-1 mt-2">Cost (in gold)</label>
+                    <input type="number" id="item-cost" class="admin-input" value="0">
+                </div>
+            </div>
+            <div class="mt-2">
+                <label class="flex items-center">
+                    <input type="checkbox" id="item-movable" class="mr-2"> Is Movable? (Can be picked up)
+                </label>
+            </div>
+            <div class="flex justify-between mt-4">
+                <div>
+                    <button id="save-item-btn" class="bg-yellow-400 text-black px-4 py-2 rounded">Save Item</button>
+                    <button id="new-item-btn" class="bg-cyan-400 text-black px-4 py-2 rounded">New Item</button>
+                </div>
+                <button id="delete-item-btn" class="bg-red-600 text-white px-4 py-2 rounded">Delete Item</button>
+            </div>
+            <div id="admin-item-status" class="text-center mt-2 text-sm"></div>
+        </div>
+
+        <!-- NPC Editor -->
+        <div id="npc-editor-panel" class="hidden">
+             <h2 class="text-2xl text-yellow-400 text-center text-shadow mb-4">NPC Editor</h2>
+             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="npc-select" class="block mb-1">Select NPC to Edit</label>
+                    <select id="npc-select" class="admin-input"></select>
+                </div>
+                <div>
+                    <label for="npc-id" class="block mb-1">NPC ID (no spaces)</label>
+                    <input type="text" id="npc-id" class="admin-input">
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label for="npc-short-name" class="block mb-1 mt-2">Short Name (e.g., Albert)</label>
+                    <input type="text" id="npc-short-name" class="admin-input">
+                </div>
+                <div>
+                    <label for="npc-name" class="block mb-1 mt-2">Descriptive Name (e.g., an old man)</label>
+                    <input type="text" id="npc-name" class="admin-input">
+                </div>
+            </div>
+             <div>
+                <label for="npc-desc" class="block mb-1 mt-2">Description (on examine)</label>
+                <textarea id="npc-desc" class="admin-input" rows="2"></textarea>
+            </div>
+            <div>
+                <label class="block mb-1 mt-2">Items This NPC Sells</label>
+                <div id="npc-sells-selector" class="admin-input h-24 overflow-y-auto"></div>
+            </div>
+            <div class="mt-2">
+                <label class="flex items-center">
+                    <input type="checkbox" id="npc-ai-enabled" class="mr-2"> Use AI for Dialogue?
+                </label>
+            </div>
+            <div>
+                <label for="npc-dialogue" id="npc-dialogue-label" class="block mb-1 mt-2">Dialogue (one line per response)</label>
+                <textarea id="npc-dialogue" class="admin-input" rows="2" placeholder="If AI is enabled, this is the personality prompt."></textarea>
+            </div>
+             <div>
+                <label for="npc-triggers" class="block mb-1 mt-2">Item Triggers (JSON: {"keyword": "itemId"})</label>
+                <textarea id="npc-triggers" class="admin-input" rows="1" placeholder='For AI NPCs to know what items they can give.'></textarea>
+            </div>
+            <div class="flex justify-between mt-4">
+                <div>
+                    <button id="save-npc-btn" class="bg-yellow-400 text-black px-4 py-2 rounded">Save NPC</button>
+                    <button id="new-npc-btn" class="bg-cyan-400 text-black px-4 py-2 rounded">New NPC</button>
+                </div>
+                <button id="delete-npc-btn" class="bg-red-600 text-white px-4 py-2 rounded">Delete NPC</button>
+            </div>
+            <div id="admin-npc-status" class="text-center mt-2 text-sm"></div>
+        </div>
+        
+        <!-- Monster Editor -->
+        <div id="monster-editor-panel" class="hidden">
+            <h2 class="text-2xl text-yellow-400 text-center text-shadow mb-4">Monster Editor</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+               <div>
+                   <label for="monster-select" class="block mb-1">Select Monster to Edit</label>
+                   <select id="monster-select" class="admin-input"></select>
+               </div>
+               <div>
+                   <label for="monster-id" class="block mb-1">Monster ID (no spaces)</label>
+                   <input type="text" id="monster-id" class="admin-input">
+               </div>
+           </div>
+           <div>
+               <label for="monster-name" class="block mb-1 mt-2">Monster Name (e.g., a grumpy goblin)</label>
+               <input type="text" id="monster-name" class="admin-input">
+           </div>
+            <div>
+               <label for="monster-desc" class="block mb-1 mt-2">Description (on examine)</label>
+               <textarea id="monster-desc" class="admin-input" rows="2"></textarea>
+           </div>
+           <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
+                <div>
+                    <label for="monster-hp">HP</label>
+                    <input type="number" id="monster-hp" class="admin-input" value="10">
+                </div>
+                <div>
+                    <label for="monster-min-atk">Min Atk</label>
+                    <input type="number" id="monster-min-atk" class="admin-input" value="1">
+                </div>
+                <div>
+                    <label for="monster-max-atk">Max Atk</label>
+                    <input type="number" id="monster-max-atk" class="admin-input" value="3">
+                </div>
+                <div>
+                    <label for="monster-xp">XP Reward</label>
+                    <input type="number" id="monster-xp" class="admin-input" value="10">
+                </div>
+           </div>
+            <div class="grid grid-cols-2 gap-4 mt-2">
+                 <div>
+                    <label for="monster-gold">Gold Drop</label>
+                    <input type="number" id="monster-gold" class="admin-input" value="5">
+                </div>
+                <div>
+                    <label>Item Drop (optional)</label>
+                    <select id="monster-item-drop" class="admin-input">
+                        <option value="">-- None --</option>
+                    </select>
+                </div>
+            </div>
+             <div class="flex justify-between mt-4">
+               <div>
+                   <button id="save-monster-btn" class="bg-yellow-400 text-black px-4 py-2 rounded">Save Monster</button>
+                   <button id="new-monster-btn" class="bg-cyan-400 text-black px-4 py-2 rounded">New Monster</button>
+               </div>
+               <button id="delete-monster-btn" class="bg-red-600 text-white px-4 py-2 rounded">Delete Monster</button>
+           </div>
+           <div id="admin-monster-status" class="text-center mt-2 text-sm"></div>
+        </div>
+
+        <!-- Player Editor -->
+        <div id="player-editor-panel" class="hidden">
+            <h2 class="text-2xl text-yellow-400 text-center text-shadow mb-4">Player Administrator</h2>
+            <div>
+                <label for="player-select" class="block mb-1">Select Player to Edit</label>
+                <select id="player-select" class="admin-input"></select>
+            </div>
+            <div id="player-edit-form" class="hidden mt-4 p-2 border border-yellow-400 rounded space-y-2">
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
+                    <div class="md:col-span-2">
+                        <label for="player-name-edit">Name</label>
+                        <input type="text" id="player-name-edit" class="player-edit-input">
+                    </div>
+                     <div>
+                        <label for="player-level-edit">Level</label>
+                        <input type="number" id="player-level-edit" class="player-edit-input">
+                    </div>
+                    <div>
+                        <label for="player-score-edit">Score (XP)</label>
+                        <input type="number" id="player-score-edit" class="player-edit-input">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label for="player-room-edit">Current Room ID (Teleport)</label>
+                        <input type="text" id="player-room-edit" class="player-edit-input">
+                    </div>
+                    <div>
+                         <label for="player-money-edit">Gold</label>
+                        <input type="number" id="player-money-edit" class="player-edit-input">
+                    </div>
+                </div>
+                <fieldset class="border border-gray-500 p-2">
+                    <legend>Attributes</legend>
+                    <div class="grid grid-cols-3 gap-2">
+                        <div><label>STR</label><input type="number" id="player-str-edit" class="player-edit-input"></div>
+                        <div><label>DEX</label><input type="number" id="player-dex-edit" class="player-edit-input"></div>
+                        <div><label>CON</label><input type="number" id="player-con-edit" class="player-edit-input"></div>
+                        <div><label>INT</label><input type="number" id="player-int-edit" class="player-edit-input"></div>
+                        <div><label>WIS</label><input type="number" id="player-wis-edit" class="player-edit-input"></div>
+                        <div><label>CHA</label><input type="number" id="player-cha-edit" class="player-edit-input"></div>
+                    </div>
+                </fieldset>
+                <div>
+                    <label><input type="checkbox" id="player-admin-edit" class="mr-2">Is Admin?</label>
+                </div>
+                <div class="flex justify-between items-center">
+                     <button id="save-player-btn" class="bg-yellow-400 text-black px-4 py-2 rounded">Save Player Changes</button>
+                     <button id="delete-player-btn" class="bg-red-600 text-white px-4 py-2 rounded">Delete This Player</button>
+                </div>
+            </div>
+            <div id="admin-player-status" class="text-center mt-2 text-sm"></div>
+        </div>
+    </div>
+</div>
