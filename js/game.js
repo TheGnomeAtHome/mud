@@ -162,10 +162,15 @@ export function initializeGameLogic(dependencies) {
     const MAX_LEVEL = 30;
     const BASE_XP = 100; // XP needed for level 2
     
-    // Calculate XP required for a given level (exponential growth)
-    function getXpForLevel(level) {
+    // Get class data for a player
+    function getClassData(playerClass) {
+        return gameClasses[playerClass] || null;
+    }
+    
+    // Calculate XP required for a given level (class-specific)
+    function getXpForLevel(level, playerClass = null) {
         if (level <= 1) return 0;
-        if (level > MAX_LEVEL) return getXpForLevel(MAX_LEVEL);
+        if (level > MAX_LEVEL) return getXpForLevel(MAX_LEVEL, playerClass);
         
         // Use custom XP if loaded from Firebase, otherwise calculate
         if (LEVEL_XP[level] !== undefined) {
@@ -173,27 +178,69 @@ export function initializeGameLogic(dependencies) {
         }
         
         // Default exponential formula: XP = BASE_XP * level^1.5
-        return Math.floor(BASE_XP * Math.pow(level, 1.5));
+        let baseXp = Math.floor(BASE_XP * Math.pow(level, 1.5));
+        
+        // Apply class-specific XP multiplier
+        if (playerClass) {
+            const classData = getClassData(playerClass);
+            if (classData && classData.xpMultiplier) {
+                baseXp = Math.floor(baseXp * classData.xpMultiplier);
+            }
+        }
+        
+        return baseXp;
     }
     
-    // Calculate current level from XP
-    function getLevelFromXp(xp) {
+    // Calculate current level from XP (class-specific)
+    function getLevelFromXp(xp, playerClass = null) {
         for (let level = MAX_LEVEL; level >= 1; level--) {
-            if (xp >= getXpForLevel(level)) {
+            if (xp >= getXpForLevel(level, playerClass)) {
                 return level;
             }
         }
         return 1;
     }
     
-    // Calculate stat bonuses for a given level
-    function getLevelBonuses(level) {
+    // Calculate stat bonuses for a given level (class-specific)
+    function getLevelBonuses(level, playerClass = null, playerData = null) {
+        const classData = getClassData(playerClass);
+        
+        // Base HP calculation
+        let baseMaxHp = 100;
+        let hpPerLevel = 10; // Default
+        let mpPerLevel = 5;  // Default
+        
+        // Apply class-specific starting bonuses
+        if (playerData) {
+            baseMaxHp = playerData.maxHp || 100; // Use current max HP as base
+        } else if (classData) {
+            baseMaxHp = 100 + (classData.hpBonus || 0);
+        }
+        
+        // Get class-specific HP/MP per level
+        if (classData) {
+            hpPerLevel = classData.hpPerLevel || 10;
+            mpPerLevel = classData.mpPerLevel || 5;
+        }
+        
+        const maxHp = baseMaxHp + (level - 1) * hpPerLevel;
+        const maxMp = 100 + (level - 1) * mpPerLevel;
+        
+        // Calculate stat growth based on class
+        const statGrowth = classData?.statGrowth || {
+            str: 3, dex: 3, con: 3, int: 3, wis: 3, cha: 3
+        };
+        
         return {
-            maxHp: 100 + (level - 1) * 10,           // +10 HP per level
-            strength: Math.floor((level - 1) / 3),    // +1 STR every 3 levels
-            dexterity: Math.floor((level - 1) / 3),   // +1 DEX every 3 levels
-            intelligence: Math.floor((level - 1) / 3), // +1 INT every 3 levels
-            gold: level * 50                          // Starting gold increases with level
+            maxHp,
+            maxMp,
+            strength: Math.floor((level - 1) / statGrowth.str),
+            dexterity: Math.floor((level - 1) / statGrowth.dex),
+            constitution: Math.floor((level - 1) / statGrowth.con),
+            intelligence: Math.floor((level - 1) / statGrowth.int),
+            wisdom: Math.floor((level - 1) / statGrowth.wis),
+            charisma: Math.floor((level - 1) / statGrowth.cha),
+            gold: level * 50
         };
     }
     
@@ -222,45 +269,77 @@ export function initializeGameLogic(dependencies) {
     
     // Check and handle level up
     async function checkLevelUp(playerRef, currentXp, currentLevel) {
-        const newLevel = getLevelFromXp(currentXp);
+        const playerDoc = await getDoc(playerRef);
+        const playerData = playerDoc.data();
+        const playerClass = playerData.class || 'Adventurer';
+        
+        const newLevel = getLevelFromXp(currentXp, playerClass);
         
         if (newLevel > currentLevel && newLevel <= MAX_LEVEL) {
-            const bonuses = getLevelBonuses(newLevel);
-            const playerDoc = await getDoc(playerRef);
-            const playerData = playerDoc.data();
+            const oldBonuses = getLevelBonuses(currentLevel, playerClass, playerData);
+            const bonuses = getLevelBonuses(newLevel, playerClass, playerData);
             
-            // Calculate new stats
+            // Calculate new stats based on class and character creation bonuses
+            const classData = getClassData(playerClass);
+            const baseAttributes = playerData.attributes || { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
+            
+            // Get initial class bonuses (from character creation)
+            const initialBonuses = classData?.statBonuses || { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 };
+            
+            // New attributes = 10 (base) + initial class bonus + level bonus
+            const newAttributes = {
+                str: 10 + initialBonuses.str + bonuses.strength,
+                dex: 10 + initialBonuses.dex + bonuses.dexterity,
+                con: 10 + initialBonuses.con + bonuses.constitution,
+                int: 10 + initialBonuses.int + bonuses.intelligence,
+                wis: 10 + initialBonuses.wis + bonuses.wisdom,
+                cha: 10 + initialBonuses.cha + bonuses.charisma
+            };
+            
+            // Calculate HP/MP increases
             const newMaxHp = bonuses.maxHp;
-            const newHp = Math.min(playerData.hp + (newMaxHp - playerData.maxHp), newMaxHp); // Heal on level up
+            const newMaxMp = bonuses.maxMp;
+            const hpGain = newMaxHp - (playerData.maxHp || 100);
+            const mpGain = newMaxMp - (playerData.maxMp || 100);
+            const newHp = Math.min(playerData.hp + hpGain, newMaxHp); // Heal on level up
+            const newMp = Math.min((playerData.mp || 100) + mpGain, newMaxMp);
             
             // Update player with new level and stats
             await updateDoc(playerRef, {
                 level: newLevel,
                 maxHp: newMaxHp,
                 hp: newHp,
-                'attributes.str': 10 + bonuses.strength,
-                'attributes.dex': 10 + bonuses.dexterity,
-                'attributes.int': 10 + bonuses.intelligence
+                maxMp: newMaxMp,
+                mp: newMp,
+                attributes: newAttributes
             });
             
             // Announce level up!
             const newLevelName = getLevelName(newLevel);
-            logToTerminal(`🎉 LEVEL UP! You are now level ${newLevel} - ${newLevelName}!`, 'system');
-            logToTerminal(`Max HP increased to ${newMaxHp}! (+${newMaxHp - playerData.maxHp})`, 'game');
-            if (bonuses.strength > Math.floor((currentLevel - 1) / 3)) {
-                logToTerminal(`Strength increased to ${10 + bonuses.strength}!`, 'game');
+            const className = classData?.name || playerClass;
+            logToTerminal(`🎉 LEVEL UP! You are now level ${newLevel} ${className} - ${newLevelName}!`, 'system');
+            
+            if (hpGain > 0) {
+                logToTerminal(`Max HP increased to ${newMaxHp}! (+${hpGain})`, 'game');
             }
-            if (bonuses.dexterity > Math.floor((currentLevel - 1) / 3)) {
-                logToTerminal(`Dexterity increased to ${10 + bonuses.dexterity}!`, 'game');
+            if (mpGain > 0) {
+                logToTerminal(`Max MP increased to ${newMaxMp}! (+${mpGain})`, 'game');
             }
-            if (bonuses.intelligence > Math.floor((currentLevel - 1) / 3)) {
-                logToTerminal(`Intelligence increased to ${10 + bonuses.intelligence}!`, 'game');
+            
+            // Show stat increases
+            const statNames = { str: 'Strength', dex: 'Dexterity', con: 'Constitution', int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma' };
+            for (const [stat, name] of Object.entries(statNames)) {
+                const oldStat = 10 + initialBonuses[stat] + oldBonuses[stat.slice(0, -2) === 'ch' ? 'charisma' : stat === 'str' ? 'strength' : stat === 'dex' ? 'dexterity' : stat === 'con' ? 'constitution' : stat === 'int' ? 'intelligence' : 'wisdom'];
+                const newStat = newAttributes[stat];
+                if (newStat > oldStat) {
+                    logToTerminal(`${name} increased to ${newStat}! (+${newStat - oldStat})`, 'game');
+                }
             }
             
             // Log to news feed
             await logNews('levelup', playerData.name, `reached level ${newLevel} - ${newLevelName}!`);
             
-            const xpForNext = getXpForLevel(newLevel + 1);
+            const xpForNext = getXpForLevel(newLevel + 1, playerClass);
             if (newLevel < MAX_LEVEL) {
                 logToTerminal(`XP to next level: ${xpForNext - currentXp}`, 'game');
             } else {
@@ -1582,11 +1661,13 @@ export function initializeGameLogic(dependencies) {
                 const money = pData.money || 0;
                 const hp = pData.hp || 10;
                 const playerMaxHp = pData.maxHp || 100;
+                const mp = pData.mp || 100;
+                const playerMaxMp = pData.maxMp || 100;
                 const playerRace = pData.race || 'Human';
                 const playerClass = pData.class || 'Adventurer';
                 
-                const currentLevelXp = getXpForLevel(level);
-                const nextLevelXp = getXpForLevel(level + 1);
+                const currentLevelXp = getXpForLevel(level, playerClass);
+                const nextLevelXp = getXpForLevel(level + 1, playerClass);
                 const xpProgress = xp - currentLevelXp;
                 const xpNeeded = nextLevelXp - currentLevelXp;
                 
@@ -1596,6 +1677,7 @@ export function initializeGameLogic(dependencies) {
                 const levelName = getLevelName(level);
                 logToTerminal(`Level: ${level} - ${levelName}${level >= MAX_LEVEL ? ' (MAX)' : ''}`, 'game');
                 logToTerminal(`HP: ${hp} / ${playerMaxHp}`, 'game');
+                logToTerminal(`MP: ${mp} / ${playerMaxMp}`, 'game');
                 
                 if (level < MAX_LEVEL) {
                     logToTerminal(`XP: ${xp} (${xpProgress} / ${xpNeeded} to level ${level + 1})`, 'game');

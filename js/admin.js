@@ -1700,7 +1700,19 @@ export function initializeAdminPanel({
                 statBonuses: { str: 3, dex: 0, con: 2, int: -1, wis: 0, cha: 0 },
                 hpBonus: 20,
                 mpBonus: 0,
-                abilities: ['Power Attack', 'Shield Bash']
+                abilities: ['Power Attack', 'Shield Bash'],
+                // Leveling properties
+                xpMultiplier: 0.95,  // Levels slightly faster (5% less XP needed)
+                hpPerLevel: 12,      // High HP gain per level
+                mpPerLevel: 2,       // Low MP gain per level
+                statGrowth: {        // Stat increases every N levels
+                    str: 2,  // +1 STR every 2 levels
+                    dex: 4,  // +1 DEX every 4 levels
+                    con: 3,  // +1 CON every 3 levels
+                    int: 6,  // +1 INT every 6 levels
+                    wis: 5,  // +1 WIS every 5 levels
+                    cha: 5   // +1 CHA every 5 levels
+                }
             },
             'priest': {
                 name: 'Priest',
@@ -1708,7 +1720,18 @@ export function initializeAdminPanel({
                 statBonuses: { str: 0, dex: 0, con: 1, int: 0, wis: 3, cha: 2 },
                 hpBonus: 0,
                 mpBonus: 20,
-                abilities: ['Heal', 'Bless', 'Smite']
+                abilities: ['Heal', 'Bless', 'Smite'],
+                xpMultiplier: 1.0,   // Standard XP progression
+                hpPerLevel: 8,       // Average HP gain
+                mpPerLevel: 8,       // High MP gain
+                statGrowth: {
+                    str: 6,
+                    dex: 5,
+                    con: 4,
+                    int: 4,
+                    wis: 2,  // +1 WIS every 2 levels
+                    cha: 3   // +1 CHA every 3 levels
+                }
             },
             'wizard': {
                 name: 'Wizard',
@@ -1716,7 +1739,18 @@ export function initializeAdminPanel({
                 statBonuses: { str: -1, dex: 0, con: -1, int: 4, wis: 1, cha: 0 },
                 hpBonus: -10,
                 mpBonus: 30,
-                abilities: ['Fireball', 'Lightning Bolt', 'Shield']
+                abilities: ['Fireball', 'Lightning Bolt', 'Shield'],
+                xpMultiplier: 1.1,   // Levels slower (10% more XP needed)
+                hpPerLevel: 6,       // Low HP gain
+                mpPerLevel: 10,      // Highest MP gain
+                statGrowth: {
+                    str: 6,
+                    dex: 4,
+                    con: 5,
+                    int: 2,  // +1 INT every 2 levels
+                    wis: 3,  // +1 WIS every 3 levels
+                    cha: 5
+                }
             },
             'rogue': {
                 name: 'Rogue',
@@ -1724,7 +1758,18 @@ export function initializeAdminPanel({
                 statBonuses: { str: 0, dex: 4, con: 0, int: 0, wis: 0, cha: 2 },
                 hpBonus: 0,
                 mpBonus: 0,
-                abilities: ['Backstab', 'Stealth', 'Lockpick']
+                abilities: ['Backstab', 'Stealth', 'Lockpick'],
+                xpMultiplier: 0.9,   // Levels fastest
+                hpPerLevel: 9,       // Average HP
+                mpPerLevel: 3,       // Low MP
+                statGrowth: {
+                    str: 4,
+                    dex: 2,  // +1 DEX every 2 levels
+                    con: 4,
+                    int: 5,
+                    wis: 4,
+                    cha: 3
+                }
             },
             'paladin': {
                 name: 'Paladin',
@@ -1732,7 +1777,18 @@ export function initializeAdminPanel({
                 statBonuses: { str: 2, dex: 0, con: 2, int: 0, wis: 1, cha: 1 },
                 hpBonus: 15,
                 mpBonus: 10,
-                abilities: ['Lay on Hands', 'Divine Shield', 'Holy Strike']
+                abilities: ['Lay on Hands', 'Divine Shield', 'Holy Strike'],
+                xpMultiplier: 1.05,  // Levels slightly slower
+                hpPerLevel: 10,      // Good HP gain
+                mpPerLevel: 5,       // Good MP gain
+                statGrowth: {
+                    str: 3,  // +1 STR every 3 levels
+                    dex: 5,
+                    con: 3,  // +1 CON every 3 levels
+                    int: 5,
+                    wis: 4,
+                    cha: 4
+                }
             },
             'ranger': {
                 name: 'Ranger',
@@ -1740,7 +1796,18 @@ export function initializeAdminPanel({
                 statBonuses: { str: 1, dex: 3, con: 1, int: 0, wis: 2, cha: 0 },
                 hpBonus: 10,
                 mpBonus: 5,
-                abilities: ['Track', 'Rapid Shot', 'Animal Companion']
+                abilities: ['Track', 'Rapid Shot', 'Animal Companion'],
+                xpMultiplier: 0.95,  // Levels slightly faster
+                hpPerLevel: 10,      // Good HP
+                mpPerLevel: 4,       // Low-moderate MP
+                statGrowth: {
+                    str: 4,
+                    dex: 2,  // +1 DEX every 2 levels
+                    con: 4,
+                    int: 5,
+                    wis: 3,  // +1 WIS every 3 levels
+                    cha: 6
+                }
             }
         };
 

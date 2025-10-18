@@ -279,6 +279,12 @@ export async function initializeApp() {
             console.error('Error checking player count:', error);
         }
         
+        // Calculate initial MP based on class
+        let maxMp = 100;
+        if (classData && classData.mpBonus) {
+            maxMp += classData.mpBonus;
+        }
+        
         const playerData = {
             name: characterName,
             race: race,
@@ -291,6 +297,8 @@ export async function initializeApp() {
             money: 100,
             hp: maxHp,
             maxHp: maxHp,
+            mp: maxMp,
+            maxMp: maxMp,
             xp: 0,
             level: 1,
             score: 0,
