@@ -928,6 +928,9 @@ export function initializeGameLogic(dependencies) {
                     
                     await updateDoc(playerRef, updates);
                     
+                    // Update local current room
+                    currentPlayerRoomId = destinationRoomId;
+                    
                     // Send entry message to destination room
                     const fromDirection = oppositeDirections[direction] || 'somewhere';
                     await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
@@ -938,6 +941,9 @@ export function initializeGameLogic(dependencies) {
                         isEmote: true,
                         timestamp: serverTimestamp()
                     });
+                    
+                    // Show the new room
+                    await showRoom(destinationRoomId);
                 } else { logToTerminal("You can't go that way.", "error"); }
                 break;
             case 'get':
