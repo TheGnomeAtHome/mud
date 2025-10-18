@@ -59,15 +59,23 @@
                 description: "Strong melee fighters with high HP. Bonus to Strength and Constitution.",
                 statBonuses: {
                     str: 3,
-                    dex: 0,
-                    con: 2,
+                    dex: 1,
+                    con: 3,
                     int: -1,
                     wis: 0,
                     cha: 0
                 },
                 hpBonus: 20,
                 mpBonus: 0,
-                abilities: ["Power Strike", "Second Wind", "Weapon Mastery"]
+                abilities: ["Power Attack", "Shield Bash", "Berserker Rage"],
+                levelTitles: {
+                    1: "Recruit", 2: "Soldier", 3: "Corporal", 4: "Sergeant", 5: "Lieutenant",
+                    6: "Captain", 7: "Major", 8: "Colonel", 9: "General", 10: "War Marshal",
+                    11: "Battle Lord", 12: "Warlord", 13: "Conqueror", 14: "Champion", 15: "Hero",
+                    16: "Legend", 17: "War God", 18: "Destroyer", 19: "Eternal Warrior", 20: "God of War",
+                    21: "Immortal Blade", 22: "Celestial Warrior", 23: "Divine Champion", 24: "Eternal Conqueror", 25: "Supreme Warlord",
+                    26: "Transcendent Warrior", 27: "Omnipotent Fighter", 28: "Primordial Destroyer", 29: "Cosmic Warrior", 30: "War Incarnate"
+                }
             },
             priest: {
                 name: "Priest",
@@ -97,7 +105,15 @@
                 },
                 hpBonus: -10,
                 mpBonus: 30,
-                abilities: ["Fireball", "Magic Missile", "Arcane Shield"]
+                abilities: ["Fireball", "Magic Missile", "Arcane Shield"],
+                levelTitles: {
+                    1: "Apprentice", 2: "Initiate", 3: "Acolyte", 4: "Adept", 5: "Magician",
+                    6: "Conjurer", 7: "Sorcerer", 8: "Enchanter", 9: "Mage", 10: "Arcanist",
+                    11: "Archmage", 12: "Wizard Lord", 13: "Grand Wizard", 14: "Spellweaver", 15: "Arcane Master",
+                    16: "Legendary Mage", 17: "Spell Lord", 18: "Archmagus", 19: "Eternal Wizard", 20: "God of Magic",
+                    21: "Immortal Sorcerer", 22: "Celestial Wizard", 23: "Divine Arcanist", 24: "Eternal Spellmaster", 25: "Supreme Magus",
+                    26: "Transcendent Wizard", 27: "Omnipotent Sorcerer", 28: "Primordial Mage", 29: "Cosmic Wizard", 30: "Magic Incarnate"
+                }
             },
             rogue: {
                 name: "Rogue",

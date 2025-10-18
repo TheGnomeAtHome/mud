@@ -81,7 +81,16 @@ export function initializeGameLogic(dependencies) {
         }
     }
     
-    function getLevelName(level) {
+    function getLevelName(level, playerClass = null) {
+        // Check for class-specific level titles first
+        if (playerClass && gameClasses[playerClass]) {
+            const classData = gameClasses[playerClass];
+            if (classData.levelTitles && classData.levelTitles[level]) {
+                return classData.levelTitles[level];
+            }
+        }
+        
+        // Fall back to generic level names
         return LEVEL_NAMES[level] || `Level ${level}`;
     }
     
@@ -317,7 +326,7 @@ export function initializeGameLogic(dependencies) {
             });
             
             // Announce level up!
-            const newLevelName = getLevelName(newLevel);
+            const newLevelName = getLevelName(newLevel, playerClass);
             const className = classData?.name || playerClass;
             logToTerminal(`🎉 LEVEL UP! You are now level ${newLevel} ${className} - ${newLevelName}!`, 'system');
             
@@ -380,6 +389,7 @@ export function initializeGameLogic(dependencies) {
                 const playerLevel = player.level || 1;
                 const playerXp = player.xp || 0;
                 const playerName = player.name || "Unknown";
+                const playerClass = player.class || 'Adventurer';
                 
                 // Format rank with medal emojis for top 3
                 let rankDisplay = `${rank}.`;
@@ -390,7 +400,7 @@ export function initializeGameLogic(dependencies) {
                 
                 // Format the line with proper spacing
                 const nameDisplay = playerName.padEnd(20);
-                const levelName = getLevelName(playerLevel);
+                const levelName = getLevelName(playerLevel, playerClass);
                 const levelDisplay = `Lv.${playerLevel} ${levelName}`.padEnd(20);
                 const xpDisplay = `${playerXp} XP`;
                 
@@ -1994,11 +2004,11 @@ export function initializeGameLogic(dependencies) {
                     const hp = player.hp || player.maxHp || 100;
                     const maxHp = player.maxHp || 100;
                     const hpPercent = Math.round((hp / maxHp) * 100);
-                    const levelName = getLevelName(player.level || 1);
+                    const playerClass = player.class || 'Adventurer';
+                    const levelName = getLevelName(player.level || 1, playerClass);
                     const isBot = player.isBot ? ' 🤖' : '';
                     const room = gameWorld[player.roomId];
                     const roomName = room ? room.name : 'Unknown';
-                    const playerClass = player.class || 'Adventurer';
                     const playerRace = player.race || 'Human';
                     
                     // Show guild tag if in a guild
@@ -2045,7 +2055,7 @@ export function initializeGameLogic(dependencies) {
                 logToTerminal("--- Player Status ---", 'system');
                 logToTerminal(`Name: ${playerName}`, 'game');
                 logToTerminal(`Race: ${playerRace} | Class: ${playerClass}`, 'game');
-                const levelName = getLevelName(level);
+                const levelName = getLevelName(level, playerClass);
                 logToTerminal(`Level: ${level} - ${levelName}${level >= MAX_LEVEL ? ' (MAX)' : ''}`, 'game');
                 logToTerminal(`HP: ${hp} / ${playerMaxHp}`, 'game');
                 logToTerminal(`MP: ${mp} / ${playerMaxMp}`, 'game');
@@ -2501,9 +2511,10 @@ export function initializeGameLogic(dependencies) {
                     const statsLevel = pDataStats.level || 1;
                     const statsHp = pDataStats.hp || 10;
                     const statsMaxHp = pDataStats.maxHp || 100;
+                    const statsClass = pDataStats.class || 'Adventurer';
                     
                     logToTerminal("--- Your Attributes ---", 'system');
-                    logToTerminal(`Level: ${statsLevel} - ${getLevelName(statsLevel)}`, 'game');
+                    logToTerminal(`Level: ${statsLevel} - ${getLevelName(statsLevel, statsClass)}`, 'game');
                     logToTerminal(`HP: ${statsHp} / ${statsMaxHp}`, 'game');
                     logToTerminal("", 'game'); // Blank line
                     Object.entries(pDataStats.attributes).forEach(([key, value]) => {
