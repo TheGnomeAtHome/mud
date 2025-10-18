@@ -1114,6 +1114,42 @@ export function initializeGameLogic(dependencies) {
                     break;
                 }
                 
+                // Check if examining another player
+                const targetPlayer = Object.values(gamePlayers).find(p => 
+                    p.roomId === currentPlayerRoomId && 
+                    p.name !== playerName && 
+                    p.name.toLowerCase() === target.toLowerCase()
+                );
+                
+                if (targetPlayer) {
+                    // Show player information (without sensitive stats)
+                    logToTerminal(`=== ${targetPlayer.name} ===`, 'system');
+                    logToTerminal(`Level ${targetPlayer.level || 1} ${targetPlayer.class || 'Adventurer'}`, 'game');
+                    
+                    // Show HP status
+                    const hpPercent = ((targetPlayer.hp || 0) / (targetPlayer.maxHp || 100)) * 100;
+                    let healthStatus = 'Healthy';
+                    if (hpPercent < 25) healthStatus = 'Critically wounded';
+                    else if (hpPercent < 50) healthStatus = 'Badly hurt';
+                    else if (hpPercent < 75) healthStatus = 'Slightly injured';
+                    logToTerminal(`Health: ${healthStatus}`, 'game');
+                    
+                    // Show equipped weapon if any
+                    if (targetPlayer.equippedWeapon) {
+                        const weapon = gameItems[targetPlayer.equippedWeapon];
+                        if (weapon) {
+                            logToTerminal(`Wielding: ${weapon.name}`, 'game');
+                        }
+                    }
+                    
+                    // Show title or achievement if any
+                    if (targetPlayer.title) {
+                        logToTerminal(`Title: ${targetPlayer.title}`, 'game');
+                    }
+                    
+                    break;
+                }
+                
                 const npcToExamine = findNpcInRoom(target);
                 if (npcToExamine) {
                     logToTerminal(npcToExamine.description, 'game');
