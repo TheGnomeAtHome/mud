@@ -873,24 +873,47 @@ export function initializeGameLogic(dependencies) {
                     break;
 
                 case 'spellbook':
-                    // Spellbook - teaches a spell when used
-                    const teachSpell = specialData.teachSpell; // spell ID to teach
-                    if (!teachSpell) {
+                    // Spellbook - teaches one or more spells when used
+                    // Support both single spell (teachSpell) and multiple spells (teachSpells array)
+                    let spellsToTeach = [];
+                    
+                    if (specialData.teachSpells && Array.isArray(specialData.teachSpells)) {
+                        spellsToTeach = specialData.teachSpells;
+                    } else if (specialData.teachSpell) {
+                        spellsToTeach = [specialData.teachSpell];
+                    }
+                    
+                    if (spellsToTeach.length === 0) {
                         logToTerminal(`${itemData.name} appears to be blank.`, 'error');
                         break;
                     }
 
-                    // Check if spell exists
-                    const spellToLearn = gameSpells[teachSpell];
-                    if (!spellToLearn) {
-                        logToTerminal(`${itemData.name} contains unknown magic.`, 'error');
-                        break;
+                    // Get current known spells
+                    const currentKnownSpells = playerData.knownSpells || [];
+                    
+                    // Check which spells the player doesn't know yet
+                    const newSpells = [];
+                    const alreadyKnown = [];
+                    const unknownSpells = [];
+                    
+                    for (const spellId of spellsToTeach) {
+                        const spell = gameSpells[spellId];
+                        if (!spell) {
+                            unknownSpells.push(spellId);
+                        } else if (currentKnownSpells.includes(spellId)) {
+                            alreadyKnown.push(spell.name);
+                        } else {
+                            newSpells.push({ id: spellId, data: spell });
+                        }
                     }
 
-                    // Check if player already knows the spell
-                    const currentKnownSpells = playerData.knownSpells || [];
-                    if (currentKnownSpells.includes(teachSpell)) {
-                        logToTerminal(`You already know ${spellToLearn.name}. The book's magic fades.`, 'game');
+                    // If no new spells to learn
+                    if (newSpells.length === 0) {
+                        if (unknownSpells.length > 0) {
+                            logToTerminal(`${itemData.name} contains unknown or corrupted magic.`, 'error');
+                        } else {
+                            logToTerminal(`You already know all the spells in ${itemData.name}. The book's magic fades.`, 'game');
+                        }
                         // Still consume the item
                         const updatedInv = playerData.inventory.filter(item => 
                             item.id !== inventoryItem.id || item.name !== inventoryItem.name
@@ -899,18 +922,34 @@ export function initializeGameLogic(dependencies) {
                         break;
                     }
 
-                    // Teach the spell
+                    // Teach all new spells
+                    const spellIdsToAdd = newSpells.map(s => s.id);
                     await updateDoc(playerRef, {
-                        knownSpells: arrayUnion(teachSpell),
+                        knownSpells: [...currentKnownSpells, ...spellIdsToAdd],
                         inventory: playerData.inventory.filter(item => 
                             item.id !== inventoryItem.id || item.name !== inventoryItem.name
                         )
                     });
 
                     logToTerminal(`You study ${itemData.name} intently. The magical words burn themselves into your mind!`, 'system');
-                    logToTerminal(`You have learned ${spellToLearn.name}!`, 'success');
-                    logToTerminal(`${spellToLearn.description}`, 'game');
-                    logToTerminal(`MP Cost: ${spellToLearn.mpCost} | Target: ${spellToLearn.targetType}`, 'game');
+                    
+                    // Show what was learned
+                    if (newSpells.length === 1) {
+                        const spell = newSpells[0].data;
+                        logToTerminal(`You have learned ${spell.name}!`, 'success');
+                        logToTerminal(`${spell.description}`, 'game');
+                        logToTerminal(`MP Cost: ${spell.mpCost} | Target: ${spell.targetType}`, 'game');
+                    } else {
+                        logToTerminal(`You have learned ${newSpells.length} new spells!`, 'success');
+                        newSpells.forEach(({ data: spell }) => {
+                            logToTerminal(`• ${spell.name} (${spell.mpCost} MP, ${spell.targetType})`, 'game');
+                        });
+                    }
+                    
+                    // Show which spells were already known
+                    if (alreadyKnown.length > 0) {
+                        logToTerminal(`You already knew: ${alreadyKnown.join(', ')}`, 'game');
+                    }
                     
                     // The book is consumed after learning
                     logToTerminal(`The book crumbles to dust as its knowledge transfers to you.`, 'system');
