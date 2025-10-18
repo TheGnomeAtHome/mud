@@ -1,0 +1,54 @@
+body {
+            font-family: 'VT323', monospace;
+            background-color: #0d0d0d;
+            color: #00ff41;
+        }
+        #terminal-output::-webkit-scrollbar, #admin-panel::-webkit-scrollbar {
+            width: 8px;
+        }
+        #terminal-output::-webkit-scrollbar-track, #admin-panel::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+        #terminal-output::-webkit-scrollbar-thumb, #admin-panel::-webkit-scrollbar-thumb {
+            background-color: #00ff41;
+            border-radius: 4px;
+        }
+        .text-shadow {
+            text-shadow: 0 0 5px #00ff41, 0 0 10px #00ff41;
+        }
+        #command-input {
+            background: transparent;
+            border: none;
+            outline: none;
+            color: #00ff41;
+            width: 100%;
+            font-family: 'VT323', monospace;
+        }
+        .glow {
+            box-shadow: 0 0 5px #00ff41, 0 0 10px #00ff41, 0 0 15px #00ff41;
+        }
+        .admin-input, .player-edit-input, .auth-input {
+            background-color: #1a1a1a;
+            border: 1px solid #00ff41;
+            color: #00ff41;
+            padding: 4px 8px;
+            border-radius: 4px;
+            width: 100%;
+        }
+        .gemini-btn {
+            background-color: #8A2BE2; /* A magical purple */
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            border: 1px solid #c398ff;
+        }
+        .admin-tab {
+            border-bottom: 2px solid transparent;
+        }
+        .admin-tab.active {
+            border-bottom-color: #facc15; /* yellow-400 */
+            color: #facc15;
+        }
+        .combat-log { color: #ff6347; } /* Tomato red for combat */
+        .loot-log { color: #ffd700; } /* Gold for loot */
+        .loot-log { color: #ffd700; } /* Gold for loot */

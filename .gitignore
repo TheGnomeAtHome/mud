@@ -1,0 +1,19 @@
+# Backups
+*.backup
+*.zip
+
+# IDE
+.vs/
+.vscode/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*~

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>M.U.D. - The Digital Realm</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="bg-black text-[#00ff41] font-mono">
+    <nav class="p-6 flex justify-between items-center border-b border-[#00ff41]">
+        <div class="flex items-center gap-3">
+            <span class="text-4xl">⚔️</span>
+            <h1 class="text-2xl font-bold">M.U.D. - The Digital Realm</h1>
+        </div>
+        <a href="mud.html" class="bg-[#00ff41] text-black px-6 py-2 rounded hover:bg-white transition-all font-bold">
+            PLAY NOW
+        </a>
+    </nav>
+    
+    <div class="container mx-auto px-4 py-20 text-center">
+        <h1 class="text-8xl font-bold mb-6 glow" style="font-family: 'VT323', monospace;">
+            THE DIGITAL REALM
+        </h1>
+        <p class="text-2xl mb-10 text-gray-400">
+            A text-based multiplayer adventure powered by AI
+        </p>
+        <a href="mud.html" class="bg-[#00ff41] text-black px-12 py-6 rounded-lg text-2xl font-bold hover:bg-white transition-all glow inline-block">
+            🎮 Enter The Realm
+        </a>
+    </div>
+    
+    <div class="container mx-auto px-4 py-10">
+        <div class="grid grid-cols-4 gap-6">
+            <div class="text-center p-6 border border-[#00ff41] rounded-lg">
+                <div class="text-4xl font-bold mb-2" id="player-count">-</div>
+                <div class="text-gray-400">Players</div>
+            </div>
+            <div class="text-center p-6 border border-[#00ff41] rounded-lg">
+                <div class="text-4xl font-bold mb-2" id="room-count">-</div>
+                <div class="text-gray-400">Rooms</div>
+            </div>
+            <div class="text-center p-6 border border-[#00ff41] rounded-lg">
+                <div class="text-4xl font-bold mb-2" id="monster-count">-</div>
+                <div class="text-gray-400">Monsters</div>
+            </div>
+            <div class="text-center p-6 border border-[#00ff41] rounded-lg">
+                <div class="text-4xl font-bold mb-2" id="npc-count">-</div>
+                <div class="text-gray-400">NPCs</div>
+            </div>
+        </div>
+    </div>
+    
+    <section class="py-20">
+        <div class="container mx-auto px-4">
+            <h2 class="text-5xl font-bold text-center mb-16 glow">Recent Achievements</h2>
+            <div class="max-w-3xl mx-auto space-y-4" id="news-feed">
+                <div class="text-center text-gray-400">Loading...</div>
+            </div>
+        </div>
+    </section>
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, collection, getDocs, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyD454EmNJFMHPsL2XrNJc7-dQ4bnoCFASs",
+            authDomain: "mudgame-3cbb1.firebaseapp.com",
+            projectId: "mudgame-3cbb1",
+            storageBucket: "mudgame-3cbb1.appspot.com",
+            messagingSenderId: "1004334145379",
+            appId: "1:1004334145379:web:3db9fda346526a64e67d56"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const appId = 'mudgame-3cbb1';
+
+        async function loadStats() {
+            try {
+                const [playersSnap, roomsSnap, monstersSnap, npcsSnap] = await Promise.all([
+                    getDocs(collection(db, `/artifacts/${appId}/public/data/mud-players`)),
+                    getDocs(collection(db, `/artifacts/${appId}/public/data/mud-rooms`)),
+                    getDocs(collection(db, `/artifacts/${appId}/public/data/mud-monsters`)),
+                    getDocs(collection(db, `/artifacts/${appId}/public/data/mud-npcs`))
+                ]);
+
+                document.getElementById('player-count').textContent = playersSnap.size;
+                document.getElementById('room-count').textContent = roomsSnap.size;
+                document.getElementById('monster-count').textContent = monstersSnap.size;
+                document.getElementById('npc-count').textContent = npcsSnap.size;
+            } catch (error) {
+                console.error('Error loading stats:', error);
+                document.getElementById('player-count').textContent = '?';
+                document.getElementById('room-count').textContent = '?';
+                document.getElementById('monster-count').textContent = '?';
+                document.getElementById('npc-count').textContent = '?';
+            }
+        }
+
+        async function loadNews() {
+            try {
+                const newsRef = collection(db, `/artifacts/${appId}/public/data/mud-news`);
+                const newsQuery = query(newsRef, orderBy('timestamp', 'desc'), limit(10));
+                const newsSnapshot = await getDocs(newsQuery);
+
+                const newsFeed = document.getElementById('news-feed');
+                
+                if (newsSnapshot.empty) {
+                    newsFeed.innerHTML = '<div class="text-center text-gray-400">No achievements yet. Be the first hero!</div>';
+                    return;
+                }
+
+                newsFeed.innerHTML = '';
+                newsSnapshot.forEach(doc => {
+                    const news = doc.data();
+                    const timeAgo = getTimeAgo(news.timestamp);
+                    const icon = news.icon || '📰';
+                    
+                    const div = document.createElement('div');
+                    div.className = 'p-4 border-l-4 border-[#00ff41] bg-black bg-opacity-50 rounded';
+                    div.innerHTML = `
+                        <div class="flex items-center gap-3">
+                            <span class="text-2xl">${icon}</span>
+                            <div class="flex-1">
+                                <span class="text-yellow-400 font-bold">${news.playerName}</span>
+                                <span> ${news.event}</span>
+                            </div>
+                            <span class="text-gray-500 text-sm">${timeAgo}</span>
+                        </div>
+                    `;
+                    newsFeed.appendChild(div);
+                });
+            } catch (error) {
+                console.error('Error loading news:', error);
+                document.getElementById('news-feed').innerHTML = '<div class="text-center text-red-400">Error loading news</div>';
+            }
+        }
+
+        function getTimeAgo(timestamp) {
+            if (!timestamp) return 'just now';
+            
+            let date;
+            if (timestamp.toDate) {
+                date = timestamp.toDate();
+            } else if (timestamp.seconds) {
+                date = new Date(timestamp.seconds * 1000);
+            } else {
+                date = new Date(timestamp);
+            }
+            
+            const now = new Date();
+            const secondsAgo = Math.floor((now - date) / 1000);
+            
+            if (secondsAgo < 60) return 'just now';
+            if (secondsAgo < 3600) return `${Math.floor(secondsAgo / 60)}m ago`;
+            if (secondsAgo < 86400) return `${Math.floor(secondsAgo / 3600)}h ago`;
+            return `${Math.floor(secondsAgo / 86400)}d ago`;
+        }
+
+        loadStats();
+        loadNews();
+        setInterval(loadNews, 30000); // Refresh news every 30 seconds
+    </script>
+</body>
+</html>

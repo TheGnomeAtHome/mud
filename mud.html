@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-User Dungeon</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    
+    <!-- vis.js for network graph visualization -->
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
+        #map-network {
+            width: 100%;
+            height: 600px;
+            border: 1px solid #00ff41;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8 flex flex-col items-center justify-center min-h-screen">
+
+    <!-- FILE: game.html (Main Game View) -->
+    <div id="app-container" class="w-full max-w-4xl h-[85vh] border-2 border-[#00ff41] bg-black bg-opacity-75 rounded-lg p-4 flex-col glow mb-4 hidden">
+        <div id="header" class="mb-2">
+            <h1 class="text-3xl font-bold text-center text-shadow">M.U.D. - The Digital Realm</h1>
+            <div id="user-info" class="text-center text-sm">Loading...</div>
+        </div>
+
+        <div id="terminal-output" class="flex-grow overflow-y-auto border border-[#00ff41] p-3 mb-3 text-lg leading-relaxed">
+            <!-- Game output will appear here -->
+        </div>
+
+        <div class="flex items-center border-t-2 border-[#00ff41] pt-2">
+            <span class="text-xl mr-2">&gt;</span>
+            <input type="text" id="command-input" class="text-xl" placeholder="Type a command..." autocomplete="off">
+        </div>
+    </div>
+    
+    <button id="admin-toggle-btn" class="hidden bg-[#00ff41] text-black px-4 py-2 rounded">Admin Panel</button>
+    <!-- END OF FILE: game.html -->
+
+
+    <!-- FILE: admin.html (Admin Panel View) -->
+    <div id="admin-panel" class="hidden w-full max-w-4xl h-[85vh] border-2 border-yellow-400 bg-black bg-opacity-80 rounded-lg p-4 flex-col gap-2">
+        <div class="flex justify-center flex-wrap gap-4 border-b border-yellow-400 mb-4">
+            <button id="room-tab-btn" class="admin-tab active px-4 py-2 text-lg">Rooms</button>
+            <button id="item-tab-btn" class="admin-tab px-4 py-2 text-lg">Items</button>
+            <button id="npc-tab-btn" class="admin-tab px-4 py-2 text-lg">NPCs</button>
+            <button id="monster-tab-btn" class="admin-tab px-4 py-2 text-lg">Monsters</button>
+            <button id="player-tab-btn" class="admin-tab px-4 py-2 text-lg">Players</button>
+            <button id="levels-tab-btn" class="admin-tab px-4 py-2 text-lg">⬆️ Levels</button>
+            <button id="actions-tab-btn" class="admin-tab px-4 py-2 text-lg">🎭 Actions</button>
+            <button id="map-tab-btn" class="admin-tab px-4 py-2 text-lg">🗺️ Map</button>
+        </div>
+
+        <div id="admin-content" class="overflow-y-auto flex-grow">
+            <!-- Room Editor -->
+            <div id="room-editor-panel">
+                 <h2 class="text-2xl text-yellow-400 text-center text-shadow mb-4">Room Editor</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="room-select" class="block mb-1">Select Room to Edit</label>
+                        <select id="room-select" class="admin-input"></select>
+                    </div>
+                    <div>
+                        <label for="room-id" class="block mb-1">Room ID (no spaces)</label>
+                        <input type="text" id="room-id" class="admin-input">
+                    </div>
+                </div>
+                <div>
+                    <label for="room-name" class="block mb-1 mt-2">Room Name</label>
+                    <input type="text" id="room-name" class="admin-input">
+                </div>
+                <div>
+                    <label for="room-desc" class="block mb-1 mt-2">Description</label>
+                    <textarea id="room-desc" class="admin-input" rows="2"></textarea>
+                    <div class="flex gap-2 mt-1">
+                         <input type="text" id="room-desc-keywords" class="admin-input flex-grow" placeholder="Keywords: e.g., dark, spooky, cavern">
+                         <button id="generate-desc-btn" class="gemini-btn">Generate Description ✨</button>
+                    </div>
+                </div>
+                <div>
+                    <label for="room-exits" class="block mb-1 mt-2">Exits (JSON: {"direction": "roomId"})</label>
+                    <textarea id="room-exits" class="admin-input" rows="2"></textarea>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block mb-1 mt-2">Items in Room</label>
+                        <div id="room-items-selector" class="admin-input h-20 overflow-y-auto"></div>
+                    </div>
+                    <div>
+                        <label class="block mb-1 mt-2">NPCs in Room</label>
+                        <div id="room-npcs-selector" class="admin-input h-20 overflow-y-auto"></div>
+                    </div>
+                </div>
+                 <div>
+                    <label class="block mb-1 mt-2">Monster Spawns</label>
+                    <div id="room-monsters-selector" class="admin-input h-20 overflow-y-auto"></div>
+                </div>
+                <div>
+                    <label for="room-details" class="block mb-1 mt-2">Details (JSON: {"target": "desc"})</label>
+                    <textarea id="room-details" class="admin-input" rows="1"></textarea>
+                </div>
+                <div class="flex justify-between mt-4">
+                    <div>
+                        <button id="save-room-btn" class="bg-yellow-400 text-black px-4 py-2 rounded">Save Changes</button>
+                        <button id="new-room-btn" class="bg-cyan-400 text-black px-4 py-2 rounded">New Room</button>
+                    </div>
+                    <button id="delete-room-btn" class="bg-red-600 text-white px-4 py-2 rounded">Delete Room</button>
+                </div>
+                <div id="admin-room-status" class="text-center mt-2 text-sm"></div>
+
+                <div class="border border-purple-400 p-2 rounded mt-4">
+                    <h3 class="text-xl text-purple-400 text-center">✨ AI Dungeon Master ✨</h3>
+                    <p class="text-sm text-center text-gray-400 mb-2">Describe a new room and the AI will build it for you.</p>
+                    <div>
+                        <label for="ai-room-prompt" class="block mb-1">Room Prompt</label>
+                        <textarea id="ai-room-prompt" class="admin-input" rows="2" placeholder="e.g., A forgotten library connected to the dark cave, with a mysterious pedestal in the middle."></textarea>
+                    </div>
+                    <div class="text-center mt-2">
+                        <button id="generate-room-btn" class="gemini-btn">Generate New Room</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Item Editor -->
+            <div id="item-editor-panel" class="hidden">
+                 <h2 class="text-2xl text-yellow-400 text-center text-shadow mb-4">Item Editor</h2>
+                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="item-select" class="block mb-1">Select Item to Edit</label>
+                        <select id="item-select" class="admin-input"></select>
+                    </div>
+                    <div>
+                        <label for="item-id" class="block mb-1">Item ID (no spaces)</label>
+                        <input type="text" id="item-id" class="admin-input">
+                    </div>
+                </div>
+                 <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label for="item-name" class="block mb-1 mt-2">Item Name (e.g., a rusty key)</label>
+                        <input type="text" id="item-name" class="admin-input">
+                    </div>
+                    <div>
+                        <label for="item-cost" class="block mb-1 mt-2">Cost (in gold)</label>
+                        <input type="number" id="item-cost" class="admin-input" value="0">
+                    </div>
+                </div>
+                <div class="mt-2">
+                    <label for="item-aliases" class="block mb-1">Aliases (comma-separated, e.g., ring, band, jewelry)</label>
+                    <input type="text" id="item-aliases" class="admin-input" placeholder="ring, band, jewelry">
+                    <p class="text-xs text-gray-400 mt-1">Players can use these alternative names to interact with the item</p>
+                </div>
+                <div class="mt-2">
+                    <label class="flex items-center">
+                        <input type="checkbox" id="item-movable" class="mr-2"> Is Movable? (Can be picked up)
+                    </label>
+                </div>
+                <div class="mt-2">
+                    <label class="flex items-center">
+                        <input type="checkbox" id="item-consumable" class="mr-2"> Is Consumable? (Can be used/eaten/drunk)
+                    </label>
+                </div>
+                <div class="mt-2">
+                    <label class="flex items-center">
+                        <input type="checkbox" id="item-is-weapon" class="mr-2"> Is Weapon? (Adds damage bonus in combat)
+                    </label>
+                </div>
+                <div class="mt-2">
+                    <label class="flex items-center">
+                        <input type="checkbox" id="item-newsworthy" class="mr-2"> Newsworthy (Appears in news feed when found)
+                    </label>
+                </div>
+                <div id="item-weapon-fields" class="hidden">
+                    <div class="grid grid-cols-2 gap-4 mt-2">
+                        <div>
+                            <label for="item-weapon-damage" class="block mb-1">Weapon Damage Bonus</label>
+                            <input type="number" id="item-weapon-damage" class="admin-input" value="3" min="1" max="50">
+                        </div>
+                        <div>
+                            <label for="item-weapon-type" class="block mb-1">Weapon Type</label>
+                            <select id="item-weapon-type" class="admin-input">
+                                <option value="melee">Melee</option>
+                                <option value="ranged">Ranged</option>
+                                <option value="magic">Magic</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4 mt-2">
+                    <div>
+                        <label for="item-hp-restore" class="block mb-1">HP Restored (0 = none)</label>
+                        <input type="number" id="item-hp-restore" class="admin-input" value="0" min="0">
+                    </div>
+                    <div>
+                        <label for="item-effect" class="block mb-1">Effect Description (optional)</label>
+                        <input type="text" id="item-effect" class="admin-input" placeholder="e.g., 'refreshes you'">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4 mt-2">
+                    <div>
+                        <label for="item-type" class="block mb-1">Item Type</label>
+                        <select id="item-type" class="admin-input">
+                            <option value="normal">Normal</option>
+                            <option value="key">Key (unlocks doors)</option>
+                            <option value="teleport">Teleportation Device</option>
+                            <option value="light">Light Source</option>
+                            <option value="container">Container (holds items)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="item-special-data" class="block mb-1">Special Data (JSON)</label>
+                        <input type="text" id="item-special-data" class="admin-input" placeholder='{"unlocks": "gate"}'>
+                    </div>
+                </div>
+                <div class="mt-2">
+                    <label class="flex items-center gap-2">
+                        <input type="checkbox" id="item-is-readable">
+                        <span>Is Readable (has text on it)</span>
+                    </label>
+                    <div id="readable-fields" class="mt-2 hidden">
+                        <label for="item-readable-text" class="block mb-1">Readable Text</label>
+                        <textarea id="item-readable-text" class="admin-input" rows="3" placeholder="Enter the text that appears when this item is read..."></textarea>
+                    </div>
+                </div>
+                <div class="flex flex-col gap-2 mt-4">
+                    <div class="flex gap-2">
+                        <input type="text" id="item-ai-prompt" class="admin-input flex-1" placeholder="Describe the item (e.g., 'a magical healing potion')">
+                        <button id="generate-item-btn" class="gemini-btn px-4 py-2 rounded">✨ Generate Item</button>
+                    </div>
+                    <div class="flex justify-between">
+                        <div>
+                            <button id="save-item-btn" class="bg-yellow-400 text-black px-4 py-2 rounded">Save Item</button>
+                            <button id="new-item-btn" class="bg-cyan-400 text-black px-4 py-2 rounded">New Item</button>
+                        </div>
+                        <button id="delete-item-btn" class="bg-red-600 text-white px-4 py-2 rounded">Delete Item</button>
+                    </div>
+                </div>
+                <div id="admin-item-status" class="text-center mt-2 text-sm"></div>
+            </div>
+
+            <!-- NPC Editor -->
+            <div id="npc-editor-panel" class="hidden">
+                 <h2 class="text-2xl text-yellow-400 text-center text-shadow mb-4">NPC Editor</h2>
+                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="npc-select" class="block mb-1">Select NPC to Edit</label>
+                        <select id="npc-select" class="admin-input"></select>
+                    </div>
+                    <div>
+                        <label for="npc-id" class="block mb-1">NPC ID (no spaces)</label>
+                        <input type="text" id="npc-id" class="admin-input">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label for="npc-short-name" class="block mb-1 mt-2">Short Name (e.g., Albert)</label>
+                        <input type="text" id="npc-short-name" class="admin-input">
+                    </div>
+                    <div>
+                        <label for="npc-name" class="block mb-1 mt-2">Descriptive Name (e.g., an old man)</label>
+                        <input type="text" id="npc-name" class="admin-input">
+                    </div>
+                </div>
+                 <div>
+                    <label for="npc-desc" class="block mb-1 mt-2">Description (on examine)</label>
+                    <textarea id="npc-desc" class="admin-input" rows="2"></textarea>
+                </div>
+                <div>
+                    <label class="block mb-1 mt-2">Items This NPC Sells</label>
+                    <div id="npc-sells-selector" class="admin-input h-24 overflow-y-auto"></div>
+                </div>
+                <div class="mt-2">
+                    <label class="flex items-center">
+                        <input type="checkbox" id="npc-ai-enabled" class="mr-2"> Use AI for Dialogue?
+                    </label>
+                </div>
+                <div>
+                    <label for="npc-dialogue" id="npc-dialogue-label" class="block mb-1 mt-2">Dialogue (one line per response)</label>
+                    <textarea id="npc-dialogue" class="admin-input" rows="2" placeholder="If AI is enabled, this is the personality prompt."></textarea>
+                </div>
+                 <div>
+                    <label for="npc-triggers" class="block mb-1 mt-2">Item Triggers (JSON: {"keyword": "itemId"})</label>
+                    <textarea id="npc-triggers" class="admin-input" rows="1" placeholder='For AI NPCs to know what items they can give.'></textarea>
+                </div>
+                
+                <!-- Combat Stats Section -->
+                <div class="mt-4 p-3 bg-gray-800 rounded">
+                    <div class="flex items-center mb-2">
+                        <label class="flex items-center">
+                            <input type="checkbox" id="npc-can-fight" class="mr-2"> Can Fight? (Enable combat for this NPC)
+                        </label>
+                    </div>
+                    <div id="npc-combat-fields" class="hidden">
+                        <div class="grid grid-cols-2 gap-4 mt-2">
+                            <div>
+                                <label for="npc-hp" class="block mb-1">HP</label>
+                                <input type="number" id="npc-hp" class="admin-input" value="50" min="1">
+                            </div>
+                            <div>
+                                <label for="npc-hostile" class="block mb-1">Behavior</label>
+                                <select id="npc-hostile" class="admin-input">
+                                    <option value="false">Friendly (won't attack first)</option>
+                                    <option value="true">Hostile (attacks on sight)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4 mt-2">
+                            <div>
+                                <label for="npc-min-atk" class="block mb-1">Min Attack</label>
+                                <input type="number" id="npc-min-atk" class="admin-input" value="3" min="0">
+                            </div>
+                            <div>
+                                <label for="npc-max-atk" class="block mb-1">Max Attack</label>
+                                <input type="number" id="npc-max-atk" class="admin-input" value="8" min="0">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4 mt-2">
+                            <div>
+                                <label for="npc-xp" class="block mb-1">XP Reward</label>
+                                <input type="number" id="npc-xp" class="admin-input" value="50" min="0">
+                            </div>
+                            <div>
+                                <label for="npc-gold" class="block mb-1">Gold Reward</label>
+                                <input type="number" id="npc-gold" class="admin-input" value="25" min="0">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex flex-col gap-2 mt-4">
+                    <div class="flex gap-2">
+                        <input type="text" id="npc-ai-prompt" class="admin-input flex-1" placeholder="Describe the NPC (e.g., 'a wise wizard who sells potions')">
+                        <button id="generate-npc-btn" class="gemini-btn px-4 py-2 rounded">✨ Generate NPC</button>
+                    </div>
+                    <div class="flex justify-between">
+                        <div>
+                            <button id="save-npc-btn" class="bg-yellow-400 text-black px-4 py-2 rounded">Save NPC</button>
+                            <button id="new-npc-btn" class="bg-cyan-400 text-black px-4 py-2 rounded">New NPC</button>
+                        </div>
+                        <button id="delete-npc-btn" class="bg-red-600 text-white px-4 py-2 rounded">Delete NPC</button>
+                    </div>
+                </div>
+                <div id="admin-npc-status" class="text-center mt-2 text-sm"></div>
+            </div>
+            
+            <!-- Monster Editor -->
+            <div id="monster-editor-panel" class="hidden">
+                <h2 class="text-2xl text-yellow-400 text-center text-shadow mb-4">Monster Editor</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                   <div>
+                       <label for="monster-select" class="block mb-1">Select Monster to Edit</label>
+                       <select id="monster-select" class="admin-input"></select>
+                   </div>
+                   <div>
+                       <label for="monster-id" class="block mb-1">Monster ID (no spaces)</label>
+                       <input type="text" id="monster-id" class="admin-input">
+                   </div>
+               </div>
+               <div>
+                   <label for="monster-name" class="block mb-1 mt-2">Monster Name (e.g., a grumpy goblin)</label>
+                   <input type="text" id="monster-name" class="admin-input">
+               </div>
+                <div>
+                   <label for="monster-desc" class="block mb-1 mt-2">Description (on examine)</label>
+                   <textarea id="monster-desc" class="admin-input" rows="2"></textarea>
+               </div>
+               <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
+                    <div>
+                        <label for="monster-hp">HP</label>
+                        <input type="number" id="monster-hp" class="admin-input" value="10">
+                    </div>
+                    <div>
+                        <label for="monster-min-atk">Min Atk</label>
+                        <input type="number" id="monster-min-atk" class="admin-input" value="1">
+                    </div>
+                    <div>
+                        <label for="monster-max-atk">Max Atk</label>
+                        <input type="number" id="monster-max-atk" class="admin-input" value="3">
+                    </div>
+                    <div>
+                        <label for="monster-xp">XP Reward</label>
+                        <input type="number" id="monster-xp" class="admin-input" value="10">
+                    </div>
+               </div>
+                <div class="grid grid-cols-2 gap-4 mt-2">
+                     <div>
+                        <label for="monster-gold">Gold Drop</label>
+                        <input type="number" id="monster-gold" class="admin-input" value="5">
+                    </div>
+                    <div>
+                        <label>Item Drop (optional)</label>
+                        <select id="monster-item-drop" class="admin-input">
+                            <option value="">-- None --</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mt-2">
+                    <label class="flex items-center">
+                        <input type="checkbox" id="monster-newsworthy" class="mr-2"> Newsworthy (Appears in news feed when killed)
+                    </label>
+                </div>
+                 <div class="flex flex-col gap-2 mt-4">
+                   <div class="flex gap-2">
+                       <input type="text" id="monster-ai-prompt" class="admin-input flex-1" placeholder="Describe the monster (e.g., 'a fierce dragon')">
+                       <button id="generate-monster-btn" class="gemini-btn px-4 py-2 rounded">✨ Generate Monster</button>
+                   </div>
+                   <div class="flex justify-between">
+                       <div>
+                           <button id="save-monster-btn" class="bg-yellow-400 text-black px-4 py-2 rounded">Save Monster</button>
+                           <button id="new-monster-btn" class="bg-cyan-400 text-black px-4 py-2 rounded">New Monster</button>
+                       </div>
+                       <button id="delete-monster-btn" class="bg-red-600 text-white px-4 py-2 rounded">Delete Monster</button>
+                   </div>
+               </div>
+               <div id="admin-monster-status" class="text-center mt-2 text-sm"></div>
+            </div>
+
+            <!-- Player Editor -->
+            <div id="player-editor-panel" class="hidden">
+                <h2 class="text-2xl text-yellow-400 text-center text-shadow mb-4">Player Administrator</h2>
+                <div>
+                    <label for="player-select" class="block mb-1">Select Player to Edit</label>
+                    <select id="player-select" class="admin-input"></select>
+                </div>
+                <div id="player-edit-form" class="hidden mt-4 p-2 border border-yellow-400 rounded space-y-2">
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
+                        <div class="md:col-span-2">
+                            <label for="player-name-edit">Name</label>
+                            <input type="text" id="player-name-edit" class="player-edit-input">
+                        </div>
+                         <div>
+                            <label for="player-level-edit">Level</label>
+                            <input type="number" id="player-level-edit" class="player-edit-input">
+                        </div>
+                        <div>
+                            <label for="player-score-edit">Score (XP)</label>
+                            <input type="number" id="player-score-edit" class="player-edit-input">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label for="player-room-edit">Current Room ID (Teleport)</label>
+                            <input type="text" id="player-room-edit" class="player-edit-input">
+                        </div>
+                        <div>
+                             <label for="player-money-edit">Gold</label>
+                            <input type="number" id="player-money-edit" class="player-edit-input">
+                        </div>
+                    </div>
+                    <fieldset class="border border-gray-500 p-2">
+                        <legend>Attributes</legend>
+                        <div class="grid grid-cols-3 gap-2">
+                            <div><label>STR</label><input type="number" id="player-str-edit" class="player-edit-input"></div>
+                            <div><label>DEX</label><input type="number" id="player-dex-edit" class="player-edit-input"></div>
+                            <div><label>CON</label><input type="number" id="player-con-edit" class="player-edit-input"></div>
+                            <div><label>INT</label><input type="number" id="player-int-edit" class="player-edit-input"></div>
+                            <div><label>WIS</label><input type="number" id="player-wis-edit" class="player-edit-input"></div>
+                            <div><label>CHA</label><input type="number" id="player-cha-edit" class="player-edit-input"></div>
+                        </div>
+                    </fieldset>
+                    <div>
+                        <label><input type="checkbox" id="player-admin-edit" class="mr-2">Is Admin?</label>
+                    </div>
+                    <div class="flex justify-between items-center">
+                         <button id="save-player-btn" class="bg-yellow-400 text-black px-4 py-2 rounded">Save Player Changes</button>
+                         <button id="delete-player-btn" class="bg-red-600 text-white px-4 py-2 rounded">Delete This Player</button>
+                    </div>
+                </div>
+                <div id="admin-player-status" class="text-center mt-2 text-sm"></div>
+            </div>
+
+
+            <!-- Levels Configuration Panel -->
+            <div id="levels-editor-panel" class="hidden">
+                <h2 class="text-2xl text-yellow-400 text-center text-shadow mb-4">⬆️ Level Configuration</h2>
+                
+                <div class="mb-4 text-center">
+                    <p class="text-gray-300 mb-2">Edit level names and XP requirements (1-30)</p>
+                    <button id="save-all-levels-btn" class="bg-green-500 text-white px-4 py-2 rounded">💾 Save All Levels</button>
+                    <button id="load-levels-btn" class="bg-blue-500 text-white px-4 py-2 rounded ml-2">🔄 Reload from Database</button>
+                    <span id="admin-levels-status" class="ml-4 text-sm"></span>
+                </div>
+
+                <div class="overflow-y-auto max-h-[65vh] border border-gray-700 p-4 rounded bg-gray-900">
+                    <table class="w-full text-left">
+                        <thead class="sticky top-0 bg-black border-b border-yellow-400">
+                            <tr>
+                                <th class="p-2 text-yellow-400">Level</th>
+                                <th class="p-2 text-yellow-400">Name</th>
+                                <th class="p-2 text-yellow-400">Min XP Required</th>
+                            </tr>
+                        </thead>
+                        <tbody id="levels-table-body" class="text-gray-300">
+                            <!-- Dynamically populated -->
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Actions/Emotes Editor Panel -->
+            <div id="actions-editor-panel" class="hidden">
+                <h2 class="text-2xl text-yellow-400 text-center text-shadow mb-4">🎭 Actions & Emotes</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label for="action-select" class="block mb-1">Select Action to Edit</label>
+                        <select id="action-select" class="admin-input"></select>
+                    </div>
+                    <div>
+                        <label for="action-command" class="block mb-1">Command (e.g., wave, dance)</label>
+                        <input type="text" id="action-command" class="admin-input" placeholder="wave">
+                    </div>
+                </div>
+                
+                <div class="mb-4">
+                    <label for="action-message" class="block mb-1">Message Template</label>
+                    <input type="text" id="action-message" class="admin-input" placeholder="{player} waves." />
+                    <p class="text-xs text-gray-400 mt-1">Use {player} as a placeholder for the player's name</p>
+                </div>
+                
+                <div class="flex gap-2 mb-4">
+                    <button id="new-action-btn" class="bg-blue-500 text-white px-4 py-2 rounded">New Action</button>
+                    <button id="save-action-btn" class="bg-green-500 text-white px-4 py-2 rounded">Save Action</button>
+                    <button id="delete-action-btn" class="bg-red-500 text-white px-4 py-2 rounded">Delete Action</button>
+                    <span id="admin-action-status" class="ml-2 text-sm self-center"></span>
+                </div>
+                
+                <div class="border border-gray-700 p-4 rounded bg-gray-900">
+                    <h3 class="text-yellow-400 mb-2">Available Actions</h3>
+                    <div id="action-list" class="grid grid-cols-3 md:grid-cols-4 gap-2 text-sm">
+                        <!-- Dynamically populated -->
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Map Visualization Panel -->
+            <div id="map-editor-panel" class="hidden">
+                <h2 class="text-2xl text-yellow-400 text-center text-shadow mb-4">🗺️ World Map</h2>
+                
+                <div class="mb-4 text-center">
+                    <p class="text-gray-300 mb-2">Interactive map of all rooms and connections</p>
+                    <div class="flex gap-4 justify-center text-sm">
+                        <span class="text-green-400">● Rooms</span>
+                        <span class="text-blue-400">🎒 Has Items</span>
+                        <span class="text-purple-400">👤 Has NPCs</span>
+                        <span class="text-red-400">👹 Has Monsters</span>
+                        <span class="text-yellow-400">⭐ Has Players</span>
+                    </div>
+                    <button id="refresh-map-btn" class="mt-2 bg-yellow-400 text-black px-4 py-2 rounded">Refresh Map</button>
+                </div>
+                
+                <div id="map-network"></div>
+                
+                <div class="mt-4 text-sm text-gray-400 text-center">
+                    <p>💡 Click and drag to pan • Scroll to zoom • Click a room to edit it</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- END OF FILE: admin.html -->
+
+
+    <!-- FILE: auth.html (Login/Registration View) -->
+    <div id="auth-modal" class="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50">
+        <div class="bg-black border-2 border-[#00ff41] p-8 rounded-lg text-center glow w-full max-w-sm">
+            <h2 class="text-2xl mb-4 text-shadow">Enter the Digital Realm</h2>
+            
+            <!-- Login Form -->
+            <form id="login-form" class="space-y-4">
+                <div>
+                    <input type="email" id="login-email" placeholder="Email" class="auth-input text-center" required>
+                </div>
+                <div>
+                    <input type="password" id="login-password" placeholder="Password" class="auth-input text-center" required>
+                </div>
+                <button type="submit" class="bg-[#00ff41] text-black px-6 py-2 rounded w-full">Login</button>
+                <div class="text-sm flex justify-between">
+                    <a href="#" id="show-register" class="underline text-yellow-400">Register here</a>
+                    <a href="#" id="show-forgot-password" class="underline text-yellow-400">Forgot Password?</a>
+                </div>
+            </form>
+
+            <!-- Register Form -->
+            <form id="register-form" class="hidden space-y-4">
+                <p class="text-sm mb-2">Create an account to begin your adventure!</p>
+                 <div>
+                    <input type="email" id="register-email" placeholder="Email" class="auth-input text-center" required>
+                </div>
+                <div>
+                    <input type="password" id="register-password" placeholder="Password (min 6 characters)" class="auth-input text-center" required>
+                </div>
+                <button type="submit" class="bg-[#00ff41] text-black px-6 py-2 rounded w-full">Register</button>
+                 <p class="text-sm">Already have an account? <a href="#" id="show-login-register" class="underline text-yellow-400">Login here</a>.</p>
+            </form>
+
+            <!-- Forgot Password Form -->
+            <form id="forgot-password-form" class="hidden space-y-4">
+                <p class="text-sm">Enter your email and we'll send a link to reset your password.</p>
+                <div>
+                    <input type="email" id="forgot-email" placeholder="Email" class="auth-input text-center" required>
+                </div>
+                <button type="submit" class="bg-[#00ff41] text-black px-6 py-2 rounded w-full">Send Reset Email</button>
+                 <p class="text-sm">Remembered it? <a href="#" id="show-login-forgot" class="underline text-yellow-400">Login here</a>.</p>
+            </form>
+
+            <p id="auth-error" class="text-red-500 text-sm mt-4"></p>
+        </div>
+    </div>
+    <!-- END OF FILE: auth.html -->
+
+    <!-- Character Creation Modal -->
+    <div id="character-creation-modal" class="hidden fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50">
+        <div class="bg-black border-2 border-[#00ff41] p-8 rounded-lg glow w-full max-w-2xl">
+            <h2 class="text-3xl mb-6 text-center text-shadow">Create Your Character</h2>
+            
+            <div class="space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label for="char-name" class="block mb-1 text-sm">Character Name</label>
+                        <input type="text" id="char-name" class="auth-input" placeholder="Enter your name" required maxlength="20">
+                    </div>
+                    <div>
+                        <label for="char-gender" class="block mb-1 text-sm">Gender</label>
+                        <select id="char-gender" class="auth-input">
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                            <option value="Non-binary">Non-binary</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label for="char-race" class="block mb-1 text-sm">Race</label>
+                        <select id="char-race" class="auth-input">
+                            <option value="Human">Human</option>
+                            <option value="Elf">Elf</option>
+                            <option value="Dwarf">Dwarf</option>
+                            <option value="Halfling">Halfling</option>
+                            <option value="Orc">Orc</option>
+                            <option value="Tiefling">Tiefling</option>
+                            <option value="Dragonborn">Dragonborn</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="char-age" class="block mb-1 text-sm">Age</label>
+                        <input type="number" id="char-age" class="auth-input" placeholder="25" min="16" max="999" value="25">
+                    </div>
+                </div>
+                
+                <div>
+                    <label for="char-description" class="block mb-1 text-sm">Description</label>
+                    <textarea id="char-description" class="auth-input h-20 resize-none" placeholder="Describe your character's appearance..."></textarea>
+                </div>
+                
+                <div class="border border-[#00ff41] p-4 rounded">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="text-lg">Attributes</h3>
+                        <button id="reroll-stats-btn" class="bg-yellow-400 text-black px-4 py-2 rounded text-sm">🎲 Reroll Stats</button>
+                    </div>
+                    <div class="grid grid-cols-3 gap-3">
+                        <div class="text-center">
+                            <div class="text-sm text-gray-400">Strength</div>
+                            <div id="stat-str" class="text-2xl font-bold">10</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-sm text-gray-400">Dexterity</div>
+                            <div id="stat-dex" class="text-2xl font-bold">10</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-sm text-gray-400">Constitution</div>
+                            <div id="stat-con" class="text-2xl font-bold">10</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-sm text-gray-400">Intelligence</div>
+                            <div id="stat-int" class="text-2xl font-bold">10</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-sm text-gray-400">Wisdom</div>
+                            <div id="stat-wis" class="text-2xl font-bold">10</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-sm text-gray-400">Charisma</div>
+                            <div id="stat-cha" class="text-2xl font-bold">10</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <button id="start-adventure-btn" class="bg-[#00ff41] text-black px-6 py-3 rounded w-full text-lg font-bold">Start Your Adventure!</button>
+            </div>
+        </div>
+    </div>
+    <!-- END OF CHARACTER CREATION -->
+
+
+
+    <script type="module" src="./js/app.js"></script>
+</body>
+</html>
