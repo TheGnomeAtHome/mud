@@ -68,7 +68,7 @@ export async function parseCommandWithGemini(command, logToTerminal) {
 User command: "${command}"
 
 Rules:
-- The action must be one of: "go", "get", "drop", "examine", "say", "buy", "attack", "ask_dm", "talk", "ask_npc", "look", "inventory", "who", "score", "stats", "help", "logout", "use", "drink", "consume", "eat", "read", "unknown"
+- The action must be one of: "go", "get", "drop", "examine", "say", "buy", "attack", "ask_dm", "talk", "ask_npc", "look", "inventory", "who", "score", "stats", "help", "logout", "use", "drink", "consume", "eat", "read", "cast", "spells", "spell", "learn", "unknown"
 - For movement: "go north" -> {"action": "go", "target": "north"}
 - For items: "get torch" -> {"action": "get", "target": "torch"}
 - For NPCs: "talk to guard" -> {"action": "talk", "npc_target": "guard"}
@@ -81,7 +81,11 @@ Rules:
 - For consuming: "drink beer" -> {"action": "drink", "target": "beer"}
 - For reading: "read scroll" -> {"action": "read", "target": "scroll"}
 - For reading: "read sign" -> {"action": "read", "target": "sign"}
-- Accept synonyms: "purchase"="buy", "fight"="attack", "speak"="talk", "consume"="use", "eat"="use", "drink"="use"
+- For spells: "cast fireball" -> {"action": "cast", "target": "fireball"}
+- For spells: "cast fireball goblin" -> {"action": "cast", "target": "fireball", "npc_target": "goblin"}
+- For learning: "learn fireball" -> {"action": "learn", "target": "fireball"}
+- For spell list: "spells" -> {"action": "spells"}
+- Accept synonyms: "purchase"="buy", "fight"="attack", "speak"="talk", "consume"="use", "eat"="use", "drink"="use", "magic"="spells"
 
 Respond with ONLY valid JSON in this exact format:
 {"action": "...", "target": "...", "npc_target": "...", "topic": "...", "verb": "..."}
