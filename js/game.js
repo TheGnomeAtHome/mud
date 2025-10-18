@@ -1855,8 +1855,73 @@ export function initializeGameLogic(dependencies) {
                             logToTerminal(`You heal yourself for ${healAmountAlly} HP!`, 'success');
                             castSuccess = true;
                         } else {
-                            logToTerminal("Healing other players is not yet implemented.", 'error');
-                            castSuccess = false;
+                            // Find target player in the same room
+                            const targetPlayerName = spellTargetName.toLowerCase();
+                            const playersInRoom = Object.entries(gamePlayers).filter(([id, player]) => 
+                                player.roomId === currentPlayerRoomId && 
+                                player.name.toLowerCase().includes(targetPlayerName)
+                            );
+                            
+                            if (playersInRoom.length === 0) {
+                                logToTerminal(`There is no player named "${spellTargetName}" here.`, 'error');
+                                castSuccess = false;
+                                break;
+                            }
+                            
+                            const [targetPlayerId, targetPlayerData] = playersInRoom[0];
+                            const targetPlayerRef = doc(db, `/artifacts/${appId}/public/data/mud-players/${targetPlayerId}`);
+                            
+                            // Get target's current HP
+                            const targetDoc = await getDoc(targetPlayerRef);
+                            const targetData = targetDoc.data();
+                            const targetCurrentHp = targetData.hp || 0;
+                            const targetMaxHp = targetData.maxHp || 100;
+                            
+                            // Calculate healing
+                            const newTargetHp = Math.min(targetCurrentHp + spell.healing, targetMaxHp);
+                            const healAmountTarget = newTargetHp - targetCurrentHp;
+                            
+                            if (healAmountTarget <= 0) {
+                                logToTerminal(`${targetPlayerData.name} is already at full health!`, 'error');
+                                castSuccess = false;
+                                break;
+                            }
+                            
+                            // Update target's HP
+                            await updateDoc(targetPlayerRef, {
+                                hp: newTargetHp
+                            });
+                            
+                            // Deduct caster's MP
+                            await updateDoc(playerRef, {
+                                mp: currentMp - spell.mpCost
+                            });
+                            
+                            // Messages for caster
+                            logToTerminal(`You cast ${spell.name} on ${targetPlayerData.name}!`, 'magic');
+                            logToTerminal(`${targetPlayerData.name} is healed for ${healAmountTarget} HP!`, 'success');
+                            
+                            // Send message to target player via room messages
+                            await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                                senderId: userId,
+                                senderName: playerName,
+                                roomId: currentPlayerRoomId,
+                                text: `${playerName} casts ${spell.name} on you! You are healed for ${healAmountTarget} HP!`,
+                                isEmote: false,
+                                timestamp: serverTimestamp()
+                            });
+                            
+                            // Send visible message to room
+                            await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                                senderId: userId,
+                                senderName: playerName,
+                                roomId: currentPlayerRoomId,
+                                text: `${playerName} casts ${spell.name} on ${targetPlayerData.name}!`,
+                                isEmote: true,
+                                timestamp: serverTimestamp()
+                            });
+                            
+                            castSuccess = true;
                         }
                         break;
                         
@@ -1886,6 +1951,69 @@ export function initializeGameLogic(dependencies) {
                         }
                         
                         await updateDoc(playerRef, { mp: currentMp - spell.mpCost });
+                        castSuccess = true;
+                        break;
+                        
+                    case 'all-allies':
+                        // Heal all players in the room (including self)
+                        const allPlayersInRoom = Object.entries(gamePlayers).filter(([id, player]) => 
+                            player.roomId === currentPlayerRoomId
+                        );
+                        
+                        if (allPlayersInRoom.length === 0) {
+                            logToTerminal("There are no allies here to heal.", 'error');
+                            break;
+                        }
+                        
+                        logToTerminal(`You cast ${spell.name}!`, 'magic');
+                        logToTerminal(`${spell.description}`, 'game');
+                        
+                        let healedCount = 0;
+                        for (const [allyId, allyData] of allPlayersInRoom) {
+                            const allyRef = doc(db, `/artifacts/${appId}/public/data/mud-players/${allyId}`);
+                            const allyDoc = await getDoc(allyRef);
+                            const allyCurrentData = allyDoc.data();
+                            
+                            const allyCurrentHp = allyCurrentData.hp || 0;
+                            const allyMaxHp = allyCurrentData.maxHp || 100;
+                            const newAllyHp = Math.min(allyCurrentHp + spell.healing, allyMaxHp);
+                            const healAmount = newAllyHp - allyCurrentHp;
+                            
+                            if (healAmount > 0) {
+                                await updateDoc(allyRef, { hp: newAllyHp });
+                                logToTerminal(`${allyData.name} is healed for ${healAmount} HP!`, 'success');
+                                healedCount++;
+                                
+                                // Notify the healed player (if not self)
+                                if (allyId !== userId) {
+                                    await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                                        senderId: userId,
+                                        senderName: playerName,
+                                        roomId: currentPlayerRoomId,
+                                        text: `${playerName}'s ${spell.name} heals you for ${healAmount} HP!`,
+                                        isEmote: false,
+                                        timestamp: serverTimestamp()
+                                    });
+                                }
+                            }
+                        }
+                        
+                        // Send visible message to room
+                        await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                            senderId: userId,
+                            senderName: playerName,
+                            roomId: currentPlayerRoomId,
+                            text: `${playerName} casts ${spell.name}, healing everyone nearby!`,
+                            isEmote: true,
+                            timestamp: serverTimestamp()
+                        });
+                        
+                        await updateDoc(playerRef, { mp: currentMp - spell.mpCost });
+                        
+                        if (healedCount === 0) {
+                            logToTerminal("Everyone is already at full health!", 'game');
+                        }
+                        
                         castSuccess = true;
                         break;
                         
