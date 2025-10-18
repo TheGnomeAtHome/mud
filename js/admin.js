@@ -1091,12 +1091,28 @@ export function initializeAdminPanel({
     const playerEditForm = document.getElementById('player-edit-form');
     const adminPlayerStatus = document.getElementById('admin-player-status');
     
+    // Basic info fields
     const playerNameEdit = document.getElementById('player-name-edit');
+    const playerRaceEdit = document.getElementById('player-race-edit');
+    const playerClassEdit = document.getElementById('player-class-edit');
+    const playerGenderEdit = document.getElementById('player-gender-edit');
+    const playerAgeEdit = document.getElementById('player-age-edit');
+    const playerDescriptionEdit = document.getElementById('player-description-edit');
+    const playerAdminEdit = document.getElementById('player-admin-edit');
+    
+    // Progression fields
     const playerLevelEdit = document.getElementById('player-level-edit');
-    const playerScoreEdit = document.getElementById('player-score-edit');
+    const playerXpEdit = document.getElementById('player-xp-edit');
     const playerMoneyEdit = document.getElementById('player-money-edit');
     const playerRoomEdit = document.getElementById('player-room-edit');
-    const playerAdminEdit = document.getElementById('player-admin-edit');
+    
+    // HP/MP fields
+    const playerHpEdit = document.getElementById('player-hp-edit');
+    const playerMaxHpEdit = document.getElementById('player-maxhp-edit');
+    const playerMpEdit = document.getElementById('player-mp-edit');
+    const playerMaxMpEdit = document.getElementById('player-maxmp-edit');
+    
+    // Attribute fields
     const attrInputs = {
         str: document.getElementById('player-str-edit'),
         dex: document.getElementById('player-dex-edit'),
@@ -1105,6 +1121,9 @@ export function initializeAdminPanel({
         wis: document.getElementById('player-wis-edit'),
         cha: document.getElementById('player-cha-edit'),
     };
+    
+    // Inventory field
+    const playerInventoryEdit = document.getElementById('player-inventory-edit');
     
     function populatePlayerSelector() {
          const currentVal = playerSelect.value;
@@ -1132,17 +1151,48 @@ export function initializeAdminPanel({
         });
     }
 
+    function populatePlayerClassSelector(selectedClass = '') {
+        playerClassEdit.innerHTML = '';
+        const sortedClassIds = Object.keys(gameClasses).sort();
+        sortedClassIds.forEach(id => {
+            const classData = gameClasses[id];
+            const option = document.createElement('option');
+            option.value = id;
+            option.textContent = classData?.name || id;
+            if (id === selectedClass) option.selected = true;
+            playerClassEdit.appendChild(option);
+        });
+    }
+
     playerSelect.addEventListener('change', () => {
         const playerId = playerSelect.value;
         if (playerId && gamePlayers[playerId]) {
             const player = gamePlayers[playerId];
+            
+            // Basic info
             playerNameEdit.value = player.name || '';
-            playerLevelEdit.value = player.level || 1;
-            playerScoreEdit.value = player.score || 0;
-            playerMoneyEdit.value = player.money || 0;
+            playerRaceEdit.value = player.race || '';
+            playerGenderEdit.value = player.gender || 'Other';
+            playerAgeEdit.value = player.age || 25;
+            playerDescriptionEdit.value = player.description || '';
             playerAdminEdit.checked = player.isAdmin || false;
+            
+            // Populate class selector and set current class
+            populatePlayerClassSelector(player.class || 'Adventurer');
+            
+            // Progression
+            playerLevelEdit.value = player.level || 1;
+            playerXpEdit.value = player.xp || 0;
+            playerMoneyEdit.value = player.money || 0;
             populatePlayerRoomSelector(player.roomId || 'start');
             
+            // HP/MP
+            playerHpEdit.value = player.hp || 100;
+            playerMaxHpEdit.value = player.maxHp || 100;
+            playerMpEdit.value = player.mp || 100;
+            playerMaxMpEdit.value = player.maxMp || 100;
+            
+            // Attributes
             const attrs = player.attributes || {};
             attrInputs.str.value = attrs.str || 10;
             attrInputs.dex.value = attrs.dex || 10;
@@ -1150,6 +1200,9 @@ export function initializeAdminPanel({
             attrInputs.int.value = attrs.int || 10;
             attrInputs.wis.value = attrs.wis || 10;
             attrInputs.cha.value = attrs.cha || 10;
+            
+            // Inventory
+            playerInventoryEdit.value = JSON.stringify(player.inventory || [], null, 2);
 
             playerEditForm.classList.remove('hidden');
         } else {
@@ -1164,13 +1217,36 @@ export function initializeAdminPanel({
             return;
         }
 
+        // Parse inventory JSON
+        let inventory = [];
+        try {
+            inventory = JSON.parse(playerInventoryEdit.value || '[]');
+            if (!Array.isArray(inventory)) {
+                adminPlayerStatus.textContent = 'Error: Inventory must be a JSON array.';
+                return;
+            }
+        } catch (e) {
+            adminPlayerStatus.textContent = 'Error: Invalid JSON in inventory field.';
+            return;
+        }
+
         const updates = {
             name: playerNameEdit.value.trim(),
+            race: playerRaceEdit.value.trim(),
+            class: playerClassEdit.value,
+            gender: playerGenderEdit.value,
+            age: parseInt(playerAgeEdit.value) || 25,
+            description: playerDescriptionEdit.value.trim(),
             level: parseInt(playerLevelEdit.value) || 1,
-            score: parseInt(playerScoreEdit.value) || 0,
+            xp: parseInt(playerXpEdit.value) || 0,
             money: parseInt(playerMoneyEdit.value) || 0,
             roomId: playerRoomEdit.value,
+            hp: parseInt(playerHpEdit.value) || 100,
+            maxHp: parseInt(playerMaxHpEdit.value) || 100,
+            mp: parseInt(playerMpEdit.value) || 100,
+            maxMp: parseInt(playerMaxMpEdit.value) || 100,
             isAdmin: playerAdminEdit.checked,
+            inventory: inventory,
             attributes: {
                 str: parseInt(attrInputs.str.value) || 10,
                 dex: parseInt(attrInputs.dex.value) || 10,

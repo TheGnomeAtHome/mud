@@ -487,32 +487,95 @@
                     <select id="player-select" class="admin-input"></select>
                 </div>
                 <div id="player-edit-form" class="hidden mt-4 p-2 border border-yellow-400 rounded space-y-2">
-                    <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
-                        <div class="md:col-span-2">
-                            <label for="player-name-edit">Name</label>
-                            <input type="text" id="player-name-edit" class="player-edit-input">
-                        </div>
-                         <div>
-                            <label for="player-level-edit">Level</label>
-                            <input type="number" id="player-level-edit" class="player-edit-input">
-                        </div>
-                        <div>
-                            <label for="player-score-edit">Score (XP)</label>
-                            <input type="number" id="player-score-edit" class="player-edit-input">
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label for="player-room-edit">Current Room ID (Teleport)</label>
-                            <input type="text" id="player-room-edit" class="player-edit-input">
-                        </div>
-                        <div>
-                             <label for="player-money-edit">Gold</label>
-                            <input type="number" id="player-money-edit" class="player-edit-input">
-                        </div>
-                    </div>
+                    <!-- Basic Info -->
                     <fieldset class="border border-gray-500 p-2">
-                        <legend>Attributes</legend>
+                        <legend class="text-yellow-400">Basic Info</legend>
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
+                            <div class="md:col-span-2">
+                                <label for="player-name-edit">Name</label>
+                                <input type="text" id="player-name-edit" class="player-edit-input">
+                            </div>
+                            <div>
+                                <label for="player-race-edit">Race</label>
+                                <input type="text" id="player-race-edit" class="player-edit-input">
+                            </div>
+                            <div>
+                                <label for="player-class-edit">Class</label>
+                                <select id="player-class-edit" class="player-edit-input"></select>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-3 gap-2 mt-2">
+                            <div>
+                                <label for="player-gender-edit">Gender</label>
+                                <select id="player-gender-edit" class="player-edit-input">
+                                    <option value="Male">Male</option>
+                                    <option value="Female">Female</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="player-age-edit">Age</label>
+                                <input type="number" id="player-age-edit" class="player-edit-input">
+                            </div>
+                            <div>
+                                <label><input type="checkbox" id="player-admin-edit" class="mr-2">Is Admin?</label>
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <label for="player-description-edit">Description</label>
+                            <textarea id="player-description-edit" class="player-edit-input" rows="2"></textarea>
+                        </div>
+                    </fieldset>
+
+                    <!-- Progression & Stats -->
+                    <fieldset class="border border-gray-500 p-2">
+                        <legend class="text-yellow-400">Progression</legend>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                            <div>
+                                <label for="player-level-edit">Level</label>
+                                <input type="number" id="player-level-edit" class="player-edit-input">
+                            </div>
+                            <div>
+                                <label for="player-xp-edit">XP</label>
+                                <input type="number" id="player-xp-edit" class="player-edit-input">
+                            </div>
+                            <div>
+                                <label for="player-money-edit">Gold</label>
+                                <input type="number" id="player-money-edit" class="player-edit-input">
+                            </div>
+                            <div>
+                                <label for="player-room-edit">Room</label>
+                                <select id="player-room-edit" class="player-edit-input"></select>
+                            </div>
+                        </div>
+                    </fieldset>
+
+                    <!-- HP & MP -->
+                    <fieldset class="border border-gray-500 p-2">
+                        <legend class="text-yellow-400">Health & Mana</legend>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                            <div>
+                                <label for="player-hp-edit">Current HP</label>
+                                <input type="number" id="player-hp-edit" class="player-edit-input">
+                            </div>
+                            <div>
+                                <label for="player-maxhp-edit">Max HP</label>
+                                <input type="number" id="player-maxhp-edit" class="player-edit-input">
+                            </div>
+                            <div>
+                                <label for="player-mp-edit">Current MP</label>
+                                <input type="number" id="player-mp-edit" class="player-edit-input">
+                            </div>
+                            <div>
+                                <label for="player-maxmp-edit">Max MP</label>
+                                <input type="number" id="player-maxmp-edit" class="player-edit-input">
+                            </div>
+                        </div>
+                    </fieldset>
+
+                    <!-- Attributes -->
+                    <fieldset class="border border-gray-500 p-2">
+                        <legend class="text-yellow-400">Attributes</legend>
                         <div class="grid grid-cols-3 gap-2">
                             <div><label>STR</label><input type="number" id="player-str-edit" class="player-edit-input"></div>
                             <div><label>DEX</label><input type="number" id="player-dex-edit" class="player-edit-input"></div>
@@ -522,9 +585,16 @@
                             <div><label>CHA</label><input type="number" id="player-cha-edit" class="player-edit-input"></div>
                         </div>
                     </fieldset>
-                    <div>
-                        <label><input type="checkbox" id="player-admin-edit" class="mr-2">Is Admin?</label>
-                    </div>
+
+                    <!-- Inventory -->
+                    <fieldset class="border border-gray-500 p-2">
+                        <legend class="text-yellow-400">Inventory</legend>
+                        <div>
+                            <label for="player-inventory-edit">Items (JSON array of item IDs)</label>
+                            <textarea id="player-inventory-edit" class="player-edit-input font-mono text-sm" rows="3" placeholder='["sword", "potion"]'></textarea>
+                            <p class="text-xs text-gray-400 mt-1">Edit as JSON array. Example: ["sword", "health-potion", "gold-key"]</p>
+                        </div>
+                    </fieldset>
                     <div class="flex justify-between items-center">
                          <button id="save-player-btn" class="bg-yellow-400 text-black px-4 py-2 rounded">Save Player Changes</button>
                          <button id="delete-player-btn" class="bg-red-600 text-white px-4 py-2 rounded">Delete This Player</button>
