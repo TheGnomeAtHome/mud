@@ -2080,7 +2080,23 @@ export function initializeGameLogic(dependencies) {
                         if (spell) {
                             const costStr = `${spell.mpCost} MP`;
                             const targetStr = spell.targetType ? ` [${spell.targetType}]` : '';
-                            logToTerminal(`✨ ${spell.name} - ${costStr}${targetStr}`, 'game');
+                            
+                            // Add level and class requirements to display
+                            let reqStr = '';
+                            if (spell.levelRequired && spell.levelRequired > 1) {
+                                reqStr += ` (Lvl ${spell.levelRequired}+`;
+                            }
+                            if (spell.classRequired && spell.classRequired !== 'any') {
+                                if (reqStr) {
+                                    reqStr += `, ${spell.classRequired})`;
+                                } else {
+                                    reqStr += ` (${spell.classRequired})`;
+                                }
+                            } else if (reqStr) {
+                                reqStr += ')';
+                            }
+                            
+                            logToTerminal(`✨ ${spell.name} - ${costStr}${targetStr}${reqStr}`, 'game');
                             logToTerminal(`   ${spell.description}`, 'game');
                             if (spell.damage > 0) logToTerminal(`   Damage: ${spell.damage}`, 'game');
                             if (spell.healing > 0) logToTerminal(`   Healing: ${spell.healing}`, 'game');
@@ -2119,6 +2135,25 @@ export function initializeGameLogic(dependencies) {
                 }
                 
                 const spell = gameSpells[spellId];
+                
+                // Check level requirement
+                const playerLevelCast = pDataCast.level || 1;
+                const playerClassCast = pDataCast.class || 'Adventurer';
+                
+                if (spell.levelRequired && playerLevelCast < spell.levelRequired) {
+                    logToTerminal(`You need to be level ${spell.levelRequired} to cast ${spell.name}. (You are level ${playerLevelCast})`, 'error');
+                    break;
+                }
+                
+                // Check class requirement
+                if (spell.classRequired && spell.classRequired !== 'any') {
+                    // Support multiple classes (comma-separated)
+                    const allowedClasses = spell.classRequired.split(',').map(c => c.trim());
+                    if (!allowedClasses.includes(playerClassCast)) {
+                        logToTerminal(`${spell.name} can only be cast by: ${spell.classRequired}. (You are a ${playerClassCast})`, 'error');
+                        break;
+                    }
+                }
                 
                 // Check MP cost
                 if (currentMp < spell.mpCost) {
