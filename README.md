@@ -26,9 +26,7 @@ A browser-based Multi-User Dungeon (MUD) game featuring real-time multiplayer, A
 
 ## 🚀 Play Now
 
-**Live Game**: [https://thegnomeathome.github.io/mud/mud.html](https://thegnomeathome.github.io/mud/mud.html)
-
-**Landing Page**: [https://thegnomeathome.github.io/mud/](https://thegnomeathome.github.io/mud/)
+**Live Game**: [https://jphsoftware.com)
 
 ## 🛠️ Technology Stack
 
@@ -137,7 +135,7 @@ mud/
 
 ## 📝 License
 
-This project is a work in progress and personal learning experiment.
+This project is a work in progress and personal learning experiment. Nowhere near finished or ready. 
 
 ## 🙏 Acknowledgments
 
