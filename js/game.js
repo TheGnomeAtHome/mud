@@ -1742,11 +1742,11 @@ export function initializeGameLogic(dependencies) {
                 const currentHp = pDataCast.hp || 0;
                 const maxHpCast = pDataCast.maxHp || 100;
                 
-                // Find the spell
+                // Find the spell (match by name or id)
                 const spellName = parsedCommand.target.toLowerCase();
                 const spellId = knownSpellsCast.find(id => {
                     const spell = gameSpells[id];
-                    return spell && spell.name.toLowerCase() === spellName;
+                    return spell && (spell.name.toLowerCase() === spellName || id.toLowerCase() === spellName);
                 });
                 
                 if (!spellId) {
