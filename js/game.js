@@ -1766,6 +1766,12 @@ export function initializeGameLogic(dependencies) {
                 let spellTargetName = parsedCommand.npc_target || "";
                 let castSuccess = false;
                 
+                // Validate target for self-only spells
+                if (spell.targetType === 'self' && spellTargetName) {
+                    logToTerminal(`${spell.name} can only be cast on yourself. Try: cast ${spell.name}`, 'error');
+                    break;
+                }
+                
                 switch (spell.targetType) {
                     case 'self':
                         // Apply spell effects to self
@@ -1850,6 +1856,7 @@ export function initializeGameLogic(dependencies) {
                             castSuccess = true;
                         } else {
                             logToTerminal("Healing other players is not yet implemented.", 'error');
+                            castSuccess = false;
                         }
                         break;
                         
