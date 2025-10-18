@@ -26,14 +26,30 @@ export function initializeAuth(firebase, ui, appId) {
     document.getElementById('register-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         authError.textContent = '';
-        const email = document.getElementById('reg-email').value;
-        const password = document.getElementById('reg-password').value;
+        const email = document.getElementById('register-email').value;
+        const password = document.getElementById('register-password').value;
+        
+        console.log('Registration attempt:', email);
+        
+        if (!email || !password) {
+            authError.textContent = 'Email and password are required';
+            authError.className = 'text-red-500 text-sm mt-4';
+            return;
+        }
+        
+        if (password.length < 6) {
+            authError.textContent = 'Password must be at least 6 characters';
+            authError.className = 'text-red-500 text-sm mt-4';
+            return;
+        }
         
         try {
+            console.log('Creating user with Firebase...');
             await createUserWithEmailAndPassword(auth, email, password);
+            console.log('User created successfully');
             authModal.classList.add('hidden');
         } catch (error) {
-            console.error("Registration Error:", error.message);
+            console.error("Registration Error:", error.message, error.code);
             authError.textContent = error.message;
             authError.className = 'text-red-500 text-sm mt-4';
         }
@@ -57,10 +73,10 @@ export function initializeAuth(firebase, ui, appId) {
     });
     
     // Password Reset
-    document.getElementById('reset-form').addEventListener('submit', async (e) => {
+    document.getElementById('forgot-password-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         authError.textContent = '';
-        const email = document.getElementById('reset-email').value;
+        const email = document.getElementById('forgot-email').value;
         
         try {
             await sendPasswordResetEmail(auth, email);

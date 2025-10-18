@@ -9,19 +9,36 @@ export function initializeDataLoader(firebase, appId) {
         gameNpcs: {},
         gameMonsters: {},
         gamePlayers: {},
-        activeMonsters: {}
+        activeMonsters: {},
+        gameClasses: {}
     };
     
     const unsubscribers = [];
+    let isLoading = false;
+    let isLoaded = false;
+    let loadPromise = null;
     
     function loadGameData() {
-        return new Promise((resolve, reject) => {
+        // If already loaded, return resolved promise
+        if (isLoaded) {
+            return Promise.resolve(true);
+        }
+        
+        // If currently loading, return existing promise
+        if (isLoading && loadPromise) {
+            return loadPromise;
+        }
+        
+        isLoading = true;
+        loadPromise = new Promise((resolve, reject) => {
             let loadedCount = 0;
-            const expectedCount = 6;
+            const expectedCount = 7;
             
             function checkComplete() {
                 loadedCount++;
                 if (loadedCount === expectedCount) {
+                    isLoaded = true;
+                    isLoading = false;
                     resolve(true);
                 }
             }
@@ -79,7 +96,19 @@ export function initializeDataLoader(firebase, appId) {
                 checkComplete();
             }, reject);
             unsubscribers.push(activeMonstersUnsub);
+            
+            // Load classes
+            const classesUnsub = onSnapshot(collection(db, `/artifacts/${appId}/public/data/mud-classes`), (snapshot) => {
+                gameData.gameClasses = {};
+                snapshot.forEach(doc => {
+                    gameData.gameClasses[doc.id] = { id: doc.id, ...doc.data() };
+                });
+                checkComplete();
+            }, reject);
+            unsubscribers.push(classesUnsub);
         });
+        
+        return loadPromise;
     }
     
     function cleanup() {

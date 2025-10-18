@@ -1400,12 +1400,14 @@ export function initializeGameLogic(dependencies) {
                     const isBot = player.isBot ? ' 🤖' : '';
                     const room = gameWorld[player.roomId];
                     const roomName = room ? room.name : 'Unknown';
+                    const playerClass = player.class || 'Adventurer';
+                    const playerRace = player.race || 'Human';
                     
                     let hpColor = 'game';
                     if (hpPercent < 30) hpColor = 'error';
                     else if (hpPercent < 70) hpColor = 'combat-log';
                     
-                    logToTerminal(`${player.name}${isBot} - Level ${player.level} ${levelName} - HP: ${hp}/${maxHp} - ${roomName}`, hpColor);
+                    logToTerminal(`${player.name}${isBot} - ${playerRace} ${playerClass} - Level ${player.level} ${levelName} - HP: ${hp}/${maxHp} - ${roomName}`, hpColor);
                 });
                 break;
             case 'ask_dm':
@@ -1426,6 +1428,8 @@ export function initializeGameLogic(dependencies) {
                 const money = pData.money || 0;
                 const hp = pData.hp || 10;
                 const playerMaxHp = pData.maxHp || 100;
+                const playerRace = pData.race || 'Human';
+                const playerClass = pData.class || 'Adventurer';
                 
                 const currentLevelXp = getXpForLevel(level);
                 const nextLevelXp = getXpForLevel(level + 1);
@@ -1434,6 +1438,7 @@ export function initializeGameLogic(dependencies) {
                 
                 logToTerminal("--- Player Status ---", 'system');
                 logToTerminal(`Name: ${playerName}`, 'game');
+                logToTerminal(`Race: ${playerRace} | Class: ${playerClass}`, 'game');
                 const levelName = getLevelName(level);
                 logToTerminal(`Level: ${level} - ${levelName}${level >= MAX_LEVEL ? ' (MAX)' : ''}`, 'game');
                 logToTerminal(`HP: ${hp} / ${playerMaxHp}`, 'game');

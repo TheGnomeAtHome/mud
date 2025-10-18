@@ -16,6 +16,64 @@ import {
     callGeminiForNpc 
 } from './ai.js';
 
+// Setup auth form switching immediately
+function setupAuthFormSwitching() {
+    console.log('Setting up auth form switching...');
+    const showRegister = document.getElementById('show-register');
+    const showLoginRegister = document.getElementById('show-login-register');
+    const showForgotPassword = document.getElementById('show-forgot-password');
+    const showLoginForgot = document.getElementById('show-login-forgot');
+    
+    const loginForm = document.getElementById('login-form');
+    const registerForm = document.getElementById('register-form');
+    const forgotPasswordForm = document.getElementById('forgot-password-form');
+    
+    console.log('Elements found:', { showRegister, loginForm, registerForm });
+    
+    if (showRegister) {
+        showRegister.addEventListener('click', (e) => {
+            console.log('Show register clicked!');
+            e.preventDefault();
+            loginForm.classList.add('hidden');
+            registerForm.classList.remove('hidden');
+        });
+        console.log('Register link handler attached');
+    } else {
+        console.error('show-register element not found!');
+    }
+    
+    if (showLoginRegister) {
+        showLoginRegister.addEventListener('click', (e) => {
+            e.preventDefault();
+            registerForm.classList.add('hidden');
+            loginForm.classList.remove('hidden');
+        });
+    }
+    
+    if (showForgotPassword) {
+        showForgotPassword.addEventListener('click', (e) => {
+            e.preventDefault();
+            loginForm.classList.add('hidden');
+            forgotPasswordForm.classList.remove('hidden');
+        });
+    }
+    
+    if (showLoginForgot) {
+        showLoginForgot.addEventListener('click', (e) => {
+            e.preventDefault();
+            forgotPasswordForm.classList.add('hidden');
+            loginForm.classList.remove('hidden');
+        });
+    }
+}
+
+// Set up form switching when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupAuthFormSwitching);
+} else {
+    setupAuthFormSwitching();
+}
+
 export async function initializeApp() {
     console.log('Initializing MUD application...');
     
@@ -28,36 +86,16 @@ export async function initializeApp() {
     const ui = initializeUI();
     const { logToTerminal, updateUserInfo, focusInput, setInputEnabled, input } = ui;
     
-    // Setup auth form switching
-    document.getElementById('show-register').addEventListener('click', (e) => {
-        e.preventDefault();
-        document.getElementById('login-form').classList.add('hidden');
-        document.getElementById('register-form').classList.remove('hidden');
-    });
-    
-    document.getElementById('show-login-register').addEventListener('click', (e) => {
-        e.preventDefault();
-        document.getElementById('register-form').classList.add('hidden');
-        document.getElementById('login-form').classList.remove('hidden');
-    });
-    
-    document.getElementById('show-forgot-password').addEventListener('click', (e) => {
-        e.preventDefault();
-        document.getElementById('login-form').classList.add('hidden');
-        document.getElementById('forgot-password-form').classList.remove('hidden');
-    });
-    
-    document.getElementById('show-login-forgot').addEventListener('click', (e) => {
-        e.preventDefault();
-        document.getElementById('forgot-password-form').classList.add('hidden');
-        document.getElementById('login-form').classList.remove('hidden');
-    });
-    
     // Initialize Authentication
     const authModule = initializeAuth(firebase, ui, APP_ID);
     
     // Initialize Data Loader
     const dataLoader = initializeDataLoader(firebase, APP_ID);
+    
+    // Start loading game data immediately (needed for class selection during character creation)
+    dataLoader.loadGameData().catch(error => {
+        console.error('Error preloading game data:', error);
+    });
     
     // Initialize game components
     let gameLogic = null;
@@ -159,11 +197,47 @@ export async function initializeApp() {
         displayRolledStats(currentStats);
     });
     
+    // Populate class selector from Firebase
+    function populateClassSelector() {
+        const classSelect = document.getElementById('char-class');
+        const classDesc = document.getElementById('class-desc');
+        
+        // Check if classes are loaded yet
+        const classes = dataLoader.gameData.gameClasses || {};
+        if (Object.keys(classes).length === 0) {
+            classSelect.innerHTML = '<option value="">Loading classes...</option>';
+            // Retry after a short delay if classes haven't loaded yet
+            setTimeout(populateClassSelector, 500);
+            return;
+        }
+        
+        classSelect.innerHTML = '<option value="">-- Select a Class --</option>';
+        
+        Object.entries(classes).forEach(([id, classData]) => {
+            const option = document.createElement('option');
+            option.value = id;
+            option.textContent = classData.name || id;
+            option.dataset.description = classData.description || '';
+            classSelect.appendChild(option);
+        });
+        
+        // Remove any existing change listeners to avoid duplicates
+        const newClassSelect = classSelect.cloneNode(true);
+        classSelect.parentNode.replaceChild(newClassSelect, classSelect);
+        
+        // Show class description on selection
+        newClassSelect.addEventListener('change', () => {
+            const selectedOption = newClassSelect.options[newClassSelect.selectedIndex];
+            classDesc.textContent = selectedOption.dataset.description || '';
+        });
+    }
+    
     document.getElementById('start-adventure-btn').addEventListener('click', async (e) => {
         e.preventDefault();
         
         const characterName = document.getElementById('char-name').value.trim();
         const race = document.getElementById('char-race').value;
+        const characterClass = document.getElementById('char-class').value;
         const gender = document.getElementById('char-gender').value;
         const age = document.getElementById('char-age').value;
         const description = document.getElementById('char-description').value.trim();
@@ -173,21 +247,55 @@ export async function initializeApp() {
             return;
         }
         
+        // Make class optional if no classes exist yet
+        if (!characterClass && Object.keys(dataLoader.gameData.gameClasses).length > 0) {
+            alert('Please select a character class');
+            return;
+        }
+        
+        // Get class data and apply bonuses (if class selected)
+        const classData = characterClass ? dataLoader.gameData.gameClasses[characterClass] : null;
+        const finalStats = { ...currentStats };
+        let maxHp = 100;
+        
+        if (classData && classData.statBonuses) {
+            finalStats.str += classData.statBonuses.str || 0;
+            finalStats.dex += classData.statBonuses.dex || 0;
+            finalStats.con += classData.statBonuses.con || 0;
+            finalStats.int += classData.statBonuses.int || 0;
+            finalStats.wis += classData.statBonuses.wis || 0;
+            finalStats.cha += classData.statBonuses.cha || 0;
+            maxHp += classData.hpBonus || 0;
+        }
+        
+        // Check if this is the first player (should be admin)
+        let isFirstPlayer = false;
+        try {
+            const playersSnapshot = await firestoreFunctions.getDocs(
+                firestoreFunctions.collection(db, `/artifacts/${APP_ID}/public/data/mud-players`)
+            );
+            isFirstPlayer = playersSnapshot.empty;
+        } catch (error) {
+            console.error('Error checking player count:', error);
+        }
+        
         const playerData = {
             name: characterName,
             race: race,
+            class: characterClass || 'Adventurer',
             gender: gender,
             age: parseInt(age) || 25,
             description: description || 'A mysterious adventurer.',
             roomId: 'start',
             inventory: [],
             money: 100,
-            hp: 100,
-            maxHp: 100,
+            hp: maxHp,
+            maxHp: maxHp,
             xp: 0,
             level: 1,
             score: 0,
-            attributes: currentStats,
+            attributes: finalStats,
+            isAdmin: isFirstPlayer, // First player becomes admin
             createdAt: serverTimestamp()
         };
         
@@ -215,9 +323,29 @@ export async function initializeApp() {
             return;
         }
         
-        const { gameWorld, gameItems, gameNpcs, gameMonsters, gamePlayers, activeMonsters } = dataLoader.gameData;
+        const { gameWorld, gameItems, gameNpcs, gameMonsters, gamePlayers, activeMonsters, gameClasses } = dataLoader.gameData;
         
-        if (playerData.isAdmin) {
+        // Check if player should be admin - either already is, or if there are no admins
+        let shouldBeAdmin = playerData.isAdmin || false;
+        if (!shouldBeAdmin) {
+            const hasAnyAdmin = Object.values(gamePlayers).some(p => p.isAdmin);
+            if (!hasAnyAdmin) {
+                shouldBeAdmin = true;
+                // Update player document to grant admin
+                try {
+                    await firestoreFunctions.updateDoc(
+                        firestoreFunctions.doc(db, `/artifacts/${APP_ID}/public/data/mud-players/${userId}`),
+                        { isAdmin: true }
+                    );
+                    playerData.isAdmin = true;
+                    logToTerminal("You have been granted admin privileges (first user).", "system");
+                } catch (error) {
+                    console.error('Error granting admin:', error);
+                }
+            }
+        }
+        
+        if (shouldBeAdmin || playerData.isAdmin) {
             adminToggleBtn.classList.remove('hidden');
         }
         
@@ -230,6 +358,7 @@ export async function initializeApp() {
             gameNpcs,
             gameMonsters,
             gamePlayers,
+            gameClasses,
             logToTerminal,
             firestoreFunctions
         });
@@ -324,11 +453,21 @@ export async function initializeApp() {
         adminPanel.classList.toggle('flex');
     });
     
+    // Logout button
+    const logoutBtn = document.getElementById('logout-btn');
+    logoutBtn.addEventListener('click', async () => {
+        if (confirm('Are you sure you want to logout?')) {
+            await authFunctions.signOut(auth);
+            location.reload();
+        }
+    });
+    
     // Authentication state handler
     authModule.setupAuthStateHandler(async (user) => {
         if (user) {
             userId = user.uid;
             sessionStartTime = Date.now();
+            logoutBtn.classList.remove('hidden');
             
             const playerDoc = await firestoreFunctions.getDoc(firestoreFunctions.doc(db, `/artifacts/${APP_ID}/public/data/mud-players/${userId}`));
             
@@ -337,6 +476,7 @@ export async function initializeApp() {
                 charCreateModal.classList.remove('hidden');
                 currentStats = rollRandomStats();
                 displayRolledStats(currentStats);
+                populateClassSelector(); // Load available classes
             } else {
                 // Player exists, load game
                 const playerData = playerDoc.data();

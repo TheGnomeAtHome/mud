@@ -26,9 +26,9 @@ A browser-based Multi-User Dungeon (MUD) game featuring real-time multiplayer, A
 
 ## 🚀 Play Now
 
-**🎮 Play the Game**: [http://jphsoftware.co.uk/mud.html](http://jphsoftware.co.uk/mud.html)
+**🎮 Play the Game**: [http://jphsoftware.com/mud.html](http://jphsoftware.com/mud.html)
 
-**🏠 Landing Page**: [http://jphsoftware.co.uk](http://jphsoftware.co.uk)
+**🏠 Landing Page**: [http://jphsoftware.com](http://jphsoftware.com)
 
 ## 🛠️ Technology Stack
 
@@ -36,7 +36,7 @@ A browser-based Multi-User Dungeon (MUD) game featuring real-time multiplayer, A
 - **Backend**: Firebase (Firestore, Authentication)
 - **AI**: Google Gemini API
 - **Visualization**: vis.js for network graphs
-- **Hosting**: Self-hosted at jphsoftware.co.uk
+- **Hosting**: Self-hosted at jphsoftware.com
 
 ## 📦 Project Structure
 

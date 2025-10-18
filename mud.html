@@ -39,27 +39,87 @@
         </div>
     </div>
     
-    <button id="admin-toggle-btn" class="hidden bg-[#00ff41] text-black px-4 py-2 rounded">Admin Panel</button>
+    <div class="w-full max-w-4xl flex gap-2 justify-center">
+        <button id="admin-toggle-btn" class="hidden bg-[#00ff41] text-black px-4 py-2 rounded">Admin Panel</button>
+        <button id="logout-btn" class="hidden bg-red-500 text-white px-4 py-2 rounded">Logout</button>
+    </div>
     <!-- END OF FILE: game.html -->
 
 
     <!-- FILE: admin.html (Admin Panel View) -->
     <div id="admin-panel" class="hidden w-full max-w-4xl h-[85vh] border-2 border-yellow-400 bg-black bg-opacity-80 rounded-lg p-4 flex-col gap-2">
         <div class="flex justify-center flex-wrap gap-4 border-b border-yellow-400 mb-4">
+            <button id="setup-tab-btn" class="admin-tab px-4 py-2 text-lg">🚀 Setup</button>
             <button id="room-tab-btn" class="admin-tab active px-4 py-2 text-lg">Rooms</button>
             <button id="item-tab-btn" class="admin-tab px-4 py-2 text-lg">Items</button>
             <button id="npc-tab-btn" class="admin-tab px-4 py-2 text-lg">NPCs</button>
             <button id="monster-tab-btn" class="admin-tab px-4 py-2 text-lg">Monsters</button>
             <button id="player-tab-btn" class="admin-tab px-4 py-2 text-lg">Players</button>
+            <button id="class-tab-btn" class="admin-tab px-4 py-2 text-lg">⚔️ Classes</button>
             <button id="levels-tab-btn" class="admin-tab px-4 py-2 text-lg">⬆️ Levels</button>
             <button id="actions-tab-btn" class="admin-tab px-4 py-2 text-lg">🎭 Actions</button>
             <button id="map-tab-btn" class="admin-tab px-4 py-2 text-lg">🗺️ Map</button>
         </div>
 
         <div id="admin-content" class="overflow-y-auto flex-grow">
+            <!-- Setup Panel -->
+            <div id="setup-panel" class="hidden">
+                <h2 class="text-2xl text-yellow-400 text-center text-shadow mb-4">🚀 World Setup</h2>
+                <div class="text-center text-gray-300 mb-6">
+                    <p class="mb-2">Create default game content to get started quickly.</p>
+                    <p class="text-sm text-gray-400">Click buttons below to populate your game world.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    <div class="border border-purple-500 rounded p-4 bg-black bg-opacity-50">
+                        <h3 class="text-lg text-purple-400 mb-2">⚔️ Character Classes</h3>
+                        <p class="text-sm text-gray-400 mb-3">6 classes: Warrior, Priest, Wizard, Rogue, Paladin, Ranger</p>
+                        <button id="setup-classes-btn" class="bg-purple-500 text-white px-4 py-2 rounded w-full">Create Classes</button>
+                    </div>
+
+                    <div class="border border-blue-500 rounded p-4 bg-black bg-opacity-50">
+                        <h3 class="text-lg text-blue-400 mb-2">🏛️ Starter Rooms</h3>
+                        <p class="text-sm text-gray-400 mb-3">5 rooms: Town Square, Forest, Shop, Tavern, Guild</p>
+                        <button id="setup-rooms-btn" class="bg-blue-500 text-white px-4 py-2 rounded w-full">Create Rooms</button>
+                    </div>
+
+                    <div class="border border-green-500 rounded p-4 bg-black bg-opacity-50">
+                        <h3 class="text-lg text-green-400 mb-2">📦 Starter Items</h3>
+                        <p class="text-sm text-gray-400 mb-3">10 items: Weapons, armor, potions, tools</p>
+                        <button id="setup-items-btn" class="bg-green-500 text-white px-4 py-2 rounded w-full">Create Items</button>
+                    </div>
+
+                    <div class="border border-yellow-500 rounded p-4 bg-black bg-opacity-50">
+                        <h3 class="text-lg text-yellow-400 mb-2">👤 NPCs</h3>
+                        <p class="text-sm text-gray-400 mb-3">3 NPCs: Shopkeeper, Bartender, Guildmaster</p>
+                        <button id="setup-npcs-btn" class="bg-yellow-500 text-white px-4 py-2 rounded w-full">Create NPCs</button>
+                    </div>
+
+                    <div class="border border-red-500 rounded p-4 bg-black bg-opacity-50">
+                        <h3 class="text-lg text-red-400 mb-2">👹 Monsters</h3>
+                        <p class="text-sm text-gray-400 mb-3">3 monsters: Wolf, Goblin, Skeleton</p>
+                        <button id="setup-monsters-btn" class="bg-red-500 text-white px-4 py-2 rounded w-full">Create Monsters</button>
+                    </div>
+
+                    <div class="border border-orange-500 rounded p-4 bg-black bg-opacity-50 md:col-span-2">
+                        <h3 class="text-lg text-orange-400 mb-2">🌟 Complete Setup</h3>
+                        <p class="text-sm text-gray-400 mb-3">Create ALL default content at once (recommended for new worlds)</p>
+                        <button id="setup-all-btn" class="bg-orange-500 text-white px-6 py-3 rounded w-full text-lg font-bold">🚀 CREATE EVERYTHING</button>
+                    </div>
+                </div>
+
+                <div id="setup-status" class="text-center text-sm mt-4 p-4 border border-gray-600 rounded bg-black bg-opacity-70 min-h-[200px] max-h-[300px] overflow-y-auto">
+                    <p class="text-gray-400">Setup log will appear here...</p>
+                </div>
+            </div>
+
             <!-- Room Editor -->
-            <div id="room-editor-panel">
+            <div id="room-editor-panel" class="hidden">
                  <h2 class="text-2xl text-yellow-400 text-center text-shadow mb-4">Room Editor</h2>
+                 <div class="text-center mb-2">
+                    <button id="debug-data-btn" class="bg-blue-600 text-white px-3 py-1 rounded text-sm">🔍 Debug: Show Loaded Data</button>
+                    <button id="refresh-dropdowns-btn" class="bg-green-600 text-white px-3 py-1 rounded text-sm ml-2">🔄 Refresh All Dropdowns</button>
+                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label for="room-select" class="block mb-1">Select Room to Edit</label>
@@ -473,6 +533,85 @@
                 <div id="admin-player-status" class="text-center mt-2 text-sm"></div>
             </div>
 
+            <!-- Class Editor -->
+            <div id="class-editor-panel" class="hidden">
+                <h2 class="text-2xl text-yellow-400 text-center text-shadow mb-4">⚔️ Character Class Editor</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="class-select" class="block mb-1">Select Class to Edit</label>
+                        <select id="class-select" class="admin-input"></select>
+                    </div>
+                    <div>
+                        <label for="class-id" class="block mb-1">Class ID (no spaces)</label>
+                        <input type="text" id="class-id" class="admin-input">
+                    </div>
+                </div>
+                <div>
+                    <label for="class-name" class="block mb-1 mt-2">Class Name</label>
+                    <input type="text" id="class-name" class="admin-input">
+                </div>
+                <div>
+                    <label for="class-description" class="block mb-1 mt-2">Description</label>
+                    <textarea id="class-description" class="admin-input" rows="2"></textarea>
+                </div>
+                
+                <fieldset class="border border-gray-500 p-3 mt-2">
+                    <legend class="text-yellow-400">Stat Bonuses</legend>
+                    <div class="grid grid-cols-3 gap-3">
+                        <div>
+                            <label for="class-str-bonus" class="block text-sm">Strength</label>
+                            <input type="number" id="class-str-bonus" class="admin-input" value="0">
+                        </div>
+                        <div>
+                            <label for="class-dex-bonus" class="block text-sm">Dexterity</label>
+                            <input type="number" id="class-dex-bonus" class="admin-input" value="0">
+                        </div>
+                        <div>
+                            <label for="class-con-bonus" class="block text-sm">Constitution</label>
+                            <input type="number" id="class-con-bonus" class="admin-input" value="0">
+                        </div>
+                        <div>
+                            <label for="class-int-bonus" class="block text-sm">Intelligence</label>
+                            <input type="number" id="class-int-bonus" class="admin-input" value="0">
+                        </div>
+                        <div>
+                            <label for="class-wis-bonus" class="block text-sm">Wisdom</label>
+                            <input type="number" id="class-wis-bonus" class="admin-input" value="0">
+                        </div>
+                        <div>
+                            <label for="class-cha-bonus" class="block text-sm">Charisma</label>
+                            <input type="number" id="class-cha-bonus" class="admin-input" value="0">
+                        </div>
+                    </div>
+                </fieldset>
+                
+                <div class="grid grid-cols-2 gap-4 mt-2">
+                    <div>
+                        <label for="class-hp-bonus" class="block mb-1">HP Bonus</label>
+                        <input type="number" id="class-hp-bonus" class="admin-input" value="0">
+                    </div>
+                    <div>
+                        <label for="class-mp-bonus" class="block mb-1">MP Bonus (future use)</label>
+                        <input type="number" id="class-mp-bonus" class="admin-input" value="0">
+                    </div>
+                </div>
+                
+                <div>
+                    <label for="class-abilities" class="block mb-1 mt-2">Special Abilities (JSON array)</label>
+                    <textarea id="class-abilities" class="admin-input" rows="2" placeholder='["Power Strike", "Second Wind"]'></textarea>
+                </div>
+                
+                <div class="flex justify-between items-center mt-4">
+                    <div>
+                        <button id="save-class-btn" class="bg-green-500 text-white px-4 py-2 rounded">💾 Save Class</button>
+                        <button id="new-class-btn" class="bg-blue-500 text-white px-4 py-2 rounded ml-2">➕ New Class</button>
+                        <button id="create-defaults-btn" class="bg-purple-500 text-white px-4 py-2 rounded ml-2">⚡ Create 6 Default Classes</button>
+                    </div>
+                    <button id="delete-class-btn" class="bg-red-600 text-white px-4 py-2 rounded">🗑️ Delete Class</button>
+                </div>
+                <div id="admin-class-status" class="text-center mt-2 text-sm"></div>
+            </div>
+
 
             <!-- Levels Configuration Panel -->
             <div id="levels-editor-panel" class="hidden">
@@ -678,9 +817,17 @@
                         </select>
                     </div>
                     <div>
-                        <label for="char-age" class="block mb-1 text-sm">Age</label>
-                        <input type="number" id="char-age" class="auth-input" placeholder="25" min="16" max="999" value="25">
+                        <label for="char-class" class="block mb-1 text-sm">Class</label>
+                        <select id="char-class" class="auth-input">
+                            <option value="">Loading classes...</option>
+                        </select>
+                        <p id="class-desc" class="text-xs text-gray-400 mt-1"></p>
                     </div>
+                </div>
+                
+                <div>
+                    <label for="char-age" class="block mb-1 text-sm">Age</label>
+                    <input type="number" id="char-age" class="auth-input" placeholder="25" min="16" max="999" value="25">
                 </div>
                 
                 <div>

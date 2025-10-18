@@ -32,12 +32,12 @@ export async function initializeFirebase() {
 
     // Firebase configuration
     const firebaseConfig = {
-        apiKey: "AIzaSyANOlqIx79wrJLKCLSl8U19lscbdnE0v6Q",
-        authDomain: "artifacts-ccba2.firebaseapp.com",
-        projectId: "artifacts-ccba2",
-        storageBucket: "artifacts-ccba2.firebasestorage.app",
-        messagingSenderId: "785691942481",
-        appId: "1:785691942481:web:b2c83ee66ca690f56e1f67"
+        apiKey: "AIzaSyD454EmNJFMHPsL2XrNJc7-dQ4bnoCFASs",
+        authDomain: "mudgame-3cbb1.firebaseapp.com",
+        projectId: "mudgame-3cbb1",
+        storageBucket: "mudgame-3cbb1.appspot.com",
+        messagingSenderId: "1004334145379",
+        appId: "1:1004334145379:web:3db9fda346526a64e67d56"
     };
 
     const app = initializeApp(firebaseConfig);

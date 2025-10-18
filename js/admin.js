@@ -13,6 +13,7 @@ import { callGeminiForRoom, callGeminiForMonster, callGeminiForItem, callGeminiF
  * @param {Object} params.gameNpcs - Game NPCs data object
  * @param {Object} params.gameMonsters - Game monsters data object
  * @param {Object} params.gamePlayers - Game players data object
+ * @param {Object} params.gameClasses - Game character classes data object
  * @param {Function} params.logToTerminal - Terminal logging function
  * @param {Object} params.firestoreFunctions - Firestore functions (doc, setDoc, updateDoc, deleteDoc)
  */
@@ -24,19 +25,32 @@ export function initializeAdminPanel({
     gameNpcs,
     gameMonsters,
     gamePlayers,
+    gameClasses,
     logToTerminal,
     firestoreFunctions
 }) {
+    console.log('=== INITIALIZING ADMIN PANEL ===');
+    console.log('Initial data counts:', {
+        rooms: Object.keys(gameWorld).length,
+        items: Object.keys(gameItems).length,
+        npcs: Object.keys(gameNpcs).length,
+        monsters: Object.keys(gameMonsters).length,
+        players: Object.keys(gamePlayers).length,
+        classes: Object.keys(gameClasses).length
+    });
+    
     const { doc, setDoc, updateDoc, deleteDoc, arrayUnion } = firestoreFunctions;
 
     // Tab switching
     const adminTabs = document.querySelectorAll('.admin-tab');
     const adminTabPanels = {
+        'setup-tab-btn': document.getElementById('setup-panel'),
         'room-tab-btn': document.getElementById('room-editor-panel'),
         'item-tab-btn': document.getElementById('item-editor-panel'),
         'npc-tab-btn': document.getElementById('npc-editor-panel'),
         'monster-tab-btn': document.getElementById('monster-editor-panel'),
         'player-tab-btn': document.getElementById('player-editor-panel'),
+        'class-tab-btn': document.getElementById('class-editor-panel'),
         'levels-tab-btn': document.getElementById('levels-editor-panel'),
         'actions-tab-btn': document.getElementById('actions-editor-panel'),
         'map-tab-btn': document.getElementById('map-editor-panel'),
@@ -66,6 +80,23 @@ export function initializeAdminPanel({
         });
     });
 
+    // ========== DEBUG BUTTONS ==========
+    const debugDataBtn = document.getElementById('debug-data-btn');
+    const refreshDropdownsBtn = document.getElementById('refresh-dropdowns-btn');
+    
+    if (debugDataBtn) {
+        debugDataBtn.addEventListener('click', () => {
+            console.log('=== LOADED GAME DATA ===');
+            console.log('Rooms:', Object.keys(gameWorld).length, gameWorld);
+            console.log('Items:', Object.keys(gameItems).length, gameItems);
+            console.log('NPCs:', Object.keys(gameNpcs).length, gameNpcs);
+            console.log('Monsters:', Object.keys(gameMonsters).length, gameMonsters);
+            console.log('Players:', Object.keys(gamePlayers).length, gamePlayers);
+            console.log('Classes:', Object.keys(gameClasses).length, gameClasses);
+            alert(`Data loaded:\n${Object.keys(gameWorld).length} rooms\n${Object.keys(gameItems).length} items\n${Object.keys(gameNpcs).length} NPCs\n${Object.keys(gameMonsters).length} monsters\n${Object.keys(gamePlayers).length} players\n${Object.keys(gameClasses).length} classes`);
+        });
+    }
+    
     // ========== ROOM EDITOR ==========
     const roomSelect = document.getElementById('room-select');
     const roomIdInput = document.getElementById('room-id');
@@ -1163,6 +1194,214 @@ export function initializeAdminPanel({
         }
     });
 
+    // ========== CLASS EDITOR ==========
+    const classSelect = document.getElementById('class-select');
+    const adminClassStatus = document.getElementById('admin-class-status');
+    
+    // Populate class selector
+    function populateClassSelector() {
+        classSelect.innerHTML = '<option value="">-- Create New Class --</option>';
+        Object.entries(gameClasses).forEach(([id, classData]) => {
+            const option = document.createElement('option');
+            option.value = id;
+            option.textContent = classData.name || id;
+            classSelect.appendChild(option);
+        });
+    }
+    
+    // Load class data into form
+    function loadClassData(classId) {
+        const classData = gameClasses[classId];
+        if (!classData) {
+            clearClassForm();
+            return;
+        }
+        
+        document.getElementById('class-id').value = classId;
+        document.getElementById('class-name').value = classData.name || '';
+        document.getElementById('class-description').value = classData.description || '';
+        
+        // Stat bonuses
+        const bonuses = classData.statBonuses || {};
+        document.getElementById('class-str-bonus').value = bonuses.str || 0;
+        document.getElementById('class-dex-bonus').value = bonuses.dex || 0;
+        document.getElementById('class-con-bonus').value = bonuses.con || 0;
+        document.getElementById('class-int-bonus').value = bonuses.int || 0;
+        document.getElementById('class-wis-bonus').value = bonuses.wis || 0;
+        document.getElementById('class-cha-bonus').value = bonuses.cha || 0;
+        
+        document.getElementById('class-hp-bonus').value = classData.hpBonus || 0;
+        document.getElementById('class-mp-bonus').value = classData.mpBonus || 0;
+        document.getElementById('class-abilities').value = JSON.stringify(classData.abilities || []);
+    }
+    
+    function clearClassForm() {
+        document.getElementById('class-id').value = '';
+        document.getElementById('class-name').value = '';
+        document.getElementById('class-description').value = '';
+        document.getElementById('class-str-bonus').value = 0;
+        document.getElementById('class-dex-bonus').value = 0;
+        document.getElementById('class-con-bonus').value = 0;
+        document.getElementById('class-int-bonus').value = 0;
+        document.getElementById('class-wis-bonus').value = 0;
+        document.getElementById('class-cha-bonus').value = 0;
+        document.getElementById('class-hp-bonus').value = 0;
+        document.getElementById('class-mp-bonus').value = 0;
+        document.getElementById('class-abilities').value = '[]';
+    }
+    
+    classSelect.addEventListener('change', () => {
+        const classId = classSelect.value;
+        if (classId) {
+            loadClassData(classId);
+        } else {
+            clearClassForm();
+        }
+    });
+    
+    document.getElementById('new-class-btn').addEventListener('click', () => {
+        classSelect.value = '';
+        clearClassForm();
+        adminClassStatus.textContent = 'Ready to create new class';
+    });
+    
+    document.getElementById('save-class-btn').addEventListener('click', async () => {
+        const classId = document.getElementById('class-id').value.trim();
+        const className = document.getElementById('class-name').value.trim();
+        
+        if (!classId || !className) {
+            adminClassStatus.textContent = 'Class ID and Name are required!';
+            return;
+        }
+        
+        let abilities = [];
+        const abilitiesInput = document.getElementById('class-abilities').value.trim();
+        
+        if (abilitiesInput) {
+            try {
+                abilities = JSON.parse(abilitiesInput);
+                if (!Array.isArray(abilities)) {
+                    adminClassStatus.textContent = 'Abilities must be a JSON array like ["Ability 1", "Ability 2"]';
+                    return;
+                }
+            } catch (e) {
+                adminClassStatus.textContent = 'Invalid JSON in abilities field! Use format: ["Ability 1", "Ability 2"]';
+                return;
+            }
+        }
+        
+        const classData = {
+            name: className,
+            description: document.getElementById('class-description').value.trim(),
+            statBonuses: {
+                str: parseInt(document.getElementById('class-str-bonus').value) || 0,
+                dex: parseInt(document.getElementById('class-dex-bonus').value) || 0,
+                con: parseInt(document.getElementById('class-con-bonus').value) || 0,
+                int: parseInt(document.getElementById('class-int-bonus').value) || 0,
+                wis: parseInt(document.getElementById('class-wis-bonus').value) || 0,
+                cha: parseInt(document.getElementById('class-cha-bonus').value) || 0,
+            },
+            hpBonus: parseInt(document.getElementById('class-hp-bonus').value) || 0,
+            mpBonus: parseInt(document.getElementById('class-mp-bonus').value) || 0,
+            abilities: abilities
+        };
+        
+        await setDoc(doc(db, `/artifacts/${appId}/public/data/mud-classes/${classId}`), classData);
+        adminClassStatus.textContent = `Class "${className}" saved successfully!`;
+        populateClassSelector();
+    });
+    
+    document.getElementById('delete-class-btn').addEventListener('click', async () => {
+        const classId = classSelect.value;
+        if (!classId) {
+            adminClassStatus.textContent = 'No class selected!';
+            return;
+        }
+        
+        if (!confirm(`Delete class "${gameClasses[classId]?.name}"? This cannot be undone.`)) {
+            return;
+        }
+        
+        await deleteDoc(doc(db, `/artifacts/${appId}/public/data/mud-classes/${classId}`));
+        adminClassStatus.textContent = 'Class deleted successfully!';
+        clearClassForm();
+        populateClassSelector();
+    });
+    
+    // Create default classes button
+    document.getElementById('create-defaults-btn').addEventListener('click', async () => {
+        if (!confirm('Create 6 default classes (Warrior, Priest, Wizard, Rogue, Paladin, Ranger)?')) {
+            return;
+        }
+        
+        adminClassStatus.textContent = 'Creating default classes...';
+        
+        const defaultClasses = {
+            warrior: {
+                name: "Warrior",
+                description: "Strong melee fighters with high HP. Bonus to Strength and Constitution.",
+                statBonuses: { str: 3, dex: 0, con: 2, int: -1, wis: 0, cha: 0 },
+                hpBonus: 20,
+                mpBonus: 0,
+                abilities: ["Power Strike", "Second Wind", "Weapon Mastery"]
+            },
+            priest: {
+                name: "Priest",
+                description: "Holy healers with divine powers. Bonus to Wisdom and Charisma.",
+                statBonuses: { str: 0, dex: 0, con: 1, int: 0, wis: 3, cha: 2 },
+                hpBonus: 5,
+                mpBonus: 20,
+                abilities: ["Heal", "Divine Protection", "Turn Undead"]
+            },
+            wizard: {
+                name: "Wizard",
+                description: "Masters of arcane magic. Bonus to Intelligence.",
+                statBonuses: { str: -1, dex: 1, con: 0, int: 4, wis: 1, cha: 0 },
+                hpBonus: -10,
+                mpBonus: 30,
+                abilities: ["Fireball", "Magic Missile", "Arcane Shield"]
+            },
+            rogue: {
+                name: "Rogue",
+                description: "Stealthy thieves with quick reflexes. Bonus to Dexterity and Charisma.",
+                statBonuses: { str: 0, dex: 4, con: 0, int: 1, wis: 0, cha: 2 },
+                hpBonus: 0,
+                mpBonus: 5,
+                abilities: ["Backstab", "Sneak", "Pick Lock"]
+            },
+            paladin: {
+                name: "Paladin",
+                description: "Holy warriors combining combat prowess with divine magic. Balanced bonuses.",
+                statBonuses: { str: 2, dex: 0, con: 1, int: 0, wis: 2, cha: 2 },
+                hpBonus: 15,
+                mpBonus: 10,
+                abilities: ["Smite Evil", "Lay on Hands", "Divine Sense"]
+            },
+            ranger: {
+                name: "Ranger",
+                description: "Wilderness experts skilled with bow and blade. Bonus to Dexterity and Wisdom.",
+                statBonuses: { str: 1, dex: 3, con: 1, int: 0, wis: 2, cha: 0 },
+                hpBonus: 10,
+                mpBonus: 5,
+                abilities: ["Track", "Hunter's Mark", "Animal Companion"]
+            }
+        };
+        
+        try {
+            for (const [classId, classData] of Object.entries(defaultClasses)) {
+                await setDoc(doc(db, `/artifacts/${appId}/public/data/mud-classes/${classId}`), classData);
+            }
+            adminClassStatus.textContent = '✅ All 6 default classes created successfully!';
+            populateClassSelector();
+        } catch (error) {
+            adminClassStatus.textContent = `❌ Error: ${error.message}`;
+            console.error('Error creating default classes:', error);
+        }
+    });
+    
+    // Initialize class selector
+    populateClassSelector();
+
     // ========== MAP VISUALIZATION ==========
     let networkInstance = null;
 
@@ -1372,6 +1611,54 @@ export function initializeAdminPanel({
         generateMap();
     });
 
+    // Refresh dropdowns button
+    if (refreshDropdownsBtn) {
+        refreshDropdownsBtn.addEventListener('click', () => {
+            console.log('Refreshing all dropdowns...');
+            populateRoomSelector();
+            populateItemSelector();
+            populateNpcSelector();
+            populateMonsterSelector();
+            populatePlayerSelector();
+            populateClassSelector();
+            populateRoomItemsSelector();
+            populateRoomNpcsSelector();
+            populateNpcSellsSelector();
+            alert('All dropdowns refreshed!');
+        });
+    }
+
+    // Initialize all dropdowns with current data
+    // Use a longer delay and retry mechanism to ensure data is loaded
+    function tryPopulateDropdowns(attempt = 0) {
+        const maxAttempts = 10;
+        const delay = 500;
+        
+        const hasData = Object.keys(gameWorld).length > 0 || 
+                       Object.keys(gameItems).length > 0 || 
+                       Object.keys(gameNpcs).length > 0;
+        
+        if (hasData || attempt >= maxAttempts) {
+            console.log(`Populating admin dropdowns (attempt ${attempt + 1})...`);
+            console.log(`Data available: ${Object.keys(gameWorld).length} rooms, ${Object.keys(gameItems).length} items, ${Object.keys(gameNpcs).length} npcs`);
+            populateRoomSelector();
+            populateItemSelector();
+            populateNpcSelector();
+            populateMonsterSelector();
+            populatePlayerSelector();
+            populateClassSelector();
+            populateRoomItemsSelector();
+            populateRoomNpcsSelector();
+            populateNpcSellsSelector();
+        } else {
+            console.log(`Waiting for data... attempt ${attempt + 1}/${maxAttempts}`);
+            setTimeout(() => tryPopulateDropdowns(attempt + 1), delay);
+        }
+    }
+    
+    // Start trying to populate dropdowns
+    tryPopulateDropdowns();
+
     // Return populate functions so they can be called when data updates
     return {
         populateRoomSelector,
@@ -1386,6 +1673,345 @@ export function initializeAdminPanel({
         populateMonsterItemDropSelector,
         populatePlayerRoomSelector
     };
+
+    // ===== SETUP PANEL FUNCTIONS =====
+    const setupStatus = document.getElementById('setup-status');
+    
+    function logSetup(message, type = 'info') {
+        const colors = {
+            info: 'text-blue-400',
+            success: 'text-green-400',
+            error: 'text-red-400'
+        };
+        const div = document.createElement('div');
+        div.className = colors[type] || 'text-gray-300';
+        div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+        setupStatus.appendChild(div);
+        setupStatus.scrollTop = setupStatus.scrollHeight;
+    }
+
+    // Setup Classes
+    document.getElementById('setup-classes-btn').addEventListener('click', async () => {
+        logSetup('Creating default classes...', 'info');
+        const classes = {
+            'warrior': {
+                name: 'Warrior',
+                description: 'Strong melee fighter with high HP',
+                statBonuses: { str: 3, dex: 0, con: 2, int: -1, wis: 0, cha: 0 },
+                hpBonus: 20,
+                mpBonus: 0,
+                abilities: ['Power Attack', 'Shield Bash']
+            },
+            'priest': {
+                name: 'Priest',
+                description: 'Holy healer and support class',
+                statBonuses: { str: 0, dex: 0, con: 1, int: 0, wis: 3, cha: 2 },
+                hpBonus: 0,
+                mpBonus: 20,
+                abilities: ['Heal', 'Bless', 'Smite']
+            },
+            'wizard': {
+                name: 'Wizard',
+                description: 'Powerful magic user',
+                statBonuses: { str: -1, dex: 0, con: -1, int: 4, wis: 1, cha: 0 },
+                hpBonus: -10,
+                mpBonus: 30,
+                abilities: ['Fireball', 'Lightning Bolt', 'Shield']
+            },
+            'rogue': {
+                name: 'Rogue',
+                description: 'Sneaky and agile character',
+                statBonuses: { str: 0, dex: 4, con: 0, int: 0, wis: 0, cha: 2 },
+                hpBonus: 0,
+                mpBonus: 0,
+                abilities: ['Backstab', 'Stealth', 'Lockpick']
+            },
+            'paladin': {
+                name: 'Paladin',
+                description: 'Holy warrior with divine powers',
+                statBonuses: { str: 2, dex: 0, con: 2, int: 0, wis: 1, cha: 1 },
+                hpBonus: 15,
+                mpBonus: 10,
+                abilities: ['Lay on Hands', 'Divine Shield', 'Holy Strike']
+            },
+            'ranger': {
+                name: 'Ranger',
+                description: 'Skilled tracker and archer',
+                statBonuses: { str: 1, dex: 3, con: 1, int: 0, wis: 2, cha: 0 },
+                hpBonus: 10,
+                mpBonus: 5,
+                abilities: ['Track', 'Rapid Shot', 'Animal Companion']
+            }
+        };
+
+        try {
+            for (const [id, classData] of Object.entries(classes)) {
+                await setDoc(doc(db, `/artifacts/${appId}/public/data/mud-classes/${id}`), classData);
+                logSetup(`✓ Created class: ${classData.name}`, 'success');
+            }
+            logSetup('✓✓✓ Classes setup complete!', 'success');
+        } catch (error) {
+            logSetup(`Error creating classes: ${error.message}`, 'error');
+        }
+    });
+
+    // Setup Rooms
+    document.getElementById('setup-rooms-btn').addEventListener('click', async () => {
+        logSetup('Creating starter rooms...', 'info');
+        const rooms = {
+            'start': {
+                name: 'Town Square',
+                description: 'You stand in the bustling town square. A fountain bubbles in the center, and merchants hawk their wares. Paths lead in all directions.',
+                exits: { north: 'forest', south: 'shop', east: 'tavern', west: 'guild' },
+                details: { fountain: 'An ornate stone fountain with crystal-clear water.', merchants: 'Colorful merchants selling various goods.' }
+            },
+            'forest': {
+                name: 'Dark Forest',
+                description: 'Dense trees block most of the sunlight. Strange sounds echo through the woods.',
+                exits: { south: 'start' },
+                details: { trees: 'Tall, ancient oaks with twisted branches.' },
+                monsters: [{ monsterId: 'wolf', respawnTime: 300000 }]
+            },
+            'shop': {
+                name: 'General Store',
+                description: 'A cozy shop filled with adventuring supplies. The shopkeeper eyes you hopefully.',
+                exits: { north: 'start' },
+                details: { counter: 'A wooden counter with various items on display.' }
+            },
+            'tavern': {
+                name: 'The Prancing Pony',
+                description: 'A warm tavern filled with the smell of ale and roasting meat. Patrons chat at wooden tables.',
+                exits: { west: 'start' },
+                details: { bar: 'A long oak bar with various drinks.', fireplace: 'A crackling fire in the corner.' }
+            },
+            'guild': {
+                name: 'Adventurers Guild',
+                description: 'The guild hall is decorated with trophies and quest boards. Fellow adventurers mingle here.',
+                exits: { east: 'start' },
+                details: { board: 'A quest board covered in notices.', trophies: 'Monster heads and weapons mounted on the walls.' }
+            }
+        };
+
+        try {
+            for (const [id, roomData] of Object.entries(rooms)) {
+                await setDoc(doc(db, `/artifacts/${appId}/public/data/mud-rooms/${id}`), roomData);
+                logSetup(`✓ Created room: ${roomData.name}`, 'success');
+            }
+            logSetup('✓✓✓ Rooms setup complete!', 'success');
+        } catch (error) {
+            logSetup(`Error creating rooms: ${error.message}`, 'error');
+        }
+    });
+
+    // Setup Items
+    document.getElementById('setup-items-btn').addEventListener('click', async () => {
+        logSetup('Creating starter items...', 'info');
+        const items = {
+            'sword': {
+                name: 'Iron Sword',
+                description: 'A sturdy iron sword with a leather grip.',
+                type: 'weapon',
+                value: 50,
+                damage: 10,
+                weight: 5
+            },
+            'shield': {
+                name: 'Wooden Shield',
+                description: 'A simple wooden shield reinforced with iron bands.',
+                type: 'armor',
+                value: 30,
+                defense: 5,
+                weight: 8
+            },
+            'potion': {
+                name: 'Health Potion',
+                description: 'A red potion that restores health.',
+                type: 'consumable',
+                value: 20,
+                healing: 50,
+                weight: 1
+            },
+            'bread': {
+                name: 'Loaf of Bread',
+                description: 'Fresh-baked bread.',
+                type: 'food',
+                value: 5,
+                healing: 10,
+                weight: 1
+            },
+            'key': {
+                name: 'Rusty Key',
+                description: 'An old rusty key. What does it unlock?',
+                type: 'key',
+                value: 10,
+                weight: 0.5
+            },
+            'torch': {
+                name: 'Torch',
+                description: 'A wooden torch that provides light.',
+                type: 'tool',
+                value: 5,
+                weight: 2
+            },
+            'rope': {
+                name: 'Rope',
+                description: '50 feet of sturdy rope.',
+                type: 'tool',
+                value: 10,
+                weight: 3
+            },
+            'dagger': {
+                name: 'Steel Dagger',
+                description: 'A sharp steel dagger.',
+                type: 'weapon',
+                value: 25,
+                damage: 5,
+                weight: 2
+            },
+            'ring': {
+                name: 'Silver Ring',
+                description: 'A simple silver ring.',
+                type: 'jewelry',
+                value: 100,
+                weight: 0.1
+            },
+            'book': {
+                name: 'Spellbook',
+                description: 'An ancient book filled with arcane symbols.',
+                type: 'magic',
+                value: 150,
+                weight: 3
+            }
+        };
+
+        try {
+            for (const [id, itemData] of Object.entries(items)) {
+                await setDoc(doc(db, `/artifacts/${appId}/public/data/mud-items/${id}`), itemData);
+                logSetup(`✓ Created item: ${itemData.name}`, 'success');
+            }
+            logSetup('✓✓✓ Items setup complete!', 'success');
+        } catch (error) {
+            logSetup(`Error creating items: ${error.message}`, 'error');
+        }
+    });
+
+    // Setup NPCs
+    document.getElementById('setup-npcs-btn').addEventListener('click', async () => {
+        logSetup('Creating starter NPCs...', 'info');
+        const npcs = {
+            'shopkeeper': {
+                name: 'Marcus the Shopkeeper',
+                description: 'A portly merchant with a friendly smile.',
+                roomId: 'shop',
+                isTrader: true,
+                inventory: ['sword', 'shield', 'potion', 'bread', 'torch', 'rope'],
+                dialogue: ['Welcome to my shop!', 'Looking to buy something?', 'Best prices in town!'],
+                aiEnabled: false
+            },
+            'barkeep': {
+                name: 'Old Tom',
+                description: 'A grizzled bartender with many stories to tell.',
+                roomId: 'tavern',
+                isTrader: false,
+                dialogue: ['What can I get ya?', 'Heard any good rumors lately?', 'Adventurers always bring trouble...'],
+                aiEnabled: false
+            },
+            'guildmaster': {
+                name: 'Lady Evelyn',
+                description: 'The stern but fair guildmaster. She oversees all adventurer activities.',
+                roomId: 'guild',
+                isTrader: false,
+                dialogue: ['Greetings, adventurer.', 'Many quests await those brave enough.', 'Prove your worth and earn great rewards.'],
+                aiEnabled: false
+            }
+        };
+
+        try {
+            for (const [id, npcData] of Object.entries(npcs)) {
+                await setDoc(doc(db, `/artifacts/${appId}/public/data/mud-npcs/${id}`), npcData);
+                logSetup(`✓ Created NPC: ${npcData.name}`, 'success');
+            }
+            logSetup('✓✓✓ NPCs setup complete!', 'success');
+        } catch (error) {
+            logSetup(`Error creating NPCs: ${error.message}`, 'error');
+        }
+    });
+
+    // Setup Monsters
+    document.getElementById('setup-monsters-btn').addEventListener('click', async () => {
+        logSetup('Creating starter monsters...', 'info');
+        const monsters = {
+            'wolf': {
+                name: 'Gray Wolf',
+                description: 'A lean, hungry wolf with sharp fangs.',
+                hp: 30,
+                maxHp: 30,
+                damage: 8,
+                xpReward: 50,
+                loot: ['bread'],
+                aggressive: true
+            },
+            'goblin': {
+                name: 'Goblin Scout',
+                description: 'A small green creature with beady eyes and a rusty dagger.',
+                hp: 20,
+                maxHp: 20,
+                damage: 5,
+                xpReward: 30,
+                loot: ['dagger', 'key'],
+                aggressive: true
+            },
+            'skeleton': {
+                name: 'Skeleton Warrior',
+                description: 'An undead warrior wielding an ancient sword.',
+                hp: 40,
+                maxHp: 40,
+                damage: 12,
+                xpReward: 75,
+                loot: ['sword', 'ring'],
+                aggressive: true
+            }
+        };
+
+        try {
+            for (const [id, monsterData] of Object.entries(monsters)) {
+                await setDoc(doc(db, `/artifacts/${appId}/public/data/mud-monsters/${id}`), monsterData);
+                logSetup(`✓ Created monster: ${monsterData.name}`, 'success');
+            }
+            logSetup('✓✓✓ Monsters setup complete!', 'success');
+        } catch (error) {
+            logSetup(`Error creating monsters: ${error.message}`, 'error');
+        }
+    });
+
+    // Setup All
+    document.getElementById('setup-all-btn').addEventListener('click', async () => {
+        setupStatus.innerHTML = '';
+        logSetup('========================================', 'info');
+        logSetup('🚀 STARTING COMPLETE WORLD SETUP', 'info');
+        logSetup('========================================', 'info');
+        
+        // Trigger all setup buttons
+        document.getElementById('setup-classes-btn').click();
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        document.getElementById('setup-rooms-btn').click();
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        document.getElementById('setup-items-btn').click();
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        document.getElementById('setup-npcs-btn').click();
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        document.getElementById('setup-monsters-btn').click();
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        logSetup('========================================', 'success');
+        logSetup('✓✓✓ WORLD SETUP COMPLETE! ✓✓✓', 'success');
+        logSetup('========================================', 'success');
+        logSetup('Switch to other tabs to edit your content!', 'success');
+    });
 }
 
 // ========== LEVELS EDITOR ==========
@@ -1709,4 +2335,3 @@ async function initializeActionsEditor(db, appId) {
     await loadActions();
     populateActionUI();
 }
-

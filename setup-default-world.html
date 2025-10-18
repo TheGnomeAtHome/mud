@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup Default World</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #1a1a1a;
+            color: #00ff00;
+        }
+        button {
+            background-color: #00ff00;
+            color: #000;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 5px;
+            margin: 10px;
+        }
+        button:hover {
+            background-color: #00cc00;
+        }
+        #output {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #000;
+            border: 1px solid #00ff00;
+            border-radius: 5px;
+            min-height: 200px;
+        }
+        .success { color: #00ff00; }
+        .error { color: #ff0000; }
+        .info { color: #00aaff; }
+    </style>
+</head>
+<body>
+    <h1>MUD Game - Setup Default World</h1>
+    <p>This utility will create default game content in your Firebase database.</p>
+    
+    <button onclick="setupClasses()">1. Create Classes (6 defaults)</button>
+    <button onclick="setupRooms()">2. Create Rooms (5 starter rooms)</button>
+    <button onclick="setupItems()">3. Create Items (10 starter items)</button>
+    <button onclick="setupNpcs()">4. Create NPCs (3 starter NPCs)</button>
+    <button onclick="setupMonsters()">5. Create Monsters (3 starter monsters)</button>
+    <br>
+    <button onclick="setupAll()" style="background-color: #ff9900;">🚀 CREATE ALL (Complete Setup)</button>
+    
+    <div id="output"></div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getFirestore, collection, doc, setDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyDLFgt8jwT8Hde5cNKeyGn0o77UZGyWq9U",
+            authDomain: "mudgame-3cbb1.firebaseapp.com",
+            projectId: "mudgame-3cbb1",
+            storageBucket: "mudgame-3cbb1.firebasestorage.app",
+            messagingSenderId: "643707919940",
+            appId: "1:643707919940:web:f1e51802b2e86a7c5dd2f9"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const APP_ID = 'mud-game-v1';
+
+        function log(message, type = 'info') {
+            const output = document.getElementById('output');
+            const span = document.createElement('div');
+            span.className = type;
+            span.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            output.appendChild(span);
+            output.scrollTop = output.scrollHeight;
+        }
+
+        // Classes
+        window.setupClasses = async function() {
+            log('Creating default classes...', 'info');
+            const classes = {
+                'warrior': {
+                    name: 'Warrior',
+                    description: 'Strong melee fighter with high HP',
+                    statBonuses: { str: 3, dex: 0, con: 2, int: -1, wis: 0, cha: 0 },
+                    hpBonus: 20,
+                    mpBonus: 0,
+                    abilities: ['Power Attack', 'Shield Bash']
+                },
+                'priest': {
+                    name: 'Priest',
+                    description: 'Holy healer and support class',
+                    statBonuses: { str: 0, dex: 0, con: 1, int: 0, wis: 3, cha: 2 },
+                    hpBonus: 0,
+                    mpBonus: 20,
+                    abilities: ['Heal', 'Bless', 'Smite']
+                },
+                'wizard': {
+                    name: 'Wizard',
+                    description: 'Powerful magic user',
+                    statBonuses: { str: -1, dex: 0, con: -1, int: 4, wis: 1, cha: 0 },
+                    hpBonus: -10,
+                    mpBonus: 30,
+                    abilities: ['Fireball', 'Lightning Bolt', 'Shield']
+                },
+                'rogue': {
+                    name: 'Rogue',
+                    description: 'Sneaky and agile character',
+                    statBonuses: { str: 0, dex: 4, con: 0, int: 0, wis: 0, cha: 2 },
+                    hpBonus: 0,
+                    mpBonus: 0,
+                    abilities: ['Backstab', 'Stealth', 'Lockpick']
+                },
+                'paladin': {
+                    name: 'Paladin',
+                    description: 'Holy warrior with divine powers',
+                    statBonuses: { str: 2, dex: 0, con: 2, int: 0, wis: 1, cha: 1 },
+                    hpBonus: 15,
+                    mpBonus: 10,
+                    abilities: ['Lay on Hands', 'Divine Shield', 'Holy Strike']
+                },
+                'ranger': {
+                    name: 'Ranger',
+                    description: 'Skilled tracker and archer',
+                    statBonuses: { str: 1, dex: 3, con: 1, int: 0, wis: 2, cha: 0 },
+                    hpBonus: 10,
+                    mpBonus: 5,
+                    abilities: ['Track', 'Rapid Shot', 'Animal Companion']
+                }
+            };
+
+            try {
+                for (const [id, classData] of Object.entries(classes)) {
+                    await setDoc(doc(db, `/artifacts/${APP_ID}/public/data/mud-classes/${id}`), classData);
+                    log(`✓ Created class: ${classData.name}`, 'success');
+                }
+                log('Classes setup complete!', 'success');
+            } catch (error) {
+                log(`Error creating classes: ${error.message}`, 'error');
+            }
+        };
+
+        // Rooms
+        window.setupRooms = async function() {
+            log('Creating starter rooms...', 'info');
+            const rooms = {
+                'start': {
+                    name: 'Town Square',
+                    description: 'You stand in the bustling town square. A fountain bubbles in the center, and merchants hawk their wares. Paths lead in all directions.',
+                    exits: { north: 'forest', south: 'shop', east: 'tavern', west: 'guild' },
+                    details: { fountain: 'An ornate stone fountain with crystal-clear water.', merchants: 'Colorful merchants selling various goods.' }
+                },
+                'forest': {
+                    name: 'Dark Forest',
+                    description: 'Dense trees block most of the sunlight. Strange sounds echo through the woods.',
+                    exits: { south: 'start' },
+                    details: { trees: 'Tall, ancient oaks with twisted branches.' },
+                    monsters: [{ monsterId: 'wolf', respawnTime: 300000 }]
+                },
+                'shop': {
+                    name: 'General Store',
+                    description: 'A cozy shop filled with adventuring supplies. The shopkeeper eyes you hopefully.',
+                    exits: { north: 'start' },
+                    details: { counter: 'A wooden counter with various items on display.' }
+                },
+                'tavern': {
+                    name: 'The Prancing Pony',
+                    description: 'A warm tavern filled with the smell of ale and roasting meat. Patrons chat at wooden tables.',
+                    exits: { west: 'start' },
+                    details: { bar: 'A long oak bar with various drinks.', fireplace: 'A crackling fire in the corner.' }
+                },
+                'guild': {
+                    name: 'Adventurers Guild',
+                    description: 'The guild hall is decorated with trophies and quest boards. Fellow adventurers mingle here.',
+                    exits: { east: 'start' },
+                    details: { board: 'A quest board covered in notices.', trophies: 'Monster heads and weapons mounted on the walls.' }
+                }
+            };
+
+            try {
+                for (const [id, roomData] of Object.entries(rooms)) {
+                    await setDoc(doc(db, `/artifacts/${APP_ID}/public/data/mud-rooms/${id}`), roomData);
+                    log(`✓ Created room: ${roomData.name}`, 'success');
+                }
+                log('Rooms setup complete!', 'success');
+            } catch (error) {
+                log(`Error creating rooms: ${error.message}`, 'error');
+            }
+        };
+
+        // Items
+        window.setupItems = async function() {
+            log('Creating starter items...', 'info');
+            const items = {
+                'sword': {
+                    name: 'Iron Sword',
+                    description: 'A sturdy iron sword with a leather grip.',
+                    type: 'weapon',
+                    value: 50,
+                    damage: 10,
+                    weight: 5
+                },
+                'shield': {
+                    name: 'Wooden Shield',
+                    description: 'A simple wooden shield reinforced with iron bands.',
+                    type: 'armor',
+                    value: 30,
+                    defense: 5,
+                    weight: 8
+                },
+                'potion': {
+                    name: 'Health Potion',
+                    description: 'A red potion that restores health.',
+                    type: 'consumable',
+                    value: 20,
+                    healing: 50,
+                    weight: 1
+                },
+                'bread': {
+                    name: 'Loaf of Bread',
+                    description: 'Fresh-baked bread.',
+                    type: 'food',
+                    value: 5,
+                    healing: 10,
+                    weight: 1
+                },
+                'key': {
+                    name: 'Rusty Key',
+                    description: 'An old rusty key. What does it unlock?',
+                    type: 'key',
+                    value: 10,
+                    weight: 0.5
+                },
+                'torch': {
+                    name: 'Torch',
+                    description: 'A wooden torch that provides light.',
+                    type: 'tool',
+                    value: 5,
+                    weight: 2
+                },
+                'rope': {
+                    name: 'Rope',
+                    description: '50 feet of sturdy rope.',
+                    type: 'tool',
+                    value: 10,
+                    weight: 3
+                },
+                'dagger': {
+                    name: 'Steel Dagger',
+                    description: 'A sharp steel dagger.',
+                    type: 'weapon',
+                    value: 25,
+                    damage: 5,
+                    weight: 2
+                },
+                'ring': {
+                    name: 'Silver Ring',
+                    description: 'A simple silver ring.',
+                    type: 'jewelry',
+                    value: 100,
+                    weight: 0.1
+                },
+                'book': {
+                    name: 'Spellbook',
+                    description: 'An ancient book filled with arcane symbols.',
+                    type: 'magic',
+                    value: 150,
+                    weight: 3
+                }
+            };
+
+            try {
+                for (const [id, itemData] of Object.entries(items)) {
+                    await setDoc(doc(db, `/artifacts/${APP_ID}/public/data/mud-items/${id}`), itemData);
+                    log(`✓ Created item: ${itemData.name}`, 'success');
+                }
+                log('Items setup complete!', 'success');
+            } catch (error) {
+                log(`Error creating items: ${error.message}`, 'error');
+            }
+        };
+
+        // NPCs
+        window.setupNpcs = async function() {
+            log('Creating starter NPCs...', 'info');
+            const npcs = {
+                'shopkeeper': {
+                    name: 'Marcus the Shopkeeper',
+                    description: 'A portly merchant with a friendly smile.',
+                    roomId: 'shop',
+                    isTrader: true,
+                    inventory: ['sword', 'shield', 'potion', 'bread', 'torch', 'rope'],
+                    dialogue: ['Welcome to my shop!', 'Looking to buy something?', 'Best prices in town!'],
+                    aiEnabled: false
+                },
+                'barkeep': {
+                    name: 'Old Tom',
+                    description: 'A grizzled bartender with many stories to tell.',
+                    roomId: 'tavern',
+                    isTrader: false,
+                    dialogue: ['What can I get ya?', 'Heard any good rumors lately?', 'Adventurers always bring trouble...'],
+                    aiEnabled: false
+                },
+                'guildmaster': {
+                    name: 'Lady Evelyn',
+                    description: 'The stern but fair guildmaster. She oversees all adventurer activities.',
+                    roomId: 'guild',
+                    isTrader: false,
+                    dialogue: ['Greetings, adventurer.', 'Many quests await those brave enough.', 'Prove your worth and earn great rewards.'],
+                    aiEnabled: false
+                }
+            };
+
+            try {
+                for (const [id, npcData] of Object.entries(npcs)) {
+                    await setDoc(doc(db, `/artifacts/${APP_ID}/public/data/mud-npcs/${id}`), npcData);
+                    log(`✓ Created NPC: ${npcData.name}`, 'success');
+                }
+                log('NPCs setup complete!', 'success');
+            } catch (error) {
+                log(`Error creating NPCs: ${error.message}`, 'error');
+            }
+        };
+
+        // Monsters
+        window.setupMonsters = async function() {
+            log('Creating starter monsters...', 'info');
+            const monsters = {
+                'wolf': {
+                    name: 'Gray Wolf',
+                    description: 'A lean, hungry wolf with sharp fangs.',
+                    hp: 30,
+                    maxHp: 30,
+                    damage: 8,
+                    xpReward: 50,
+                    loot: ['bread'],
+                    aggressive: true
+                },
+                'goblin': {
+                    name: 'Goblin Scout',
+                    description: 'A small green creature with beady eyes and a rusty dagger.',
+                    hp: 20,
+                    maxHp: 20,
+                    damage: 5,
+                    xpReward: 30,
+                    loot: ['dagger', 'key'],
+                    aggressive: true
+                },
+                'skeleton': {
+                    name: 'Skeleton Warrior',
+                    description: 'An undead warrior wielding an ancient sword.',
+                    hp: 40,
+                    maxHp: 40,
+                    damage: 12,
+                    xpReward: 75,
+                    loot: ['sword', 'ring'],
+                    aggressive: true
+                }
+            };
+
+            try {
+                for (const [id, monsterData] of Object.entries(monsters)) {
+                    await setDoc(doc(db, `/artifacts/${APP_ID}/public/data/mud-monsters/${id}`), monsterData);
+                    log(`✓ Created monster: ${monsterData.name}`, 'success');
+                }
+                log('Monsters setup complete!', 'success');
+            } catch (error) {
+                log(`Error creating monsters: ${error.message}`, 'error');
+            }
+        };
+
+        // Setup all
+        window.setupAll = async function() {
+            log('========================================', 'info');
+            log('STARTING COMPLETE WORLD SETUP', 'info');
+            log('========================================', 'info');
+            
+            await setupClasses();
+            await setupRooms();
+            await setupItems();
+            await setupNpcs();
+            await setupMonsters();
+            
+            log('========================================', 'success');
+            log('✓✓✓ WORLD SETUP COMPLETE! ✓✓✓', 'success');
+            log('========================================', 'success');
+            log('You can now close this page and refresh your game!', 'success');
+        };
+    </script>
+</body>
+</html>

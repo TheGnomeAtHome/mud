@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup Default Classes</title>
+    <style>
+        body {
+            font-family: monospace;
+            background: #000;
+            color: #0f0;
+            padding: 20px;
+        }
+        button {
+            background: #0f0;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px 0;
+        }
+        button:hover {
+            background: #0c0;
+        }
+        #status {
+            margin-top: 20px;
+            white-space: pre-line;
+        }
+    </style>
+</head>
+<body>
+    <h1>MUD Game - Setup Default Classes</h1>
+    <p>This utility will create default character classes in your Firebase database.</p>
+    <button onclick="setupClasses()">Create Default Classes</button>
+    <div id="status"></div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getFirestore, doc, setDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyD454EmNJFMHPsL2XrNJc7-dQ4bnoCFASs",
+            authDomain: "mudgame-3cbb1.firebaseapp.com",
+            projectId: "mudgame-3cbb1",
+            storageBucket: "mudgame-3cbb1.appspot.com",
+            messagingSenderId: "1004334145379",
+            appId: "1:1004334145379:web:3db9fda346526a64e67d56"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const APP_ID = 'mudgame-3cbb1';
+
+        const defaultClasses = {
+            warrior: {
+                name: "Warrior",
+                description: "Strong melee fighters with high HP. Bonus to Strength and Constitution.",
+                statBonuses: {
+                    str: 3,
+                    dex: 0,
+                    con: 2,
+                    int: -1,
+                    wis: 0,
+                    cha: 0
+                },
+                hpBonus: 20,
+                mpBonus: 0,
+                abilities: ["Power Strike", "Second Wind", "Weapon Mastery"]
+            },
+            priest: {
+                name: "Priest",
+                description: "Holy healers with divine powers. Bonus to Wisdom and Charisma.",
+                statBonuses: {
+                    str: 0,
+                    dex: 0,
+                    con: 1,
+                    int: 0,
+                    wis: 3,
+                    cha: 2
+                },
+                hpBonus: 5,
+                mpBonus: 20,
+                abilities: ["Heal", "Divine Protection", "Turn Undead"]
+            },
+            wizard: {
+                name: "Wizard",
+                description: "Masters of arcane magic. Bonus to Intelligence.",
+                statBonuses: {
+                    str: -1,
+                    dex: 1,
+                    con: 0,
+                    int: 4,
+                    wis: 1,
+                    cha: 0
+                },
+                hpBonus: -10,
+                mpBonus: 30,
+                abilities: ["Fireball", "Magic Missile", "Arcane Shield"]
+            },
+            rogue: {
+                name: "Rogue",
+                description: "Stealthy thieves with quick reflexes. Bonus to Dexterity and Charisma.",
+                statBonuses: {
+                    str: 0,
+                    dex: 4,
+                    con: 0,
+                    int: 1,
+                    wis: 0,
+                    cha: 2
+                },
+                hpBonus: 0,
+                mpBonus: 5,
+                abilities: ["Backstab", "Sneak", "Pick Lock"]
+            },
+            paladin: {
+                name: "Paladin",
+                description: "Holy warriors combining combat prowess with divine magic. Balanced bonuses.",
+                statBonuses: {
+                    str: 2,
+                    dex: 0,
+                    con: 1,
+                    int: 0,
+                    wis: 2,
+                    cha: 2
+                },
+                hpBonus: 15,
+                mpBonus: 10,
+                abilities: ["Smite Evil", "Lay on Hands", "Divine Sense"]
+            },
+            ranger: {
+                name: "Ranger",
+                description: "Wilderness experts skilled with bow and blade. Bonus to Dexterity and Wisdom.",
+                statBonuses: {
+                    str: 1,
+                    dex: 3,
+                    con: 1,
+                    int: 0,
+                    wis: 2,
+                    cha: 0
+                },
+                hpBonus: 10,
+                mpBonus: 5,
+                abilities: ["Track", "Hunter's Mark", "Animal Companion"]
+            }
+        };
+
+        window.setupClasses = async function() {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = 'Creating default classes...\n';
+
+            try {
+                for (const [classId, classData] of Object.entries(defaultClasses)) {
+                    await setDoc(doc(db, `/artifacts/${APP_ID}/public/data/mud-classes/${classId}`), classData);
+                    statusDiv.textContent += `✓ Created class: ${classData.name}\n`;
+                }
+                statusDiv.textContent += '\n✅ All default classes created successfully!\nYou can now close this page and use the admin panel to edit them.';
+            } catch (error) {
+                statusDiv.textContent += `\n❌ Error: ${error.message}`;
+                console.error(error);
+            }
+        };
+    </script>
+</body>
+</html>
