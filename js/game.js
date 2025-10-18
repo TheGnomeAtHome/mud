@@ -955,6 +955,204 @@ export function initializeGameLogic(dependencies) {
                     logToTerminal(`The book crumbles to dust as its knowledge transfers to you.`, 'system');
                     break;
 
+                case 'scroll':
+                case 'wand':
+                case 'magical':
+                    // Magical item that casts a spell when used (one-time consumable)
+                    const castSpellId = specialData.castSpell;
+                    if (!castSpellId) {
+                        logToTerminal(`${itemData.name} appears to be inert.`, 'error');
+                        break;
+                    }
+
+                    // Check if spell exists
+                    const spellToCast = gameSpells[castSpellId];
+                    if (!spellToCast) {
+                        logToTerminal(`${itemData.name} contains corrupted magic and fizzles.`, 'error');
+                        // Still consume the broken item
+                        const brokenInv = playerData.inventory.filter(item => 
+                            item.id !== inventoryItem.id || item.name !== inventoryItem.name
+                        );
+                        await updateDoc(playerRef, { inventory: brokenInv });
+                        break;
+                    }
+
+                    // Get current player stats
+                    const currentHp = playerData.hp || 0;
+                    const maxHp = playerData.maxHp || 100;
+
+                    // Handle different target types
+                    let scrollSuccess = false;
+                    let scrollTargetName = parsedCommand.npc_target || "";
+
+                    logToTerminal(`You activate ${itemData.name}!`, 'system');
+
+                    switch (spellToCast.targetType) {
+                        case 'self':
+                            // Apply spell effects to self
+                            if (spellToCast.healing > 0) {
+                                const newHp = Math.min(currentHp + spellToCast.healing, maxHp);
+                                const healAmount = newHp - currentHp;
+                                
+                                if (healAmount > 0) {
+                                    await updateDoc(playerRef, { hp: newHp });
+                                    logToTerminal(`${spellToCast.name} heals you for ${healAmount} HP!`, 'success');
+                                    logToTerminal(`Current HP: ${newHp}/${maxHp}`, 'game');
+                                } else {
+                                    logToTerminal(`You're already at full health.`, 'game');
+                                }
+                            }
+                            
+                            if (spellToCast.damage > 0) {
+                                logToTerminal(`The magic backfires! You take ${spellToCast.damage} damage!`, 'error');
+                                const newHp = Math.max(0, currentHp - spellToCast.damage);
+                                await updateDoc(playerRef, { hp: newHp });
+                                if (newHp <= 0) {
+                                    logToTerminal("You have died from the magical backlash!", 'error');
+                                }
+                            }
+                            
+                            scrollSuccess = true;
+                            break;
+
+                        case 'single-enemy':
+                        case 'single-ally':
+                            if (!scrollTargetName) {
+                                logToTerminal(`You need to specify a target. Try: use ${itemData.name} at <target>`, 'error');
+                                return; // Don't consume the item
+                            }
+
+                            // Try to find target player
+                            const targetPlayerForScroll = Object.entries(gamePlayers).find(([id, player]) => 
+                                player.roomId === currentPlayerRoomId && 
+                                player.name.toLowerCase() === scrollTargetName.toLowerCase()
+                            );
+
+                            if (targetPlayerForScroll) {
+                                const [targetPlayerId, targetPlayerData] = targetPlayerForScroll;
+                                const targetPlayerRef = doc(db, `/artifacts/${appId}/public/data/mud-players/${targetPlayerId}`);
+
+                                if (spellToCast.healing > 0) {
+                                    const targetCurrentHp = targetPlayerData.hp || 0;
+                                    const targetMaxHp = targetPlayerData.maxHp || 100;
+                                    const newTargetHp = Math.min(targetCurrentHp + spellToCast.healing, targetMaxHp);
+                                    const healAmount = newTargetHp - targetCurrentHp;
+
+                                    if (healAmount > 0) {
+                                        await updateDoc(targetPlayerRef, { hp: newTargetHp });
+                                        logToTerminal(`${spellToCast.name} heals ${targetPlayerData.name} for ${healAmount} HP!`, 'success');
+                                        
+                                        // Notify the healed player
+                                        await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                                            senderId: userId,
+                                            senderName: playerName,
+                                            roomId: currentPlayerRoomId,
+                                            text: `${playerName} uses ${itemData.name} on you! You are healed for ${healAmount} HP.`,
+                                            recipientId: targetPlayerId,
+                                            timestamp: serverTimestamp()
+                                        });
+                                    } else {
+                                        logToTerminal(`${targetPlayerData.name} is already at full health.`, 'game');
+                                    }
+                                }
+
+                                if (spellToCast.damage > 0) {
+                                    const targetCurrentHp = targetPlayerData.hp || 0;
+                                    const newTargetHp = Math.max(0, targetCurrentHp - spellToCast.damage);
+                                    
+                                    await updateDoc(targetPlayerRef, { hp: newTargetHp });
+                                    logToTerminal(`${spellToCast.name} hits ${targetPlayerData.name} for ${spellToCast.damage} damage!`, 'combat');
+                                    
+                                    // Notify the target
+                                    await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                                        senderId: userId,
+                                        senderName: playerName,
+                                        roomId: currentPlayerRoomId,
+                                        text: `${playerName} uses ${itemData.name} on you! You take ${spellToCast.damage} damage.`,
+                                        recipientId: targetPlayerId,
+                                        timestamp: serverTimestamp()
+                                    });
+                                }
+
+                                scrollSuccess = true;
+                            } else {
+                                logToTerminal(`You can't find ${scrollTargetName} here.`, 'error');
+                                return; // Don't consume the item
+                            }
+                            break;
+
+                        case 'all-enemies':
+                        case 'all-allies':
+                            logToTerminal(`${spellToCast.name} affects everyone in the room!`, 'system');
+                            
+                            const affectedPlayers = Object.entries(gamePlayers).filter(([id, player]) => 
+                                player.roomId === currentPlayerRoomId && id !== userId
+                            );
+
+                            for (const [targetId, targetData] of affectedPlayers) {
+                                const targetRef = doc(db, `/artifacts/${appId}/public/data/mud-players/${targetId}`);
+                                
+                                if (spellToCast.healing > 0) {
+                                    const targetHp = targetData.hp || 0;
+                                    const targetMax = targetData.maxHp || 100;
+                                    const newHp = Math.min(targetHp + spellToCast.healing, targetMax);
+                                    
+                                    if (newHp > targetHp) {
+                                        await updateDoc(targetRef, { hp: newHp });
+                                        await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                                            senderId: userId,
+                                            senderName: playerName,
+                                            roomId: currentPlayerRoomId,
+                                            text: `${playerName} uses ${itemData.name}! You are healed for ${newHp - targetHp} HP.`,
+                                            recipientId: targetId,
+                                            timestamp: serverTimestamp()
+                                        });
+                                    }
+                                }
+
+                                if (spellToCast.damage > 0) {
+                                    const targetHp = targetData.hp || 0;
+                                    const newHp = Math.max(0, targetHp - spellToCast.damage);
+                                    
+                                    await updateDoc(targetRef, { hp: newHp });
+                                    await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                                        senderId: userId,
+                                        senderName: playerName,
+                                        roomId: currentPlayerRoomId,
+                                        text: `${playerName} uses ${itemData.name}! You take ${spellToCast.damage} damage.`,
+                                        recipientId: targetId,
+                                        timestamp: serverTimestamp()
+                                    });
+                                }
+                            }
+
+                            logToTerminal(`${affectedPlayers.length} players affected by ${spellToCast.name}!`, 'success');
+                            scrollSuccess = true;
+                            break;
+
+                        default:
+                            logToTerminal(`The magic activates but has no effect.`, 'game');
+                            scrollSuccess = true;
+                    }
+
+                    if (scrollSuccess) {
+                        // Remove the consumed magical item
+                        const consumedInv = playerData.inventory.filter(item => 
+                            item.id !== inventoryItem.id || item.name !== inventoryItem.name
+                        );
+                        await updateDoc(playerRef, { inventory: consumedInv });
+                        
+                        // Show a message based on item type
+                        if (itemType === 'scroll') {
+                            logToTerminal(`The scroll crumbles to ash.`, 'system');
+                        } else if (itemType === 'wand') {
+                            logToTerminal(`The wand shatters into pieces.`, 'system');
+                        } else {
+                            logToTerminal(`${itemData.name} disintegrates after use.`, 'system');
+                        }
+                    }
+                    break;
+
                 default:
                     logToTerminal(`You're not sure how to use ${itemData.name}.`, 'error');
             }
