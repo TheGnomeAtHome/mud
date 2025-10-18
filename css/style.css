@@ -5,6 +5,13 @@ body {
     color: #00ff41;
 }
 
+#terminal-output {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    white-space: pre-wrap;
+    max-width: 100%;
+}
+
 #terminal-output::-webkit-scrollbar, #admin-panel::-webkit-scrollbar {
     width: 8px;
 }
@@ -63,3 +70,32 @@ body {
 
 .combat-log { color: #ff6347; } /* Tomato red for combat */
 .loot-log { color: #ffd700; } /* Gold for loot */
+
+/* Prevent text overflow in admin panel */
+#admin-panel {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+#admin-panel textarea,
+#admin-panel input[type="text"] {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+/* Ensure all editor panels don't overflow */
+.editor-panel {
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+/* Container fixes */
+#app-container {
+    display: flex;
+    overflow: hidden;
+}
+
+#app-container #terminal-output {
+    flex: 1;
+    min-height: 0;
+}
