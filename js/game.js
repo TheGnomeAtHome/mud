@@ -663,6 +663,97 @@ export function initializeGameLogic(dependencies) {
             return `${action}, hitting you for ${damage} damage!`;
         };
 
+        // ========== ENHANCED COMBAT SYSTEM ==========
+        // Calculate damage output based on all relevant attributes
+        const calculateDamage = (attacker, defender, weaponBonus = 0, isMagical = false) => {
+            const attackerAttrs = attacker.attributes || { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
+            const defenderAttrs = defender.attributes || { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
+            
+            // Base damage: 1-6 + stat modifier
+            let baseDamage = Math.ceil(Math.random() * 6);
+            
+            // Physical attacks: STR bonus
+            // Magical attacks: INT bonus
+            const attackStat = isMagical ? attackerAttrs.int : attackerAttrs.str;
+            const attackBonus = Math.floor((attackStat - 10) / 2); // D&D style modifier
+            baseDamage += attackBonus;
+            
+            // DEX affects accuracy - adds to damage on higher DEX
+            const dexBonus = Math.floor((attackerAttrs.dex - 10) / 4); // Smaller bonus
+            baseDamage += dexBonus;
+            
+            // Add weapon bonus
+            baseDamage += weaponBonus;
+            
+            // Critical hit chance based on DEX (5% base + 1% per 2 DEX above 10)
+            const critChance = 0.05 + Math.max(0, (attackerAttrs.dex - 10) * 0.005);
+            const isCritical = Math.random() < critChance;
+            if (isCritical) {
+                baseDamage = Math.floor(baseDamage * 2); // Double damage on crit
+            }
+            
+            // Defender's CON reduces damage (damage reduction)
+            const conReduction = Math.floor((defenderAttrs.con - 10) / 3);
+            baseDamage = Math.max(1, baseDamage - conReduction); // Minimum 1 damage
+            
+            // Ensure minimum damage
+            baseDamage = Math.max(1, baseDamage);
+            
+            return {
+                damage: baseDamage,
+                isCritical,
+                attackBonus,
+                dexBonus,
+                conReduction,
+                weaponBonus
+            };
+        };
+        
+        // Calculate dodge chance based on DEX and WIS
+        const calculateDodge = (defender) => {
+            const defenderAttrs = defender.attributes || { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
+            
+            // Base dodge: 5% + DEX modifier + WIS modifier
+            const dexMod = Math.floor((defenderAttrs.dex - 10) / 2);
+            const wisMod = Math.floor((defenderAttrs.wis - 10) / 4); // Smaller contribution
+            const dodgeChance = 0.05 + (dexMod * 0.02) + (wisMod * 0.01);
+            
+            return Math.min(0.50, Math.max(0, dodgeChance)); // Cap at 50%
+        };
+        
+        // Apply combat result with detailed logging
+        const applyCombatResult = (result, attackerName, defenderName, combatMessages) => {
+            if (result.dodged) {
+                combatMessages.push({ 
+                    msg: `${defenderName} dodges your attack!`, 
+                    type: 'combat-log' 
+                });
+                return;
+            }
+            
+            let damageMsg = `${attackerName} hit ${defenderName} for ${result.damage} damage`;
+            
+            if (result.isCritical) {
+                damageMsg += ` (Critical Hit!)`;
+            }
+            
+            combatMessages.push({ msg: damageMsg + '!', type: 'combat-log' });
+            
+            // Show combat breakdown if significant bonuses
+            const bonusDetails = [];
+            if (result.attackBonus > 0) bonusDetails.push(`+${result.attackBonus} STR`);
+            if (result.dexBonus > 0) bonusDetails.push(`+${result.dexBonus} DEX`);
+            if (result.weaponBonus > 0) bonusDetails.push(`+${result.weaponBonus} weapon`);
+            if (result.conReduction > 0) bonusDetails.push(`-${result.conReduction} target CON`);
+            
+            if (bonusDetails.length > 0) {
+                combatMessages.push({ 
+                    msg: `(${bonusDetails.join(', ')})`, 
+                    type: 'game' 
+                });
+            }
+        };
+
         // Handle special item types (keys, teleport devices, etc.)
         const handleSpecialItem = async (itemType, itemData, inventoryItem, playerData) => {
             const playerRef = doc(db, `/artifacts/${appId}/public/data/mud-players/${userId}`);
@@ -1059,10 +1150,7 @@ export function initializeGameLogic(dependencies) {
                             //     throw new Error("You cannot attack bots!");
                             // }
                             
-                            // Calculate attacker damage
-                            let baseDamage = 1 + Math.floor((attackerData.attributes.str - 10) / 2) + Math.ceil(Math.random() * 4);
-                            
-                            // Add weapon bonus
+                            // Calculate attacker damage with enhanced system
                             let weaponBonus = 0;
                             let bestWeapon = null;
                             const inventory = attackerData.inventory || [];
@@ -1077,17 +1165,30 @@ export function initializeGameLogic(dependencies) {
                                 }
                             });
                             
-                            const attackerDamage = baseDamage + weaponBonus;
-                            const newDefenderHp = (defenderData.hp || defenderData.maxHp) - attackerDamage;
-                            
                             combatMessages.length = 0;
                             
-                            const weaponName = bestWeapon ? bestWeapon.name : null;
-                            const attackMsg = getCombatDescription(verb || 'hit', 'You', defenderData.name, attackerDamage, weaponName);
-                            combatMessages.push({ msg: attackMsg, type: 'combat-log' });
+                            // Check if defender dodges
+                            const dodgeChance = calculateDodge(defenderData);
+                            const didDodge = Math.random() < dodgeChance;
                             
-                            if (weaponBonus > 0) {
-                                combatMessages.push({ msg: `(+${weaponBonus} weapon damage)`, type: 'game' });
+                            let attackerDamage = 0;
+                            let newDefenderHp = defenderData.hp || defenderData.maxHp;
+                            
+                            if (didDodge) {
+                                combatMessages.push({ msg: `${defenderData.name} dodges your attack!`, type: 'combat-log' });
+                            } else {
+                                // Calculate damage with all attributes
+                                const attackResult = calculateDamage(attackerData, defenderData, weaponBonus, false);
+                                attackerDamage = attackResult.damage;
+                                newDefenderHp = (defenderData.hp || defenderData.maxHp) - attackerDamage;
+                                
+                                // Apply combat result with detailed logging
+                                applyCombatResult(
+                                    { ...attackResult, dodged: false },
+                                    'You',
+                                    defenderData.name,
+                                    combatMessages
+                                );
                             }
                             
                             // Broadcast to room
@@ -1100,7 +1201,7 @@ export function initializeGameLogic(dependencies) {
                                 timestamp: serverTimestamp()
                             });
                             
-                            if (newDefenderHp <= 0) {
+                            if (!didDodge && newDefenderHp <= 0) {
                                 // Defender defeated
                                 combatMessages.push({ msg: `You have defeated ${defenderData.name}!`, type: 'system' });
                                 
@@ -1132,12 +1233,11 @@ export function initializeGameLogic(dependencies) {
                                     timestamp: serverTimestamp()
                                 });
                                 
-                            } else {
+                            } else if (!didDodge) {
                                 // Defender survives, counter-attacks
                                 transaction.update(targetPlayerRef, { hp: newDefenderHp });
                                 
-                                // Defender counter-attack
-                                let defenderBaseDamage = 1 + Math.floor((defenderData.attributes.str - 10) / 2) + Math.ceil(Math.random() * 4);
+                                // Defender counter-attack with enhanced system
                                 let defenderWeaponBonus = 0;
                                 const defenderInventory = defenderData.inventory || [];
                                 defenderInventory.forEach(item => {
@@ -1150,12 +1250,29 @@ export function initializeGameLogic(dependencies) {
                                     }
                                 });
                                 
-                                const defenderDamage = defenderBaseDamage + defenderWeaponBonus;
-                                const newAttackerHp = (attackerData.hp || attackerData.maxHp) - defenderDamage;
+                                // Check if attacker dodges counter-attack
+                                const attackerDodgeChance = calculateDodge(attackerData);
+                                const attackerDodged = Math.random() < attackerDodgeChance;
                                 
-                                combatMessages.push({ msg: `${defenderData.name} counter-attacks for ${defenderDamage} damage!`, type: 'combat-log' });
+                                let defenderDamage = 0;
+                                let newAttackerHp = attackerData.hp || attackerData.maxHp;
                                 
-                                if (newAttackerHp <= 0) {
+                                if (attackerDodged) {
+                                    combatMessages.push({ msg: `You dodge ${defenderData.name}'s counter-attack!`, type: 'combat-log' });
+                                } else {
+                                    // Calculate counter-attack damage
+                                    const counterResult = calculateDamage(defenderData, attackerData, defenderWeaponBonus, false);
+                                    defenderDamage = counterResult.damage;
+                                    newAttackerHp = (attackerData.hp || attackerData.maxHp) - defenderDamage;
+                                    
+                                    let counterMsg = `${defenderData.name} counter-attacks for ${defenderDamage} damage`;
+                                    if (counterResult.isCritical) {
+                                        counterMsg += ` (Critical Hit!)`;
+                                    }
+                                    combatMessages.push({ msg: counterMsg + '!', type: 'combat-log' });
+                                }
+                                
+                                if (!attackerDodged && newAttackerHp <= 0) {
                                     combatMessages.push({ msg: `You have been defeated! You respawn at the Nexus.`, type: 'error' });
                                     transaction.update(attackerRef, {
                                         roomId: 'start',
@@ -1237,9 +1354,6 @@ export function initializeGameLogic(dependencies) {
                     const roomData = roomDoc.data();
                     const monsterTemplate = gameMonsters[monsterData.monsterId];
                     
-                    // Calculate base damage
-                    let baseDamage = 1 + Math.floor((playerData.attributes.str - 10) / 2) + Math.ceil(Math.random() * 4);
-                    
                     // Add weapon damage bonus from inventory
                     let weaponBonus = 0;
                     let bestWeapon = null;
@@ -1255,20 +1369,43 @@ export function initializeGameLogic(dependencies) {
                         }
                     });
                     
-                    const playerDamage = baseDamage + weaponBonus;
-                    const newMonsterHp = monsterData.hp - playerDamage;
-                    
                     // Clear messages array on each transaction retry
                     combatMessages.length = 0;
                     
-                    // Use dynamic combat description with verb and weapon name
-                    const weaponName = bestWeapon ? bestWeapon.name : null;
-                    const attackMsg = getCombatDescription(verb || 'hit', 'You', monsterData.name, playerDamage, weaponName);
-                    combatMessages.push({ msg: attackMsg, type: 'combat-log' });
+                    // Create fake attributes for monster (they don't have full attribute system)
+                    const monsterAsEntity = {
+                        attributes: {
+                            str: 10 + (monsterTemplate.maxAtk || 5),
+                            dex: 10,
+                            con: 10 + Math.floor((monsterTemplate.maxHp || 30) / 10),
+                            int: 10,
+                            wis: 10,
+                            cha: 10
+                        }
+                    };
                     
-                    // Show weapon bonus if applicable
-                    if (weaponBonus > 0) {
-                        combatMessages.push({ msg: `(+${weaponBonus} weapon damage)`, type: 'game' });
+                    // Check if monster dodges (monsters have basic dodge based on their difficulty)
+                    const monsterDodgeChance = 0.05; // 5% base dodge for monsters
+                    const monsterDodged = Math.random() < monsterDodgeChance;
+                    
+                    let playerDamage = 0;
+                    let newMonsterHp = monsterData.hp;
+                    
+                    if (monsterDodged) {
+                        combatMessages.push({ msg: `The ${monsterData.name} dodges your attack!`, type: 'combat-log' });
+                    } else {
+                        // Calculate damage with enhanced combat system
+                        const attackResult = calculateDamage(playerData, monsterAsEntity, weaponBonus, false);
+                        playerDamage = attackResult.damage;
+                        newMonsterHp = monsterData.hp - playerDamage;
+                        
+                        // Apply combat result with detailed logging
+                        applyCombatResult(
+                            { ...attackResult, dodged: false },
+                            'You',
+                            `the ${monsterData.name}`,
+                            combatMessages
+                        );
                     }
                     
                     if (newMonsterHp <= 0) {
@@ -1311,16 +1448,33 @@ export function initializeGameLogic(dependencies) {
                             }
                         }
                         transaction.update(playerRef, updates);
-                    } else {
+                    } else if (!monsterDodged) {
+                        // Monster survives and counter-attacks
                         transaction.update(monsterRef, { hp: newMonsterHp });
-                        const monsterDamage = monsterTemplate.minAtk + Math.floor(Math.random() * (monsterTemplate.maxAtk - monsterTemplate.minAtk + 1));
-                        const newPlayerHp = (playerData.hp || playerData.maxHp) - monsterDamage;
                         
-                        // Use dynamic enemy attack description
-                        const enemyAttackMsg = getEnemyAttackDescription(monsterData.name, monsterDamage);
-                        combatMessages.push({ msg: enemyAttackMsg, type: 'combat-log' });
+                        // Check if player dodges monster's counter-attack
+                        const playerDodgeChance = calculateDodge(playerData);
+                        const playerDodged = Math.random() < playerDodgeChance;
+                        
+                        let monsterDamage = 0;
+                        let newPlayerHp = playerData.hp || playerData.maxHp;
+                        
+                        if (playerDodged) {
+                            combatMessages.push({ msg: `You dodge the ${monsterData.name}'s attack!`, type: 'combat-log' });
+                        } else {
+                            // Calculate monster's counter-attack damage (enhanced with player's CON defense)
+                            const monsterCounterResult = calculateDamage(monsterAsEntity, playerData, 0, false);
+                            monsterDamage = monsterCounterResult.damage;
+                            newPlayerHp = (playerData.hp || playerData.maxHp) - monsterDamage;
+                            
+                            let counterMsg = `The ${monsterData.name} counter-attacks for ${monsterDamage} damage`;
+                            if (monsterCounterResult.isCritical) {
+                                counterMsg += ` (Critical Hit!)`;
+                            }
+                            combatMessages.push({ msg: counterMsg + '!', type: 'combat-log' });
+                        }
 
-                        if (newPlayerHp <= 0) {
+                        if (!playerDodged && newPlayerHp <= 0) {
                             combatMessages.push({ msg: `You have been defeated! You respawn at the Nexus with a gold penalty.`, type: 'error' });
                             transaction.update(playerRef, {
                                 roomId: 'start',
