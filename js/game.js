@@ -518,6 +518,7 @@ export function initializeGameLogic(dependencies) {
         const monsterTemplate = gameMonsters[monsterId];
         if (!monsterTemplate) return;
 
+        // Spawn the monster
         await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-active-monsters`), {
             monsterId: monsterId,
             roomId: roomId,
@@ -525,6 +526,22 @@ export function initializeGameLogic(dependencies) {
             hp: monsterTemplate.hp,
             maxHp: monsterTemplate.hp
         });
+        
+        // Remove corpse details from the room
+        const roomRef = doc(db, `/artifacts/${appId}/public/data/mud-rooms/${roomId}`);
+        const roomDoc = await getDoc(roomRef);
+        if (roomDoc.exists()) {
+            const roomData = roomDoc.data();
+            const currentDetails = roomData.details || {};
+            const newDetails = { ...currentDetails };
+            
+            // Remove corpse-related details
+            delete newDetails[`${monsterTemplate.name.toLowerCase()} corpse`];
+            delete newDetails.corpse;
+            
+            await updateDoc(roomRef, { details: newDetails });
+        }
+        
         logToTerminal(`A ${monsterTemplate.name} appears!`, 'combat-log');
     }
     
@@ -1850,12 +1867,25 @@ export function initializeGameLogic(dependencies) {
                             combatMessages.push({ msg: `The ${monsterData.name} dropped ${item.name}!`, type: 'loot-log' });
                         }
                         
+                        // Mark spawn as defeated with timestamp - prevents immediate respawn
                         if (roomData.monsterSpawns) {
                             const spawnIndex = roomData.monsterSpawns.findIndex(s => s.monsterId === monsterData.monsterId);
                             if(spawnIndex > -1) {
                                 const newSpawns = [...roomData.monsterSpawns];
                                 newSpawns[spawnIndex].lastDefeated = Date.now();
                                 transaction.update(roomRef, { monsterSpawns: newSpawns });
+                                
+                                // Add corpse detail to room (temporary, will be cleaned up on respawn)
+                                const corpseDescription = `The lifeless body of a ${monsterData.name} lies here.`;
+                                const currentDetails = roomData.details || {};
+                                const newDetails = {
+                                    ...currentDetails,
+                                    [`${monsterData.name.toLowerCase()} corpse`]: corpseDescription,
+                                    corpse: corpseDescription
+                                };
+                                transaction.update(roomRef, { details: newDetails });
+                                
+                                combatMessages.push({ msg: `The ${monsterData.name}'s corpse lies at your feet.`, type: 'game' });
                             }
                         }
                         transaction.update(playerRef, updates);
@@ -2161,6 +2191,37 @@ export function initializeGameLogic(dependencies) {
                                 mp: currentMp - spell.mpCost
                             });
                             logToTerminal(`You gained ${xpGain} XP!`, 'success');
+                            
+                            // Add corpse and mark spawn as defeated
+                            const roomRefSpell = doc(db, `/artifacts/${appId}/public/data/mud-rooms/${currentPlayerRoomId}`);
+                            const roomDocSpell = await getDoc(roomRefSpell);
+                            if (roomDocSpell.exists()) {
+                                const roomDataSpell = roomDocSpell.data();
+                                if (roomDataSpell.monsterSpawns) {
+                                    const spawnIndex = roomDataSpell.monsterSpawns.findIndex(s => s.monsterId === targetMonster.monsterId);
+                                    if (spawnIndex > -1) {
+                                        const newSpawns = [...roomDataSpell.monsterSpawns];
+                                        newSpawns[spawnIndex].lastDefeated = Date.now();
+                                        
+                                        // Add corpse detail
+                                        const corpseDescription = `The lifeless body of a ${monsterTemplate.name} lies here.`;
+                                        const currentDetails = roomDataSpell.details || {};
+                                        const newDetails = {
+                                            ...currentDetails,
+                                            [`${monsterTemplate.name.toLowerCase()} corpse`]: corpseDescription,
+                                            corpse: corpseDescription
+                                        };
+                                        
+                                        await updateDoc(roomRefSpell, { 
+                                            monsterSpawns: newSpawns,
+                                            details: newDetails
+                                        });
+                                        
+                                        logToTerminal(`The ${monsterTemplate.name}'s corpse lies smoldering on the ground.`, 'game');
+                                    }
+                                }
+                            }
+                            
                             await checkLevelUp();
                         } else {
                             // Monster survives
