@@ -1859,6 +1859,7 @@ export function initializeAdminPanel({
             populateNpcSelector();
             populateMonsterSelector();
             populatePlayerSelector();
+            populateSpellSelector();
             populateClassSelector();
             populateRoomItemsSelector();
             populateRoomNpcsSelector();
@@ -1879,12 +1880,13 @@ export function initializeAdminPanel({
         
         if (hasData || attempt >= maxAttempts) {
             console.log(`Populating admin dropdowns (attempt ${attempt + 1})...`);
-            console.log(`Data available: ${Object.keys(gameWorld).length} rooms, ${Object.keys(gameItems).length} items, ${Object.keys(gameNpcs).length} npcs`);
+            console.log(`Data available: ${Object.keys(gameWorld).length} rooms, ${Object.keys(gameItems).length} items, ${Object.keys(gameNpcs).length} npcs, ${Object.keys(gameSpells).length} spells`);
             populateRoomSelector();
             populateItemSelector();
             populateNpcSelector();
             populateMonsterSelector();
             populatePlayerSelector();
+            populateSpellSelector();
             populateClassSelector();
             populateRoomItemsSelector();
             populateRoomNpcsSelector();
