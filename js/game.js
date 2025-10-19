@@ -601,9 +601,19 @@ export function initializeGameLogic(dependencies) {
         }
         
         // Show other players in the room
-        const playersInRoom = Object.values(gamePlayers).filter(p => p.roomId === roomId && p.name !== playerName);
+        const playersInRoom = Object.values(gamePlayers).filter(p => {
+            // Filter out yourself
+            if (p.name === playerName) return false;
+            // Filter out invisible admins (unless you're an admin)
+            if (p.invisible && !gamePlayers[userId]?.isAdmin) return false;
+            // Must be in the same room
+            return p.roomId === roomId;
+        });
         if (playersInRoom.length > 0) {
-            const playerNames = playersInRoom.map(p => p.name).join(', ');
+            const playerNames = playersInRoom.map(p => {
+                const invisMarker = p.invisible ? ' 👻' : '';
+                return p.name + invisMarker;
+            }).join(', ');
             logToTerminal(`Also here: <span class="text-cyan-300">${playerNames}</span>.`, 'game');
         }
         
@@ -723,6 +733,13 @@ export function initializeGameLogic(dependencies) {
         PERSONALITY: ${personalityPrompt}
         ${triggerInstructions}${historyContext}
         TASK: ${taskPrompt}
+        
+        IMPORTANT FORMATTING RULES:
+        - For dialogue/speech: Use first-person ("I", "me", "my")
+        - For actions/emotes: Use third-person ("he", "she", "they") referring to yourself
+        - Example: "Welcome!" he says warmly, adjusting his spectacles.
+        - Example: She nods thoughtfully. "I understand your concern."
+        - Keep responses natural and in character
         
         Remember to stay in character and keep your response coherent with the conversation history above.`;
 
@@ -1480,19 +1497,26 @@ This could be:
 - An action you're performing
 - Something related to your role/personality
 
-IMPORTANT:
+IMPORTANT FORMATTING RULES:
+- For dialogue/speech: Use first-person ("I", "me", "my")
+- For actions/emotes: Use third-person ("he", "she", "they") referring to yourself
 - Keep it very brief (1-2 sentences)
-- Don't use quotation marks
+- Don't use quotation marks around dialogue
 - Don't include your name
 - Be in character
 - Make it feel natural and spontaneous
 - Match your personality from above
 
-Examples:
-- A minstrel: "strums a lute and begins singing a ballad about ancient heroes"
-- A merchant: "looks up from counting coins and waves enthusiastically"
-- A guard: "nods in acknowledgment and continues sharpening a blade"
-- A wizard: "glances up from a dusty tome with curiosity"`;
+Examples of CORRECT formatting:
+- "Well, well, look what we have here," he says while polishing his spectacles.
+- She looks up from her book. "I wasn't expecting visitors."
+- "Greetings, traveler!" He waves enthusiastically from behind the counter.
+- She strums her lute and begins singing a ballad about ancient heroes.
+- "Ah, fresh faces," he mutters while continuing to sharpen his blade.
+
+Examples of INCORRECT formatting (DO NOT DO THIS):
+- "I look up and wave" (actions should be third-person)
+- I greet the newcomers warmly (dialogue should be in quotes)`;
 
         try {
             const response = await callGeminiForText(prompt, logToTerminal);
@@ -2653,6 +2677,20 @@ Examples:
                 } else { logToTerminal("You aren't carrying that.", 'error'); }
                 break;
             case 'say':
+                // Check if player is muted
+                const currentPlayerData = gamePlayers[userId];
+                if (currentPlayerData?.muted) {
+                    const mutedUntil = currentPlayerData.mutedUntil || 0;
+                    if (mutedUntil > Date.now()) {
+                        const minutesLeft = Math.ceil((mutedUntil - Date.now()) / 60000);
+                        logToTerminal(`You are muted for ${minutesLeft} more minute${minutesLeft !== 1 ? 's' : ''}.`, "error");
+                        break;
+                    } else {
+                        // Mute expired, remove it
+                        await updateDoc(playerRef, { muted: false, mutedUntil: null });
+                    }
+                }
+                
                 // Check if we're in an AI NPC conversation - if so, treat as reply instead
                 if (lastNpcInteraction) {
                     const lastNpc = gameNpcs[lastNpcInteraction];
@@ -3604,12 +3642,18 @@ Examples:
             case 'who':
                 logToTerminal("--- Adventurers Online ---", 'system');
                 Object.entries(gamePlayers).forEach(([playerId, player]) => {
+                    // Hide invisible admins (unless you're also an admin)
+                    if (player.invisible && !gamePlayers[userId]?.isAdmin) {
+                        return;
+                    }
+                    
                     const hp = player.hp || player.maxHp || 100;
                     const maxHp = player.maxHp || 100;
                     const hpPercent = Math.round((hp / maxHp) * 100);
                     const playerClass = player.class || 'Adventurer';
                     const levelName = getLevelName(player.level || 1, playerClass);
                     const isBot = player.isBot ? ' 🤖' : '';
+                    const isInvisible = player.invisible ? ' 👻' : '';
                     const room = gameWorld[player.roomId];
                     const roomName = room ? room.name : 'Unknown';
                     const playerRace = player.race || 'Human';
@@ -3624,7 +3668,7 @@ Examples:
                     if (hpPercent < 30) hpColor = 'error';
                     else if (hpPercent < 70) hpColor = 'combat-log';
                     
-                    logToTerminal(`${player.name}${isBot}${guildTag} - ${playerRace} ${playerClass} - Level ${player.level} ${levelName} - HP: ${hp}/${maxHp} - ${roomName}`, hpColor);
+                    logToTerminal(`${player.name}${isBot}${isInvisible}${guildTag} - ${playerRace} ${playerClass} - Level ${player.level} ${levelName} - HP: ${hp}/${maxHp} - ${roomName}`, hpColor);
                 });
                 break;
             case 'ask_dm':
@@ -4721,6 +4765,20 @@ Examples:
             
             case 'gc':
                 // Shortcut for guild chat
+                // Check if player is muted
+                const gcPlayerData = gamePlayers[userId];
+                if (gcPlayerData?.muted) {
+                    const mutedUntil = gcPlayerData.mutedUntil || 0;
+                    if (mutedUntil > Date.now()) {
+                        const minutesLeft = Math.ceil((mutedUntil - Date.now()) / 60000);
+                        logToTerminal(`You are muted for ${minutesLeft} more minute${minutesLeft !== 1 ? 's' : ''}.`, "error");
+                        break;
+                    } else {
+                        // Mute expired, remove it
+                        await updateDoc(playerRef, { muted: false, mutedUntil: null });
+                    }
+                }
+                
                 if (!target) {
                     logToTerminal("Usage: gc [message]", 'error');
                     break;
@@ -5250,6 +5308,20 @@ Examples:
 
             case 'pc':
                 // Party chat
+                // Check if player is muted
+                const pcPlayerData = gamePlayers[userId];
+                if (pcPlayerData?.muted) {
+                    const mutedUntil = pcPlayerData.mutedUntil || 0;
+                    if (mutedUntil > Date.now()) {
+                        const minutesLeft = Math.ceil((mutedUntil - Date.now()) / 60000);
+                        logToTerminal(`You are muted for ${minutesLeft} more minute${minutesLeft !== 1 ? 's' : ''}.`, "error");
+                        break;
+                    } else {
+                        // Mute expired, remove it
+                        await updateDoc(playerRef, { muted: false, mutedUntil: null });
+                    }
+                }
+                
                 const playerPartyChat = Object.values(gameParties).find(p => 
                     p.members && Object.keys(p.members).includes(userId)
                 );
@@ -5290,9 +5362,10 @@ Examples:
                 logToTerminal("Core commands: look, go, get, drop, inventory, examine, talk to, ask...about, buy...from, attack, who, say, score, stats, logout, forceadmin.", "system");
                 logToTerminal("Combat: 'attack [monster]' or 'attack [player]' - Fight monsters or other players! PvP combat is active.", "system");
                 logToTerminal("Magic: 'spells' to view your spells, 'cast [spell name] [target]' to cast spells.", "system");
-                logToTerminal("Guilds: 'guild' to view your guild, 'guild create [name]' to make one, 'guild list' to see all guilds, 'gc [message]' for guild chat.", "system");
+                logToTerminal("Communication: 'say [message]' for local chat, 'shout [message]' to nearby rooms, 'gc [message]' for guild chat, 'pc [message]' for party chat.", "system");
+                logToTerminal("Guilds: 'guild' to view your guild, 'guild create [name]' to make one, 'guild list' to see all guilds.", "system");
                 logToTerminal("Quests: 'quests' to see active and available quests, 'quest accept [name]' to accept, 'quest progress' to view details, 'quest abandon [name]' to drop.", "system");
-                logToTerminal("Parties: 'party create' to form a party, 'party invite [name]' to invite, 'party join [name]' to join, 'party leave' to leave, 'pc [message]' for party chat.", "system");
+                logToTerminal("Parties: 'party create' to form a party, 'party invite [name]' to invite, 'party join [name]' to join, 'party leave' to leave.", "system");
                 logToTerminal("Emotes: wave, dance, laugh, smile, nod, bow, clap, cheer, cry, sigh, shrug, grin, frown, wink, yawn, stretch, jump, sit, stand, kneel, salute, think, ponder, scratch.", "system");
                 logToTerminal("Or use 'emote [action]' for custom actions!", "system");
                 logToTerminal("Special: 'examine frame' to view the leaderboard!", "system");
@@ -5306,6 +5379,17 @@ Examples:
                     logToTerminal("listbots - List all active bots", "system");
                     logToTerminal("killbots - Remove all bots from the game", "system");
                     logToTerminal("npcchats [on/off] - Enable/disable NPC conversations", "system");
+                    logToTerminal("--- Moderation Commands ---", "system");
+                    logToTerminal("kick [player name] - Kick a player from the game", "system");
+                    logToTerminal("mute [player name] [minutes] - Mute a player (default: 60 min)", "system");
+                    logToTerminal("unmute [player name] - Remove mute from a player", "system");
+                    logToTerminal("--- Transportation Commands ---", "system");
+                    logToTerminal("goto/tp [room id or name] - Teleport to any room", "system");
+                    logToTerminal("rooms - List all rooms in the game", "system");
+                    logToTerminal("summon [player name] - Teleport a player to you", "system");
+                    logToTerminal("invis - Toggle invisibility (hidden from 'who' list)", "system");
+                    logToTerminal("--- Communication Commands ---", "system");
+                    logToTerminal("announce/broadcast [message] - Send message to all rooms", "system");
                 }
                 break;
             case 'npcchats':
@@ -5490,6 +5574,467 @@ Examples:
                     logToTerminal("❌ Bot system not initialized", "error");
                 }
                 break;
+            
+            case 'kick':
+                // Admin command to kick a player from the game
+                if (!gamePlayers[userId]?.isAdmin) {
+                    logToTerminal("Only admins can kick players.", "error");
+                    break;
+                }
+                if (!target) {
+                    logToTerminal("Usage: kick [player name]", "error");
+                    break;
+                }
+                
+                // Find the target player
+                const kickTarget = Object.entries(gamePlayers).find(([id, player]) => 
+                    player.name.toLowerCase() === target.toLowerCase()
+                );
+                
+                if (!kickTarget) {
+                    logToTerminal(`Player '${target}' not found.`, "error");
+                    break;
+                }
+                
+                const [kickTargetId, kickTargetData] = kickTarget;
+                
+                // Can't kick yourself
+                if (kickTargetId === userId) {
+                    logToTerminal("You can't kick yourself!", "error");
+                    break;
+                }
+                
+                // Can't kick other admins
+                if (kickTargetData.isAdmin) {
+                    logToTerminal("You can't kick other administrators.", "error");
+                    break;
+                }
+                
+                try {
+                    // Send a system message to the kicked player
+                    await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                        roomId: kickTargetData.roomId,
+                        text: `⚠️ You have been kicked from the game by an administrator.`,
+                        isSystem: true,
+                        timestamp: serverTimestamp()
+                    });
+                    
+                    // Set player as offline
+                    const kickPlayerRef = doc(db, `/artifacts/${appId}/public/data/mud-players`, kickTargetId);
+                    await updateDoc(kickPlayerRef, {
+                        online: false,
+                        lastSeen: serverTimestamp()
+                    });
+                    
+                    logToTerminal(`✅ ${kickTargetData.name} has been kicked from the game.`, "system");
+                    
+                    // Announce to all players
+                    await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                        roomId: 'global',
+                        text: `${kickTargetData.name} has been kicked from the game.`,
+                        isSystem: true,
+                        timestamp: serverTimestamp()
+                    });
+                } catch (error) {
+                    logToTerminal(`Failed to kick player: ${error.message}`, "error");
+                    console.error("Kick error:", error);
+                }
+                break;
+            
+            case 'mute':
+                // Admin command to mute a player
+                if (!gamePlayers[userId]?.isAdmin) {
+                    logToTerminal("Only admins can mute players.", "error");
+                    break;
+                }
+                if (!target) {
+                    logToTerminal("Usage: mute [player name] [duration in minutes, optional]", "error");
+                    break;
+                }
+                
+                // Parse target and duration
+                const muteParts = cmdText.split(' ');
+                const muteTargetName = muteParts[1];
+                const muteDuration = muteParts[2] ? parseInt(muteParts[2]) : 60; // Default 60 minutes
+                
+                // Find the target player
+                const muteTarget = Object.entries(gamePlayers).find(([id, player]) => 
+                    player.name.toLowerCase() === muteTargetName.toLowerCase()
+                );
+                
+                if (!muteTarget) {
+                    logToTerminal(`Player '${muteTargetName}' not found.`, "error");
+                    break;
+                }
+                
+                const [muteTargetId, muteTargetData] = muteTarget;
+                
+                // Can't mute yourself
+                if (muteTargetId === userId) {
+                    logToTerminal("You can't mute yourself!", "error");
+                    break;
+                }
+                
+                // Can't mute other admins
+                if (muteTargetData.isAdmin) {
+                    logToTerminal("You can't mute other administrators.", "error");
+                    break;
+                }
+                
+                try {
+                    const muteUntil = Date.now() + (muteDuration * 60 * 1000);
+                    const mutePlayerRef = doc(db, `/artifacts/${appId}/public/data/mud-players`, muteTargetId);
+                    await updateDoc(mutePlayerRef, {
+                        muted: true,
+                        mutedUntil: muteUntil
+                    });
+                    
+                    // Notify the muted player
+                    await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                        roomId: muteTargetData.roomId,
+                        text: `⚠️ You have been muted for ${muteDuration} minutes.`,
+                        isSystem: true,
+                        timestamp: serverTimestamp()
+                    });
+                    
+                    logToTerminal(`✅ ${muteTargetData.name} has been muted for ${muteDuration} minutes.`, "system");
+                } catch (error) {
+                    logToTerminal(`Failed to mute player: ${error.message}`, "error");
+                    console.error("Mute error:", error);
+                }
+                break;
+            
+            case 'unmute':
+                // Admin command to unmute a player
+                if (!gamePlayers[userId]?.isAdmin) {
+                    logToTerminal("Only admins can unmute players.", "error");
+                    break;
+                }
+                if (!target) {
+                    logToTerminal("Usage: unmute [player name]", "error");
+                    break;
+                }
+                
+                // Find the target player
+                const unmuteTarget = Object.entries(gamePlayers).find(([id, player]) => 
+                    player.name.toLowerCase() === target.toLowerCase()
+                );
+                
+                if (!unmuteTarget) {
+                    logToTerminal(`Player '${target}' not found.`, "error");
+                    break;
+                }
+                
+                const [unmuteTargetId, unmuteTargetData] = unmuteTarget;
+                
+                try {
+                    const unmutePlayerRef = doc(db, `/artifacts/${appId}/public/data/mud-players`, unmuteTargetId);
+                    await updateDoc(unmutePlayerRef, {
+                        muted: false,
+                        mutedUntil: null
+                    });
+                    
+                    // Notify the unmuted player
+                    await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                        roomId: unmuteTargetData.roomId,
+                        text: `✅ You have been unmuted.`,
+                        isSystem: true,
+                        timestamp: serverTimestamp()
+                    });
+                    
+                    logToTerminal(`✅ ${unmuteTargetData.name} has been unmuted.`, "system");
+                } catch (error) {
+                    logToTerminal(`Failed to unmute player: ${error.message}`, "error");
+                    console.error("Unmute error:", error);
+                }
+                break;
+            
+            case 'goto':
+            case 'teleport':
+            case 'tp':
+                // Admin command to teleport to any room
+                if (!gamePlayers[userId]?.isAdmin) {
+                    logToTerminal("Only admins can teleport.", "error");
+                    break;
+                }
+                
+                if (!target) {
+                    logToTerminal("Usage: goto [room id or name]", "error");
+                    logToTerminal("Try 'rooms' to see a list of all rooms.", "system");
+                    break;
+                }
+                
+                // Find room by ID or name
+                let targetRoomId = null;
+                const targetLower = target.toLowerCase();
+                
+                // First try exact ID match
+                if (gameWorld[target]) {
+                    targetRoomId = target;
+                } else if (gameWorld[targetLower]) {
+                    targetRoomId = targetLower;
+                } else {
+                    // Try to find by room name
+                    targetRoomId = Object.keys(gameWorld).find(roomId => {
+                        const room = gameWorld[roomId];
+                        return room.name && room.name.toLowerCase().includes(targetLower);
+                    });
+                }
+                
+                if (!targetRoomId) {
+                    logToTerminal(`Room '${target}' not found.`, "error");
+                    logToTerminal("Try 'rooms' to see available rooms.", "system");
+                    break;
+                }
+                
+                const targetRoom = gameWorld[targetRoomId];
+                const oldRoomId = currentPlayerRoomId;
+                
+                try {
+                    // Update player's room
+                    await updateDoc(playerRef, { roomId: targetRoomId });
+                    
+                    // Announce departure in old room
+                    if (oldRoomId && oldRoomId !== targetRoomId) {
+                        await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                            roomId: oldRoomId,
+                            text: `${playerName} vanishes in a flash of light!`,
+                            isSystem: true,
+                            timestamp: serverTimestamp()
+                        });
+                    }
+                    
+                    // Announce arrival in new room
+                    await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                        roomId: targetRoomId,
+                        text: `${playerName} appears in a flash of light!`,
+                        isSystem: true,
+                        timestamp: serverTimestamp()
+                    });
+                    
+                    logToTerminal(`✨ You teleport to ${targetRoom.name}!`, "system");
+                    
+                    // Show the new room
+                    await showRoom(targetRoomId);
+                } catch (error) {
+                    logToTerminal(`Teleport failed: ${error.message}`, "error");
+                    console.error("Teleport error:", error);
+                }
+                break;
+            
+            case 'rooms':
+                // Admin command to list all rooms
+                if (!gamePlayers[userId]?.isAdmin) {
+                    logToTerminal("Only admins can view the room list.", "error");
+                    break;
+                }
+                
+                logToTerminal("=== All Rooms ===", "system");
+                const roomList = Object.entries(gameWorld)
+                    .sort((a, b) => a[0].localeCompare(b[0]))
+                    .slice(0, 50); // Limit to first 50 to avoid spam
+                
+                for (const [roomId, room] of roomList) {
+                    logToTerminal(`${roomId}: ${room.name || 'Unnamed Room'}`, "game");
+                }
+                
+                if (Object.keys(gameWorld).length > 50) {
+                    logToTerminal(`... and ${Object.keys(gameWorld).length - 50} more rooms`, "system");
+                }
+                logToTerminal(`Total: ${Object.keys(gameWorld).length} rooms`, "system");
+                break;
+            
+            case 'summon':
+                // Admin command to teleport a player to you
+                if (!gamePlayers[userId]?.isAdmin) {
+                    logToTerminal("Only admins can summon players.", "error");
+                    break;
+                }
+                
+                if (!target) {
+                    logToTerminal("Usage: summon [player name]", "error");
+                    break;
+                }
+                
+                // Find the target player
+                const summonTarget = Object.entries(gamePlayers).find(([id, player]) => 
+                    player.name.toLowerCase() === target.toLowerCase()
+                );
+                
+                if (!summonTarget) {
+                    logToTerminal(`Player '${target}' not found.`, "error");
+                    break;
+                }
+                
+                const [summonTargetId, summonTargetData] = summonTarget;
+                
+                if (summonTargetId === userId) {
+                    logToTerminal("You can't summon yourself!", "error");
+                    break;
+                }
+                
+                try {
+                    const summonPlayerRef = doc(db, `/artifacts/${appId}/public/data/mud-players`, summonTargetId);
+                    const oldSummonRoom = summonTargetData.roomId;
+                    
+                    // Update target player's room
+                    await updateDoc(summonPlayerRef, { roomId: currentPlayerRoomId });
+                    
+                    // Announce departure in old room
+                    if (oldSummonRoom && oldSummonRoom !== currentPlayerRoomId) {
+                        await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                            roomId: oldSummonRoom,
+                            text: `${summonTargetData.name} vanishes in a flash of light!`,
+                            isSystem: true,
+                            timestamp: serverTimestamp()
+                        });
+                    }
+                    
+                    // Announce arrival in your room
+                    await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                        roomId: currentPlayerRoomId,
+                        text: `${summonTargetData.name} appears in a flash of light!`,
+                        isSystem: true,
+                        timestamp: serverTimestamp()
+                    });
+                    
+                    // Notify the summoned player
+                    await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                        roomId: currentPlayerRoomId,
+                        text: `You have been summoned by ${playerName}!`,
+                        isSystem: true,
+                        timestamp: serverTimestamp()
+                    });
+                    
+                    logToTerminal(`✨ ${summonTargetData.name} has been summoned!`, "system");
+                } catch (error) {
+                    logToTerminal(`Summon failed: ${error.message}`, "error");
+                    console.error("Summon error:", error);
+                }
+                break;
+            
+            case 'invis':
+            case 'invisible':
+                // Admin command to toggle invisibility
+                if (!gamePlayers[userId]?.isAdmin) {
+                    logToTerminal("Only admins can become invisible.", "error");
+                    break;
+                }
+                
+                const currentInvisState = gamePlayers[userId]?.invisible || false;
+                
+                try {
+                    await updateDoc(playerRef, { invisible: !currentInvisState });
+                    
+                    if (!currentInvisState) {
+                        logToTerminal("👻 You fade from sight...", "system");
+                        await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                            roomId: currentPlayerRoomId,
+                            text: `${playerName} fades from sight.`,
+                            isSystem: true,
+                            timestamp: serverTimestamp()
+                        });
+                    } else {
+                        logToTerminal("✨ You become visible again.", "system");
+                        await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                            roomId: currentPlayerRoomId,
+                            text: `${playerName} fades into view.`,
+                            isSystem: true,
+                            timestamp: serverTimestamp()
+                        });
+                    }
+                } catch (error) {
+                    logToTerminal(`Failed to toggle invisibility: ${error.message}`, "error");
+                    console.error("Invisibility error:", error);
+                }
+                break;
+            
+            case 'announce':
+            case 'broadcast':
+                // Admin command to send a message to all rooms
+                if (!gamePlayers[userId]?.isAdmin) {
+                    logToTerminal("Only admins can make announcements.", "error");
+                    break;
+                }
+                
+                if (!target) {
+                    logToTerminal("Usage: announce [message]", "error");
+                    break;
+                }
+                
+                // Get the full announcement text (including npc_target if it exists)
+                const announcementParts = cmdText.split(' ').slice(1);
+                const announcementText = announcementParts.join(' ');
+                
+                if (!announcementText) {
+                    logToTerminal("Usage: announce [message]", "error");
+                    break;
+                }
+                
+                try {
+                    // Send announcement to all rooms
+                    const allRoomIds = Object.keys(gameWorld);
+                    const announcementPromises = allRoomIds.map(roomId => 
+                        addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                            roomId: roomId,
+                            text: `📢 ANNOUNCEMENT: ${announcementText}`,
+                            isAnnouncement: true,
+                            isSystem: true,
+                            timestamp: serverTimestamp()
+                        })
+                    );
+                    
+                    await Promise.all(announcementPromises);
+                    logToTerminal(`✅ Announcement sent to all ${allRoomIds.length} rooms.`, "system");
+                } catch (error) {
+                    logToTerminal(`Failed to send announcement: ${error.message}`, "error");
+                    console.error("Announcement error:", error);
+                }
+                break;
+            
+            case 'shout':
+                // Player command to send a message to all nearby rooms (limited range)
+                const shoutText = cmdText.substring(cmdText.indexOf(' ') + 1).trim();
+                
+                if (!shoutText || shoutText === 'shout') {
+                    logToTerminal("Usage: shout [message]", "error");
+                    break;
+                }
+                
+                try {
+                    // Get current room and all connected rooms
+                    const currentRoom = gameWorld[currentPlayerRoomId];
+                    const nearbyRoomIds = [currentPlayerRoomId];
+                    
+                    // Add all rooms connected to current room
+                    if (currentRoom.exits) {
+                        Object.values(currentRoom.exits).forEach(exitRoomId => {
+                            if (gameWorld[exitRoomId]) {
+                                nearbyRoomIds.push(exitRoomId);
+                            }
+                        });
+                    }
+                    
+                    // Send shout to current room and adjacent rooms
+                    const shoutPromises = nearbyRoomIds.map(roomId => 
+                        addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                            roomId: roomId,
+                            text: roomId === currentPlayerRoomId 
+                                ? `${playerName} shouts, "${shoutText}"`
+                                : `You hear ${playerName} shout from nearby, "${shoutText}"`,
+                            isShout: true,
+                            timestamp: serverTimestamp()
+                        })
+                    );
+                    
+                    await Promise.all(shoutPromises);
+                    logToTerminal(`You shout, "${shoutText}"`, "action");
+                } catch (error) {
+                    logToTerminal(`Failed to shout: ${error.message}`, "error");
+                    console.error("Shout error:", error);
+                }
+                break;
+            
             default:
                 // Check if this is a custom emote/action from Firebase
                 if (gameActions[action]) {

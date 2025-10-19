@@ -152,6 +152,12 @@ export async function initializeApp() {
                         return; // Skip the normal message processing
                     }
                     
+                    // Special handling for proactive NPC greetings - always show if in same room
+                    if (msg.isNpcGreeting && msg.roomId === myCurrentRoom) {
+                        logToTerminal(`<span class="text-lime-300">${msg.text}</span>`, 'game');
+                        return; // Skip the normal message processing
+                    }
+                    
                     if (messageTime >= sessionStartTime && msg.roomId === myCurrentRoom) {
                         if (msg.isGuildChat) {
                             const sender = msg.senderId === userId ? "You" : msg.senderName;
@@ -469,12 +475,34 @@ export async function initializeApp() {
                 setInputEnabled(false);
                 logToTerminal(`> ${cmdText}`, 'chat');
                 
-                const simpleCommands = ['help', 'inventory', 'score', 'stats', 'news', 'who', 'logout', 'forceadmin', 'look', 'testai', 'test ai', 'listmodels', 'list models', 'listbots', 'killbots', 'spawnbot', 'stopbots'];
+                const simpleCommands = ['help', 'inventory', 'score', 'stats', 'news', 'who', 'logout', 'forceadmin', 'look', 'testai', 'test ai', 'listmodels', 'list models', 'listbots', 'killbots', 'spawnbot', 'stopbots', 'rooms', 'invis', 'invisible', 'shout'];
                 const directions = ['north', 'south', 'east', 'west', 'up', 'down', 'n', 's', 'e', 'w', 'u', 'd'];
                 const lowerCmdText = cmdText.toLowerCase();
                 let parsedCommand;
                 
-                if (lowerCmdText.startsWith('startbots')) {
+                // Handle multi-word admin commands
+                if (lowerCmdText.startsWith('announce ') || lowerCmdText.startsWith('broadcast ')) {
+                    const parts = cmdText.split(' ');
+                    const target = parts.slice(1).join(' ');
+                    parsedCommand = { action: 'announce', target: target };
+                } else if (lowerCmdText.startsWith('goto ') || lowerCmdText.startsWith('tp ') || lowerCmdText.startsWith('teleport ')) {
+                    const parts = cmdText.split(' ');
+                    const action = parts[0].toLowerCase();
+                    const target = parts.slice(1).join(' ');
+                    parsedCommand = { action: action === 'tp' ? 'goto' : action, target: target };
+                } else if (lowerCmdText.startsWith('summon ')) {
+                    const target = cmdText.substring('summon '.length).trim();
+                    parsedCommand = { action: 'summon', target: target };
+                } else if (lowerCmdText.startsWith('kick ')) {
+                    const target = cmdText.substring('kick '.length).trim();
+                    parsedCommand = { action: 'kick', target: target };
+                } else if (lowerCmdText.startsWith('mute ')) {
+                    const parts = cmdText.split(' ');
+                    parsedCommand = { action: 'mute', target: parts[1] };
+                } else if (lowerCmdText.startsWith('unmute ')) {
+                    const target = cmdText.substring('unmute '.length).trim();
+                    parsedCommand = { action: 'unmute', target: target };
+                } else if (lowerCmdText.startsWith('startbots')) {
                     const parts = lowerCmdText.split(' ');
                     parsedCommand = { action: 'startbots', target: parts[1] || null };
                 } else if (simpleCommands.includes(lowerCmdText)) {

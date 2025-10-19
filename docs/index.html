@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MUD Game - Player Documentation</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'VT323', monospace;
+            background: linear-gradient(135deg, #0d0d0d 0%, #1a1a1a 100%);
+            color: #00ff41;
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            text-align: center;
+            padding: 40px 20px;
+            background: rgba(0, 255, 65, 0.05);
+            border-bottom: 2px solid #00ff41;
+            margin-bottom: 40px;
+            box-shadow: 0 0 20px rgba(0, 255, 65, 0.3);
+        }
+        
+        h1 {
+            font-size: 4em;
+            text-shadow: 0 0 10px #00ff41, 0 0 20px #00ff41;
+            margin-bottom: 10px;
+            animation: glow 2s ease-in-out infinite alternate;
+        }
+        
+        @keyframes glow {
+            from { text-shadow: 0 0 10px #00ff41, 0 0 20px #00ff41; }
+            to { text-shadow: 0 0 20px #00ff41, 0 0 30px #00ff41, 0 0 40px #00ff41; }
+        }
+        
+        .tagline {
+            font-size: 1.5em;
+            color: #7fff7f;
+        }
+        
+        .intro {
+            text-align: center;
+            font-size: 1.3em;
+            margin-bottom: 50px;
+            padding: 20px;
+            background: rgba(0, 255, 65, 0.03);
+            border-radius: 10px;
+        }
+        
+        .docs-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin-bottom: 50px;
+        }
+        
+        .doc-card {
+            background: rgba(0, 255, 65, 0.05);
+            border: 2px solid #00ff41;
+            border-radius: 10px;
+            padding: 25px;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            color: #00ff41;
+            display: block;
+        }
+        
+        .doc-card:hover {
+            background: rgba(0, 255, 65, 0.1);
+            box-shadow: 0 0 20px rgba(0, 255, 65, 0.4);
+            transform: translateY(-5px);
+        }
+        
+        .doc-card h2 {
+            font-size: 2em;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .doc-card .icon {
+            font-size: 1.5em;
+        }
+        
+        .doc-card p {
+            font-size: 1.2em;
+            color: #7fff7f;
+            line-height: 1.5;
+        }
+        
+        .play-button {
+            display: block;
+            width: 300px;
+            margin: 40px auto;
+            padding: 20px 40px;
+            font-family: 'VT323', monospace;
+            font-size: 2em;
+            background: #00ff41;
+            color: #0d0d0d;
+            border: none;
+            border-radius: 10px;
+            text-decoration: none;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 20px rgba(0, 255, 65, 0.5);
+        }
+        
+        .play-button:hover {
+            background: #7fff7f;
+            box-shadow: 0 0 30px rgba(0, 255, 65, 0.8);
+            transform: scale(1.05);
+        }
+        
+        footer {
+            text-align: center;
+            padding: 30px;
+            border-top: 2px solid #00ff41;
+            margin-top: 50px;
+            color: #7fff7f;
+        }
+        
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2.5em;
+            }
+            
+            .tagline {
+                font-size: 1.2em;
+            }
+            
+            .docs-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>⚔️ MUD GAME ⚔️</h1>
+            <p class="tagline">A Text-Based Adventure Awaits</p>
+        </header>
+        
+        <div class="intro">
+            <p>Welcome to our immersive Multi-User Dungeon! Explore a living world filled with quests, combat, guilds, and AI-powered NPCs. Whether you're a veteran adventurer or new to text-based games, we have everything you need to begin your journey.</p>
+        </div>
+        
+        <a href="../mud.html" class="play-button">🎮 PLAY NOW</a>
+        
+        <h2 style="text-align: center; font-size: 2.5em; margin: 40px 0 30px; text-shadow: 0 0 10px #00ff41;">📚 Player Guides</h2>
+        
+        <div class="docs-grid">
+            <a href="getting-started.html" class="doc-card">
+                <h2><span class="icon">🎯</span> Getting Started</h2>
+                <p>New to the game? Learn the basics of creating a character, navigating the world, and your first commands.</p>
+            </a>
+            
+            <a href="combat-guide.html" class="doc-card">
+                <h2><span class="icon">⚔️</span> Combat Guide</h2>
+                <p>Master the art of battle! Learn about weapons, armor, shields, combat mechanics, and how to defeat monsters.</p>
+            </a>
+            
+            <a href="quests.html" class="doc-card">
+                <h2><span class="icon">📜</span> Quests & Objectives</h2>
+                <p>Discover how to find quests, complete objectives, earn rewards, and progress your character through adventures.</p>
+            </a>
+            
+            <a href="parties.html" class="doc-card">
+                <h2><span class="icon">👥</span> Party System</h2>
+                <p>Team up with friends! Learn how to form parties, share quests, coordinate combat, and split rewards.</p>
+            </a>
+            
+            <a href="guilds.html" class="doc-card">
+                <h2><span class="icon">🏰</span> Guilds</h2>
+                <p>Join or create a guild! Discover guild perks, advancement, experience bonuses, and cooperative gameplay.</p>
+            </a>
+            
+            <a href="npcs.html" class="doc-card">
+                <h2><span class="icon">🤖</span> NPCs & Dialogue</h2>
+                <p>Interact with AI-powered characters! Learn how to talk to NPCs, buy items, trigger quests, and uncover secrets.</p>
+            </a>
+            
+            <a href="commands.html" class="doc-card">
+                <h2><span class="icon">⌨️</span> Command Reference</h2>
+                <p>Complete list of all game commands, from basic movement to advanced actions. Your essential reference guide.</p>
+            </a>
+            
+            <a href="tips-tricks.html" class="doc-card">
+                <h2><span class="icon">💡</span> Tips & Tricks</h2>
+                <p>Expert strategies, hidden mechanics, character builds, and pro tips to enhance your gameplay experience.</p>
+            </a>
+        </div>
+        
+        <footer>
+            <p>© 2025 MUD Game | A Browser-Based Text Adventure</p>
+            <p style="margin-top: 10px;">Built with ❤️ and AI-powered NPCs</p>
+        </footer>
+    </div>
+</body>
+</html>

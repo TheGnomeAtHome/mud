@@ -1,0 +1,274 @@
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'VT323', monospace;
+    background: linear-gradient(135deg, #0d0d0d 0%, #1a1a1a 100%);
+    color: #00ff41;
+    line-height: 1.8;
+    min-height: 100vh;
+}
+
+.container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.breadcrumb {
+    padding: 15px 0;
+    font-size: 1.2em;
+    color: #7fff7f;
+}
+
+.breadcrumb a {
+    color: #00ff41;
+    text-decoration: none;
+    transition: color 0.3s;
+}
+
+.breadcrumb a:hover {
+    color: #7fff7f;
+    text-shadow: 0 0 5px #00ff41;
+}
+
+header {
+    text-align: center;
+    padding: 30px 20px;
+    background: rgba(0, 255, 65, 0.05);
+    border: 2px solid #00ff41;
+    border-radius: 10px;
+    margin-bottom: 40px;
+    box-shadow: 0 0 20px rgba(0, 255, 65, 0.3);
+}
+
+h1 {
+    font-size: 3.5em;
+    text-shadow: 0 0 10px #00ff41;
+    margin-bottom: 10px;
+}
+
+.subtitle {
+    font-size: 1.5em;
+    color: #7fff7f;
+}
+
+section {
+    margin-bottom: 40px;
+    padding: 25px;
+    background: rgba(0, 255, 65, 0.03);
+    border-left: 4px solid #00ff41;
+    border-radius: 5px;
+}
+
+h2 {
+    font-size: 2.5em;
+    margin-bottom: 20px;
+    color: #00ff41;
+    text-shadow: 0 0 5px #00ff41;
+}
+
+h3 {
+    font-size: 1.8em;
+    margin: 20px 0 15px;
+    color: #7fff7f;
+}
+
+p {
+    font-size: 1.3em;
+    margin-bottom: 15px;
+    line-height: 1.6;
+}
+
+ul, ol {
+    margin-left: 30px;
+    font-size: 1.3em;
+}
+
+li {
+    margin-bottom: 10px;
+}
+
+code {
+    background: rgba(0, 255, 65, 0.2);
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-family: 'VT323', monospace;
+    font-size: 1.1em;
+    color: #7fff7f;
+}
+
+.step-box, .command-box, .tip-box, .example-box {
+    background: rgba(0, 255, 65, 0.05);
+    border: 1px solid #00ff41;
+    border-radius: 8px;
+    padding: 20px;
+    margin: 20px 0;
+}
+
+.step-box h3, .command-box h3 {
+    color: #00ff41;
+    margin-bottom: 10px;
+}
+
+.tip-box {
+    border-color: #ffd700;
+    border-width: 2px;
+}
+
+.example-box {
+    background: rgba(0, 0, 0, 0.3);
+    border-color: #7fff7f;
+    font-family: 'Courier New', monospace;
+}
+
+.example-box pre {
+    color: #7fff7f;
+    overflow-x: auto;
+}
+
+.stat-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0;
+    font-size: 1.2em;
+}
+
+.stat-table th, .stat-table td {
+    border: 1px solid #00ff41;
+    padding: 12px;
+    text-align: left;
+}
+
+.stat-table th {
+    background: rgba(0, 255, 65, 0.2);
+    color: #00ff41;
+}
+
+.stat-table tr:hover {
+    background: rgba(0, 255, 65, 0.1);
+}
+
+.play-button {
+    display: inline-block;
+    padding: 15px 40px;
+    font-family: 'VT323', monospace;
+    font-size: 1.8em;
+    background: #00ff41;
+    color: #0d0d0d;
+    border: none;
+    border-radius: 8px;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 0 15px rgba(0, 255, 65, 0.5);
+    margin: 20px 0;
+}
+
+.play-button:hover {
+    background: #7fff7f;
+    box-shadow: 0 0 25px rgba(0, 255, 65, 0.8);
+    transform: scale(1.05);
+}
+
+.next-guides {
+    background: rgba(0, 255, 65, 0.05);
+    border: 2px solid #00ff41;
+    border-radius: 10px;
+    padding: 25px;
+    margin: 40px 0;
+}
+
+.next-guides h3 {
+    margin-top: 0;
+    margin-bottom: 20px;
+    color: #00ff41;
+}
+
+.guide-link {
+    display: block;
+    padding: 15px;
+    margin: 10px 0;
+    background: rgba(0, 255, 65, 0.1);
+    border: 1px solid #00ff41;
+    border-radius: 5px;
+    color: #00ff41;
+    text-decoration: none;
+    font-size: 1.4em;
+    transition: all 0.3s ease;
+}
+
+.guide-link:hover {
+    background: rgba(0, 255, 65, 0.2);
+    box-shadow: 0 0 15px rgba(0, 255, 65, 0.3);
+    transform: translateX(10px);
+}
+
+.warning {
+    background: rgba(255, 215, 0, 0.1);
+    border-left: 4px solid #ffd700;
+    padding: 15px;
+    margin: 20px 0;
+}
+
+.warning::before {
+    content: "⚠️ ";
+    font-size: 1.5em;
+}
+
+.info {
+    background: rgba(0, 191, 255, 0.1);
+    border-left: 4px solid #00bfff;
+    padding: 15px;
+    margin: 20px 0;
+}
+
+.info::before {
+    content: "ℹ️ ";
+    font-size: 1.5em;
+}
+
+footer {
+    text-align: center;
+    padding: 30px;
+    border-top: 2px solid #00ff41;
+    margin-top: 50px;
+    color: #7fff7f;
+    font-size: 1.2em;
+}
+
+footer a {
+    color: #00ff41;
+    text-decoration: none;
+}
+
+footer a:hover {
+    text-shadow: 0 0 5px #00ff41;
+}
+
+@media (max-width: 768px) {
+    .container {
+        padding: 10px;
+    }
+    
+    h1 {
+        font-size: 2.5em;
+    }
+    
+    h2 {
+        font-size: 2em;
+    }
+    
+    h3 {
+        font-size: 1.5em;
+    }
+    
+    p, ul, ol {
+        font-size: 1.2em;
+    }
+}

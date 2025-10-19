@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Command Reference - MUD Game Guide</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <nav class="breadcrumb">
+            <a href="index.html">← Back to Guides</a> | <a href="../mud.html">Play Game</a>
+        </nav>
+        
+        <header>
+            <h1>⌨️ Command Reference</h1>
+            <p class="subtitle">Complete List of Game Commands</p>
+        </header>
+        
+        <section>
+            <h2>Movement Commands</h2>
+            <table class="stat-table">
+                <tr>
+                    <th>Command</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>north</code> / <code>n</code></td>
+                    <td>Move north</td>
+                </tr>
+                <tr>
+                    <td><code>south</code> / <code>s</code></td>
+                    <td>Move south</td>
+                </tr>
+                <tr>
+                    <td><code>east</code> / <code>e</code></td>
+                    <td>Move east</td>
+                </tr>
+                <tr>
+                    <td><code>west</code> / <code>w</code></td>
+                    <td>Move west</td>
+                </tr>
+                <tr>
+                    <td><code>up</code> / <code>u</code></td>
+                    <td>Go up (stairs, ladders)</td>
+                </tr>
+                <tr>
+                    <td><code>down</code> / <code>d</code></td>
+                    <td>Go down</td>
+                </tr>
+            </table>
+        </section>
+        
+        <section>
+            <h2>Information Commands</h2>
+            <table class="stat-table">
+                <tr>
+                    <th>Command</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>look</code></td>
+                    <td>View current room description</td>
+                </tr>
+                <tr>
+                    <td><code>examine [object]</code></td>
+                    <td>Look closely at an item or feature</td>
+                </tr>
+                <tr>
+                    <td><code>inventory</code> / <code>inv</code></td>
+                    <td>View your items</td>
+                </tr>
+                <tr>
+                    <td><code>score</code></td>
+                    <td>View your character stats</td>
+                </tr>
+                <tr>
+                    <td><code>who</code></td>
+                    <td>See players in your room</td>
+                </tr>
+                <tr>
+                    <td><code>help</code></td>
+                    <td>Show available commands</td>
+                </tr>
+                <tr>
+                    <td><code>help [command]</code></td>
+                    <td>Get info on specific command</td>
+                </tr>
+            </table>
+        </section>
+        
+        <section>
+            <h2>Combat Commands</h2>
+            <table class="stat-table">
+                <tr>
+                    <th>Command</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>attack [target]</code></td>
+                    <td>Attack a monster or player</td>
+                </tr>
+                <tr>
+                    <td><code>fight [target]</code></td>
+                    <td>Same as attack</td>
+                </tr>
+                <tr>
+                    <td><code>kill [target]</code></td>
+                    <td>Same as attack</td>
+                </tr>
+                <tr>
+                    <td><code>cast [spell] at [target]</code></td>
+                    <td>Cast a spell on target</td>
+                </tr>
+                <tr>
+                    <td><code>kick [target]</code></td>
+                    <td>Attack with kick verb</td>
+                </tr>
+                <tr>
+                    <td><code>slash [target]</code></td>
+                    <td>Attack with slash verb</td>
+                </tr>
+            </table>
+        </section>
+        
+        <section>
+            <h2>Item Commands</h2>
+            <table class="stat-table">
+                <tr>
+                    <th>Command</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>get [item]</code></td>
+                    <td>Pick up an item</td>
+                </tr>
+                <tr>
+                    <td><code>drop [item]</code></td>
+                    <td>Drop an item from inventory</td>
+                </tr>
+                <tr>
+                    <td><code>use [item]</code></td>
+                    <td>Use a consumable item</td>
+                </tr>
+                <tr>
+                    <td><code>equip [item]</code></td>
+                    <td>Equip weapon/armor/shield</td>
+                </tr>
+                <tr>
+                    <td><code>buy [item]</code></td>
+                    <td>Purchase from NPC shop</td>
+                </tr>
+                <tr>
+                    <td><code>buy [item] from [npc]</code></td>
+                    <td>Buy specific item from NPC</td>
+                </tr>
+            </table>
+        </section>
+        
+        <section>
+            <h2>Communication Commands</h2>
+            <table class="stat-table">
+                <tr>
+                    <th>Command</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>say [message]</code></td>
+                    <td>Talk to everyone in room</td>
+                </tr>
+                <tr>
+                    <td><code>tell [player] [message]</code></td>
+                    <td>Private message to player</td>
+                </tr>
+                <tr>
+                    <td><code>talk to [npc]</code></td>
+                    <td>Speak with an NPC</td>
+                </tr>
+                <tr>
+                    <td><code>ask [npc] about [topic]</code></td>
+                    <td>Ask NPC about something</td>
+                </tr>
+                <tr>
+                    <td><code>greet [npc]</code></td>
+                    <td>Greet an NPC</td>
+                </tr>
+            </table>
+        </section>
+        
+        <section>
+            <h2>Party Commands</h2>
+            <table class="stat-table">
+                <tr>
+                    <th>Command</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>party create</code></td>
+                    <td>Create a new party</td>
+                </tr>
+                <tr>
+                    <td><code>party invite [player]</code></td>
+                    <td>Invite player to your party</td>
+                </tr>
+                <tr>
+                    <td><code>party accept [player]</code></td>
+                    <td>Accept party invitation</td>
+                </tr>
+                <tr>
+                    <td><code>party leave</code></td>
+                    <td>Leave current party</td>
+                </tr>
+                <tr>
+                    <td><code>party kick [player]</code></td>
+                    <td>Remove player from party (leader only)</td>
+                </tr>
+                <tr>
+                    <td><code>party info</code></td>
+                    <td>View party members and stats</td>
+                </tr>
+            </table>
+        </section>
+        
+        <section>
+            <h2>Quest Commands</h2>
+            <table class="stat-table">
+                <tr>
+                    <th>Command</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>quests</code></td>
+                    <td>View all active quests</td>
+                </tr>
+                <tr>
+                    <td><code>quest [name]</code></td>
+                    <td>View specific quest details</td>
+                </tr>
+                <tr>
+                    <td><code>quest progress</code></td>
+                    <td>Check quest progress</td>
+                </tr>
+                <tr>
+                    <td><code>quest abandon [name]</code></td>
+                    <td>Abandon a quest</td>
+                </tr>
+            </table>
+        </section>
+        
+        <section>
+            <h2>Guild Commands</h2>
+            <table class="stat-table">
+                <tr>
+                    <th>Command</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>guild create [name]</code></td>
+                    <td>Create a new guild (costs gold)</td>
+                </tr>
+                <tr>
+                    <td><code>guild invite [player]</code></td>
+                    <td>Invite player to guild</td>
+                </tr>
+                <tr>
+                    <td><code>guild accept [name]</code></td>
+                    <td>Accept guild invitation</td>
+                </tr>
+                <tr>
+                    <td><code>guild info</code></td>
+                    <td>View guild information</td>
+                </tr>
+                <tr>
+                    <td><code>guild leave</code></td>
+                    <td>Leave your guild</td>
+                </tr>
+                <tr>
+                    <td><code>guild members</code></td>
+                    <td>List all guild members</td>
+                </tr>
+            </table>
+        </section>
+        
+        <section>
+            <h2>Spell Commands</h2>
+            <table class="stat-table">
+                <tr>
+                    <th>Command</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>spells</code></td>
+                    <td>List all known spells</td>
+                </tr>
+                <tr>
+                    <td><code>cast [spell]</code></td>
+                    <td>Cast spell on yourself</td>
+                </tr>
+                <tr>
+                    <td><code>cast [spell] at [target]</code></td>
+                    <td>Cast spell on target</td>
+                </tr>
+                <tr>
+                    <td><code>memorize [spell]</code></td>
+                    <td>Learn a new spell (from book)</td>
+                </tr>
+            </table>
+        </section>
+        
+        <section>
+            <h2>Utility Commands</h2>
+            <table class="stat-table">
+                <tr>
+                    <th>Command</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>time</code></td>
+                    <td>Show current game time</td>
+                </tr>
+                <tr>
+                    <td><code>weather</code></td>
+                    <td>Check current weather</td>
+                </tr>
+                <tr>
+                    <td><code>rest</code></td>
+                    <td>Rest to recover HP/MP</td>
+                </tr>
+                <tr>
+                    <td><code>save</code></td>
+                    <td>Save your progress (auto-saves)</td>
+                </tr>
+                <tr>
+                    <td><code>quit</code></td>
+                    <td>Exit the game</td>
+                </tr>
+            </table>
+        </section>
+        
+        <section>
+            <h2>💡 Command Tips</h2>
+            <ul>
+                <li>Commands are case-insensitive (<code>NORTH</code> = <code>north</code>)</li>
+                <li>Most commands have shortened versions (<code>n</code> for <code>north</code>)</li>
+                <li>Natural language works! "go north" = "north"</li>
+                <li>Use TAB to auto-complete (if available)</li>
+                <li>Press UP arrow to repeat previous commands</li>
+                <li>Commands parse context - "attack" knows to target nearby monsters</li>
+                <li>You can chain actions with semicolons: <code>get sword; equip sword</code></li>
+            </ul>
+        </section>
+        
+        <nav class="next-guides">
+            <h3>Continue Learning:</h3>
+            <a href="getting-started.html" class="guide-link">🎯 Getting Started Guide</a>
+            <a href="combat-guide.html" class="guide-link">⚔️ Combat Guide</a>
+            <a href="tips-tricks.html" class="guide-link">💡 Tips & Tricks</a>
+        </nav>
+        
+        <footer>
+            <p><a href="index.html">← Back to All Guides</a></p>
+        </footer>
+    </div>
+</body>
+</html>
