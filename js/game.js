@@ -2541,13 +2541,17 @@ Examples:
             }
         };
 
+        console.log(`[ExecuteCommand] Action: "${action}", Target: "${target}", CurrentRoom:`, currentPlayerRoomId);
+        
         switch(action) {
             case 'logout':
                 await signOut(auth);
                 break;
             case 'look': await showRoom(currentPlayerRoomId); break;
             case 'go':
+                 console.log(`[Movement] Attempting to go ${target}`);
                  const direction = target.toLowerCase();
+                 console.log(`[Movement] Direction: ${direction}, Current room exits:`, currentRoom.exits);
                  if (currentRoom.exits && currentRoom.exits[direction]) {
                     const destinationRoomId = currentRoom.exits[direction];
                     const destinationRoom = gameWorld[destinationRoomId];
@@ -2811,24 +2815,257 @@ Examples:
                 }
                 break;
             case 'buy':
+                // ENHANCED: Now supports haggling and reputation system
                 const vendor = findNpcInRoom(npc_target);
-                if (!vendor) { logToTerminal("There's no one here by that name to buy from.", "error"); break; }
+                if (!vendor) { 
+                    logToTerminal("There's no one here by that name to buy from.", "error"); 
+                    break; 
+                }
                 
                 const itemToBuy = findItemByName(target);
-                if (!itemToBuy || !vendor.sells.includes(itemToBuy.id)) { logToTerminal(`${vendor.shortName || vendor.name} isn't selling that.`, "error"); break; }
-
-                const playerDocBuy = await getDoc(playerRef);
-                const playerDataBuy = playerDocBuy.data();
-                const playerGold = playerDataBuy.money || 0;
-
-                if (playerGold < itemToBuy.cost) { logToTerminal("You can't afford that.", "error"); break; }
-
-                const newGold = playerGold - itemToBuy.cost;
-                await updateDoc(playerRef, {
-                    money: newGold,
-                    inventory: arrayUnion({id: itemToBuy.id, name: itemToBuy.name, cost: itemToBuy.cost, movable: itemToBuy.movable})
-                });
-                logToTerminal(`You buy ${itemToBuy.name} from ${vendor.shortName || vendor.name} for ${itemToBuy.cost} gold.`, 'system');
+                if (!itemToBuy) {
+                    logToTerminal(`Item "${target}" not found.`, "error"); 
+                    break;
+                }
+                
+                // Use trading module for advanced purchase
+                const { acceptHagglePrice, buyFromNPC } = await import('./trading.js');
+                await acceptHagglePrice(auth.currentUser.uid, vendor, itemToBuy);
+                break;
+            
+            case 'sell':
+                // NEW: Sell items to NPCs
+                const buyer = findNpcInRoom(npc_target);
+                if (!buyer) {
+                    logToTerminal("There's no one here by that name to sell to.", "error");
+                    break;
+                }
+                
+                const itemToSell = findItemByName(target);
+                if (!itemToSell) {
+                    logToTerminal(`Item "${target}" not found.`, "error");
+                    break;
+                }
+                
+                const { sellToNPC } = await import('./trading.js');
+                const playerDocSell = await getDoc(playerRef);
+                await sellToNPC(auth.currentUser.uid, buyer, itemToSell, playerDocSell.data());
+                break;
+            
+            case 'haggle':
+                // NEW: Haggle with merchants
+                if (!npc_target) {
+                    logToTerminal("Haggle with whom?", "error");
+                    break;
+                }
+                
+                const merchant = findNpcInRoom(npc_target);
+                if (!merchant) {
+                    logToTerminal(`${npc_target} is not here.`, "error");
+                    break;
+                }
+                
+                // Parse: "haggle 50 for sword from merchant" or "haggle 50 gold for sword from merchant"
+                // target should be the price, and we need to extract the item name
+                const haggleMatch = cmdText.match(/haggle\s+(\d+)(?:\s+gold)?\s+for\s+(.+?)\s+(?:from|with)\s+/i);
+                if (!haggleMatch) {
+                    logToTerminal('Usage: haggle <price> for <item> from <merchant>', 'error');
+                    break;
+                }
+                
+                const offeredPrice = parseInt(haggleMatch[1]);
+                const itemName = haggleMatch[2].trim();
+                const itemToHaggle = findItemByName(itemName);
+                
+                if (!itemToHaggle) {
+                    logToTerminal(`Item "${itemName}" not found.`, "error");
+                    break;
+                }
+                
+                const { haggleWithNPC } = await import('./trading.js');
+                const playerDocHaggle = await getDoc(playerRef);
+                await haggleWithNPC(auth.currentUser.uid, merchant, itemToHaggle, offeredPrice, playerDocHaggle.data());
+                break;
+            
+            case 'list':
+                // NEW: List merchant inventory with prices
+                const shopkeeper = npc_target ? findNpcInRoom(npc_target) : findNpcInRoom('');
+                
+                if (!shopkeeper) {
+                    // Find any NPC with sells array in the room
+                    const npcsInRoom = Object.values(gameNpcs).filter(npc => 
+                        npc.currentRoom === currentPlayerRoomId && 
+                        npc.sells && 
+                        npc.sells.length > 0
+                    );
+                    
+                    if (npcsInRoom.length === 0) {
+                        logToTerminal("There are no merchants here.", "error");
+                        break;
+                    }
+                    
+                    if (npcsInRoom.length > 1) {
+                        logToTerminal("Which merchant? " + npcsInRoom.map(n => n.shortName || n.name).join(', '), "error");
+                        break;
+                    }
+                    
+                    const { listMerchantInventory } = await import('./trading.js');
+                    listMerchantInventory(npcsInRoom[0], auth.currentUser.uid);
+                } else {
+                    const { listMerchantInventory } = await import('./trading.js');
+                    listMerchantInventory(shopkeeper, auth.currentUser.uid);
+                }
+                break;
+            
+            case 'appraise':
+            case 'value':
+                // NEW: Check item value and what merchants will pay
+                const itemToAppraise = findItemByName(target);
+                if (!itemToAppraise) {
+                    logToTerminal(`Item "${target}" not found.`, "error");
+                    break;
+                }
+                
+                const { appraiseItem } = await import('./trading.js');
+                await appraiseItem(auth.currentUser.uid, itemToAppraise);
+                break;
+            
+            case 'reputation':
+                // NEW: Check reputation with merchant
+                if (!npc_target) {
+                    logToTerminal("Check reputation with whom?", "error");
+                    break;
+                }
+                
+                const repMerchant = findNpcInRoom(npc_target);
+                if (!repMerchant) {
+                    logToTerminal(`${npc_target} is not here.`, "error");
+                    break;
+                }
+                
+                const { getMerchantReputation, getReputationLevel, REP_LEVELS } = await import('./trading.js');
+                const reputation = await getMerchantReputation(auth.currentUser.uid, repMerchant.id);
+                const repLevel = getReputationLevel(reputation);
+                
+                logToTerminal(`<span class="text-cyan-400">═══ Reputation with ${repMerchant.shortName || repMerchant.name} ═══</span>`, 'system');
+                logToTerminal(`Status: ${repLevel.name}`, 'system');
+                logToTerminal(`Points: ${reputation}/${repLevel.max}`, 'system');
+                logToTerminal(`Discount: ${Math.round(repLevel.discount * 100)}%`, 'system');
+                
+                if (reputation < REP_LEVELS.PARTNER.min) {
+                    const nextLevel = Object.values(REP_LEVELS).find(l => l.min > reputation);
+                    if (nextLevel) {
+                        const pointsNeeded = nextLevel.min - reputation;
+                        logToTerminal(`Next level (${nextLevel.name}): ${pointsNeeded} points needed`, 'info');
+                    }
+                }
+                break;
+            
+            case 'merchants':
+                // NEW: List all known merchants and reputations
+                logToTerminal(`<span class="text-cyan-400">═══ Known Merchants ═══</span>`, 'system');
+                
+                const merchantNpcs = Object.values(gameNpcs).filter(npc => 
+                    npc.sells && npc.sells.length > 0
+                );
+                
+                if (merchantNpcs.length === 0) {
+                    logToTerminal("You haven't met any merchants yet.", 'info');
+                    break;
+                }
+                
+                const { getMerchantReputation: getRepForList, getReputationLevel: getRepLevelForList } = await import('./trading.js');
+                
+                for (const npc of merchantNpcs) {
+                    const rep = await getRepForList(auth.currentUser.uid, npc.id);
+                    const level = getRepLevelForList(rep);
+                    logToTerminal(`${npc.shortName || npc.name}: ${level.name} (${rep} points)`, 'system');
+                }
+                break;
+            
+            // ===== PLAYER-TO-PLAYER TRADING =====
+            
+            case 'trade':
+                // NEW: Initiate player trade
+                if (!target) {
+                    logToTerminal("Trade with whom? Usage: trade with <player>", "error");
+                    break;
+                }
+                
+                const { initiatePlayerTrade } = await import('./player-trading.js');
+                await initiatePlayerTrade(auth.currentUser.uid, target, currentPlayerRoomId);
+                break;
+            
+            case 'accept':
+                // Check if accepting trade or something else
+                if (target === 'trade' || cmdText.toLowerCase().includes('accept trade')) {
+                    const { acceptTradeRequest } = await import('./player-trading.js');
+                    await acceptTradeRequest(auth.currentUser.uid);
+                } else {
+                    logToTerminal("Accept what?", "error");
+                }
+                break;
+            
+            case 'decline':
+                if (target === 'trade' || cmdText.toLowerCase().includes('decline trade')) {
+                    const { declineTradeRequest } = await import('./player-trading.js');
+                    await declineTradeRequest(auth.currentUser.uid);
+                } else {
+                    logToTerminal("Decline what?", "error");
+                }
+                break;
+            
+            case 'offer':
+                // NEW: Offer item or gold in trade
+                if (!target) {
+                    logToTerminal("Offer what? Usage: offer <item> or offer <amount> gold", "error");
+                    break;
+                }
+                
+                const { offerTradeItem, offerTradeGold } = await import('./player-trading.js');
+                
+                // Check if offering gold
+                if (target.match(/^\d+$/) || cmdText.toLowerCase().includes('gold')) {
+                    const goldMatch = cmdText.match(/(\d+)/);
+                    if (goldMatch) {
+                        await offerTradeGold(auth.currentUser.uid, parseInt(goldMatch[1]));
+                    } else {
+                        logToTerminal("How much gold? Usage: offer <amount> gold", "error");
+                    }
+                } else {
+                    await offerTradeItem(auth.currentUser.uid, target);
+                }
+                break;
+            
+            case 'remove':
+                // NEW: Remove item from trade offer
+                // Check if in context of trade
+                const { getPlayerTradeSession, removeTradeItem } = await import('./player-trading.js');
+                const tradeSession = getPlayerTradeSession(auth.currentUser.uid);
+                
+                if (tradeSession) {
+                    await removeTradeItem(auth.currentUser.uid, target);
+                } else {
+                    logToTerminal("You're not currently in a trade.", "error");
+                }
+                break;
+            
+            case 'confirm':
+                if (target === 'trade' || cmdText.toLowerCase().includes('confirm trade')) {
+                    const { confirmTrade } = await import('./player-trading.js');
+                    await confirmTrade(auth.currentUser.uid);
+                } else {
+                    logToTerminal("Confirm what?", "error");
+                }
+                break;
+            
+            case 'cancel':
+                if (target === 'trade' || cmdText.toLowerCase().includes('cancel trade')) {
+                    const { cancelPlayerTrade } = await import('./player-trading.js');
+                    await cancelPlayerTrade(auth.currentUser.uid, 'cancelled');
+                } else {
+                    logToTerminal("Cancel what?", "error");
+                }
                 break;
 
             case 'use':

@@ -20,7 +20,19 @@ desktop.ini
 
 # API Keys and Sensitive Configuration
 js/config.js
+js/config.js.local
+js/config - Copy.js
 setup-default-classes.html
+setup-default-classes.html.local
 setup-default-spells.html
+setup-default-spells.html.local
 setup-default-world.html
+setup-default-world.html.local
 index.html
+index.html.local
+secrets.txt
+
+# Diagnostic tools (may contain API info)
+api-key-diagnostics.html
+connection-test.html
+deployment-diagnostics.html

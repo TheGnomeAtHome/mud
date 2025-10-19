@@ -1,4 +1,6 @@
 // Firebase initialization module
+import { FIREBASE_CONFIG } from './config.js';
+
 export async function initializeFirebase() {
     const { initializeApp } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
     const { 
@@ -30,17 +32,8 @@ export async function initializeFirebase() {
         runTransaction 
     } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
 
-    // Firebase configuration
-    const firebaseConfig = {
-        apiKey: "AIzaSyD454EmNJFMHPsL2XrNJc7-dQ4bnoCFASs",
-        authDomain: "mudgame-3cbb1.firebaseapp.com",
-        projectId: "mudgame-3cbb1",
-        storageBucket: "mudgame-3cbb1.appspot.com",
-        messagingSenderId: "1004334145379",
-        appId: "1:1004334145379:web:3db9fda346526a64e67d56"
-    };
-
-    const app = initializeApp(firebaseConfig);
+    // Use the Firebase configuration from config.js
+    const app = initializeApp(FIREBASE_CONFIG);
     const auth = getAuth(app);
     const db = getFirestore(app);
 

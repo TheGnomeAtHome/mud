@@ -78,47 +78,82 @@ export function initializeDataLoader(firebase, appId) {
             
             // Load rooms (real-time listener - frequently changes)
             const roomsUnsub = onSnapshot(collection(db, `/artifacts/${appId}/public/data/mud-rooms`), (snapshot) => {
+                let count = 0;
                 snapshot.forEach(doc => {
                     gameData.gameWorld[doc.id] = { id: doc.id, ...doc.data() };
+                    count++;
                 });
+                console.log(`[Firestore] Loaded ${count} rooms.`);
+                if (count === 0) console.warn('[Firestore] No rooms found in mud-rooms collection!');
                 checkComplete('rooms');
-            }, reject);
+            }, error => {
+                console.error('[Firestore] Error loading rooms:', error);
+                reject(error);
+            });
             unsubscribers.push(roomsUnsub);
             
             // Load items (real-time listener - can change in rooms)
             const itemsUnsub = onSnapshot(collection(db, `/artifacts/${appId}/public/data/mud-items`), (snapshot) => {
+                let count = 0;
                 snapshot.forEach(doc => {
                     gameData.gameItems[doc.id] = { id: doc.id, ...doc.data() };
+                    count++;
                 });
+                console.log(`[Firestore] Loaded ${count} items.`);
+                if (count === 0) console.warn('[Firestore] No items found in mud-items collection!');
                 checkComplete('items');
-            }, reject);
+            }, error => {
+                console.error('[Firestore] Error loading items:', error);
+                reject(error);
+            });
             unsubscribers.push(itemsUnsub);
             
             // Load NPCs (real-time listener - positions can change)
             const npcsUnsub = onSnapshot(collection(db, `/artifacts/${appId}/public/data/mud-npcs`), (snapshot) => {
+                let count = 0;
                 snapshot.forEach(doc => {
                     gameData.gameNpcs[doc.id] = { id: doc.id, ...doc.data() };
+                    count++;
                 });
+                console.log(`[Firestore] Loaded ${count} NPCs.`);
+                if (count === 0) console.warn('[Firestore] No NPCs found in mud-npcs collection!');
                 checkComplete('npcs');
-            }, reject);
+            }, error => {
+                console.error('[Firestore] Error loading NPCs:', error);
+                reject(error);
+            });
             unsubscribers.push(npcsUnsub);
             
             // Load monsters (real-time listener)
             const monstersUnsub = onSnapshot(collection(db, `/artifacts/${appId}/public/data/mud-monsters`), (snapshot) => {
+                let count = 0;
                 snapshot.forEach(doc => {
                     gameData.gameMonsters[doc.id] = { id: doc.id, ...doc.data() };
+                    count++;
                 });
+                console.log(`[Firestore] Loaded ${count} monsters.`);
+                if (count === 0) console.warn('[Firestore] No monsters found in mud-monsters collection!');
                 checkComplete('monsters');
-            }, reject);
+            }, error => {
+                console.error('[Firestore] Error loading monsters:', error);
+                reject(error);
+            });
             unsubscribers.push(monstersUnsub);
             
             // Load players (real-time listener - critical for multiplayer)
             const playersUnsub = onSnapshot(collection(db, `/artifacts/${appId}/public/data/mud-players`), (snapshot) => {
+                let count = 0;
                 snapshot.forEach(doc => {
                     gameData.gamePlayers[doc.id] = { id: doc.id, ...doc.data() };
+                    count++;
                 });
+                console.log(`[Firestore] Loaded ${count} players.`);
+                if (count === 0) console.warn('[Firestore] No players found in mud-players collection!');
                 checkComplete('players');
-            }, reject);
+            }, error => {
+                console.error('[Firestore] Error loading players:', error);
+                reject(error);
+            });
             unsubscribers.push(playersUnsub);
             
             // Load active monsters (real-time listener - frequently changes)

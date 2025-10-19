@@ -61,6 +61,34 @@ export async function parseCommandWithGemini(command, logToTerminal) {
         return { action: "unknown" };
     }
     
+    // Pre-process direction shortcuts before sending to Gemini
+    const directionMap = {
+        'n': 'north',
+        's': 'south',
+        'e': 'east',
+        'w': 'west',
+        'ne': 'northeast',
+        'nw': 'northwest',
+        'se': 'southeast',
+        'sw': 'southwest',
+        'u': 'up',
+        'd': 'down'
+    };
+    
+    // Check if command is a single direction shortcut
+    const lowerCmd = command.toLowerCase().trim();
+    if (directionMap[lowerCmd]) {
+        console.log(`[Command Parser] Direction shortcut detected: "${command}" -> "go ${directionMap[lowerCmd]}"`);
+        return { action: "go", target: directionMap[lowerCmd] };
+    }
+    
+    // Check if command is a full direction word
+    const fullDirections = ['north', 'south', 'east', 'west', 'northeast', 'northwest', 'southeast', 'southwest', 'up', 'down'];
+    if (fullDirections.includes(lowerCmd)) {
+        console.log(`[Command Parser] Direction detected: "${command}" -> "go ${lowerCmd}"`);
+        return { action: "go", target: lowerCmd };
+    }
+    
     const apiUrl = `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
     const prompt = `You are a text adventure game command parser. Parse this command into JSON format.

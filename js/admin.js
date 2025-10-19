@@ -74,19 +74,22 @@ export function initializeAdminPanel({
         tab.addEventListener('click', () => {
             adminTabs.forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
-            Object.values(adminTabPanels).forEach(p => p.classList.add('hidden'));
-            adminTabPanels[tab.id].classList.remove('hidden');
-            
+            Object.values(adminTabPanels).forEach(p => {
+                if (p) p.classList.add('hidden');
+            });
+            if (adminTabPanels[tab.id]) {
+                adminTabPanels[tab.id].classList.remove('hidden');
+            } else {
+                console.warn('Missing admin panel for tab:', tab.id);
+            }
             // If switching to map tab, refresh the map
             if (tab.id === 'map-tab-btn') {
                 setTimeout(() => generateMap(), 100); // Small delay to ensure panel is visible
             }
-            
             // If switching to levels tab, initialize the editor
             if (tab.id === 'levels-tab-btn') {
                 setTimeout(() => initializeLevelsEditor(db, appId), 100);
             }
-            
             // If switching to actions tab, initialize the editor
             if (tab.id === 'actions-tab-btn') {
                 setTimeout(() => initializeActionsEditor(db, appId), 100);

@@ -546,7 +546,9 @@ export async function initializeApp() {
                         setInputEnabled(true);
                         return;
                     }
+                    console.log('[Command] Executing parsed command:', parsedCommand);
                     await gameLogic.executeParsedCommand(parsedCommand, cmdText);
+                    console.log('[Command] Command execution complete');
                 } catch (error) {
                     console.error("Error executing command:", error);
                     logToTerminal(`An error occurred: ${error.message || error}`, "error");
