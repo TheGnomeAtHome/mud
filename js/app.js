@@ -1,4 +1,26 @@
-// Main application module
+/**
+ * Main application module
+ * 
+ * MUD Game Engine
+ * Copyright (C) 2025 JPH Software (http://jphsoftware.com)
+ * 
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ * 
+ * ** IMPORTANT: This copyright notice and the link to jphsoftware.com must be preserved
+ * ** in all copies or substantial portions of this software.
+ */
+
 import { APP_ID, GEMINI_API_KEY } from './config.js';
 import { initializeFirebase } from './firebase-init.js';
 import { initializeUI } from './ui.js';
