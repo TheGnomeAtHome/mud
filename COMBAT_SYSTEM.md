@@ -1,7 +1,42 @@
 # Enhanced Combat System
 
 ## Overview
-The combat system has been upgraded to utilize all player attributes (STR, DEX, CON, INT, WIS, CHA) for more strategic and realistic combat encounters.
+The combat system has been upgraded to utilize all player attributes (STR, DEX, CON, INT, WIS, CHA) for more strategic and realistic combat encounters. The system now features **verbose, contextual combat descriptions** that bring every fight to life!
+
+> 💡 **New!** See [VERBOSE_COMBAT.md](VERBOSE_COMBAT.md) for the complete guide to the immersive combat description system including shield blocking, armor deflection, and damage-based narrative text.
+
+## Quick Feature Highlights
+
+### 🎯 Verbose Combat Descriptions
+Combat now features dynamic, contextual messages that change based on:
+- **Damage severity** (light, moderate, heavy, severe, devastating)
+- **Weapon type** (slash, stab, punch, kick, claw, bite)
+- **Critical hits** (dramatic flair with visual effects: ⚡ CRITICAL HIT!)
+- **Attack verbs** (hundreds of varied descriptions)
+
+**Example:**
+```
+You cleave into the Dragon with your greatsword finding a vulnerable spot for 24 damage! ⚡ CRITICAL HIT!
+(+5 STR, +3 DEX, +8 weapon)
+```
+
+### 🛡️ Shield Blocking System
+- **Block chance**: 15% base + 2% per DEX point above 10 (max 40%)
+- **Damage reduction**: 50-100% of incoming damage
+- **Descriptive messages**: "You raise your iron shield and block the attack!"
+- **Requires**: Shield equipped in `equippedShield` slot
+
+### 🛡️ Armor Deflection System  
+- **Armor types**: Cloth (1), Leather (2), Chainmail (3), Plate (5) damage reduction
+- **Full deflection**: 10% chance to completely deflect light attacks
+- **Descriptive messages**: "The blow glances off your chainmail!"
+- **Requires**: Armor equipped in `equippedArmor` slot
+
+### 🤸 Enhanced Dodging
+Dodge descriptions now reflect character DEX:
+- **High DEX (18+)**: "You dodge with lightning reflexes!"
+- **Medium DEX (14-17)**: "You quickly step aside!"
+- **Low DEX**: "You barely dodge the attack!"
 
 ## Attribute Effects
 

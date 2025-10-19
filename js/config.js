@@ -5,7 +5,7 @@
 export const APP_ID = 'mudgame-3cbb1';
 
 // Gemini AI Configuration
-export const GEMINI_API_KEY = "AIzaSyA6-8ZwIEv2nNfaf4fNFMcIVvLNGrp6zII";
+export const GEMINI_API_KEY = "AIzaSyBxmx2BCT_xWBHzIMi0l88J5MHo2wVyNZ0";
 export const GEMINI_MODEL = "gemini-2.0-flash";
 export const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 

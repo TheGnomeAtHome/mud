@@ -14,6 +14,9 @@ import { callGeminiForRoom, callGeminiForMonster, callGeminiForItem, callGeminiF
  * @param {Object} params.gameMonsters - Game monsters data object
  * @param {Object} params.gamePlayers - Game players data object
  * @param {Object} params.gameClasses - Game character classes data object
+ * @param {Object} params.gameSpells - Game spells data object
+ * @param {Object} params.gameGuilds - Game guilds data object
+ * @param {Object} params.gameQuests - Game quests data object
  * @param {Function} params.logToTerminal - Terminal logging function
  * @param {Object} params.firestoreFunctions - Firestore functions (doc, setDoc, updateDoc, deleteDoc)
  */
@@ -27,8 +30,11 @@ export function initializeAdminPanel({
     gamePlayers,
     gameClasses,
     gameSpells,
+    gameGuilds,
+    gameQuests,
     logToTerminal,
-    firestoreFunctions
+    firestoreFunctions,
+    gameLogic = null // Optional, set later
 }) {
     console.log('=== INITIALIZING ADMIN PANEL ===');
     console.log('Initial data counts:', {
@@ -38,7 +44,9 @@ export function initializeAdminPanel({
         monsters: Object.keys(gameMonsters).length,
         players: Object.keys(gamePlayers).length,
         classes: Object.keys(gameClasses).length,
-        spells: Object.keys(gameSpells).length
+        spells: Object.keys(gameSpells).length,
+        guilds: Object.keys(gameGuilds).length,
+        quests: Object.keys(gameQuests).length
     });
     
     const { doc, setDoc, updateDoc, deleteDoc, arrayUnion } = firestoreFunctions;
@@ -54,9 +62,12 @@ export function initializeAdminPanel({
         'player-tab-btn': document.getElementById('player-editor-panel'),
         'spell-tab-btn': document.getElementById('spell-editor-panel'),
         'class-tab-btn': document.getElementById('class-editor-panel'),
+        'guild-tab-btn': document.getElementById('guild-editor-panel'),
+        'quest-tab-btn': document.getElementById('quest-editor-panel'),
         'levels-tab-btn': document.getElementById('levels-editor-panel'),
         'actions-tab-btn': document.getElementById('actions-editor-panel'),
         'map-tab-btn': document.getElementById('map-editor-panel'),
+        'settings-tab-btn': document.getElementById('settings-panel'),
     };
     
     adminTabs.forEach(tab => {
@@ -79,6 +90,11 @@ export function initializeAdminPanel({
             // If switching to actions tab, initialize the editor
             if (tab.id === 'actions-tab-btn') {
                 setTimeout(() => initializeActionsEditor(db, appId), 100);
+            }
+            
+            // If switching to settings tab, initialize the editor
+            if (tab.id === 'settings-tab-btn') {
+                setTimeout(() => initializeSettingsPanel(), 100);
             }
         });
     });
@@ -706,10 +722,38 @@ export function initializeAdminPanel({
     const adminNpcStatus = document.getElementById('admin-npc-status');
     const generateNpcBtn = document.getElementById('generate-npc-btn');
     const aiNpcPrompt = document.getElementById('npc-ai-prompt');
+    const npcWandersCheckbox = document.getElementById('npc-wanders');
+    const npcWanderFields = document.getElementById('npc-wander-fields');
+    const npcWanderMinInput = document.getElementById('npc-wander-min');
+    const npcWanderMaxInput = document.getElementById('npc-wander-max');
+    const npcProactiveGreetingCheckbox = document.getElementById('npc-proactive-greeting');
+    const npcGreetingFields = document.getElementById('npc-greeting-fields');
+    const npcGreetingDelayMinInput = document.getElementById('npc-greeting-delay-min');
+    const npcGreetingDelayMaxInput = document.getElementById('npc-greeting-delay-max');
+    const npcGreetingIntervalInput = document.getElementById('npc-greeting-interval');
+    const npcAmbientDialogueCheckbox = document.getElementById('npc-ambient-dialogue');
+    const npcAmbientFields = document.getElementById('npc-ambient-fields');
+    const npcAmbientMinInput = document.getElementById('npc-ambient-min');
+    const npcAmbientMaxInput = document.getElementById('npc-ambient-max');
     
     // Toggle combat fields visibility
     npcCanFightCheckbox.addEventListener('change', () => {
         npcCombatFields.classList.toggle('hidden', !npcCanFightCheckbox.checked);
+    });
+    
+    // Toggle wander fields visibility
+    npcWandersCheckbox.addEventListener('change', () => {
+        npcWanderFields.classList.toggle('hidden', !npcWandersCheckbox.checked);
+    });
+    
+    // Toggle proactive greeting fields visibility
+    npcProactiveGreetingCheckbox.addEventListener('change', () => {
+        npcGreetingFields.classList.toggle('hidden', !npcProactiveGreetingCheckbox.checked);
+    });
+    
+    // Toggle ambient dialogue fields visibility
+    npcAmbientDialogueCheckbox.addEventListener('change', () => {
+        npcAmbientFields.classList.toggle('hidden', !npcAmbientDialogueCheckbox.checked);
     });
     
     function populateNpcSelector() {
@@ -738,6 +782,19 @@ export function initializeAdminPanel({
         npcMaxAtkInput.value = '8';
         npcXpInput.value = '50';
         npcGoldInput.value = '25';
+        npcWandersCheckbox.checked = false;
+        npcWanderFields.classList.add('hidden');
+        npcWanderMinInput.value = '60';
+        npcWanderMaxInput.value = '180';
+        npcProactiveGreetingCheckbox.checked = false;
+        npcGreetingFields.classList.add('hidden');
+        npcGreetingDelayMinInput.value = '5';
+        npcGreetingDelayMaxInput.value = '30';
+        npcGreetingIntervalInput.value = '120';
+        npcAmbientDialogueCheckbox.checked = false;
+        npcAmbientFields.classList.add('hidden');
+        npcAmbientMinInput.value = '120';
+        npcAmbientMaxInput.value = '600';
         npcIdInput.disabled = false; npcSelect.value = '';
         updateNpcDialogueLabel();
         document.querySelectorAll('.npc-sells-checkbox').forEach(cb => cb.checked = false);
@@ -787,6 +844,37 @@ export function initializeAdminPanel({
                 npcGoldInput.value = npc.gold || 25;
             } else {
                 npcCombatFields.classList.add('hidden');
+            }
+            
+            // Load wandering settings
+            npcWandersCheckbox.checked = npc.wanders || false;
+            if (npc.wanders) {
+                npcWanderFields.classList.remove('hidden');
+                npcWanderMinInput.value = npc.wanderInterval?.min || 60;
+                npcWanderMaxInput.value = npc.wanderInterval?.max || 180;
+            } else {
+                npcWanderFields.classList.add('hidden');
+            }
+            
+            // Load proactive greeting settings
+            npcProactiveGreetingCheckbox.checked = npc.proactiveGreeting || false;
+            if (npc.proactiveGreeting) {
+                npcGreetingFields.classList.remove('hidden');
+                npcGreetingDelayMinInput.value = npc.greetingDelay?.min || 5;
+                npcGreetingDelayMaxInput.value = npc.greetingDelay?.max || 30;
+                npcGreetingIntervalInput.value = npc.greetingInterval?.min || 120;
+                
+                npcAmbientDialogueCheckbox.checked = npc.ambientDialogue || false;
+                if (npc.ambientDialogue) {
+                    npcAmbientFields.classList.remove('hidden');
+                    npcAmbientMinInput.value = npc.ambientInterval?.min || 120;
+                    npcAmbientMaxInput.value = npc.ambientInterval?.max || 600;
+                } else {
+                    npcAmbientFields.classList.add('hidden');
+                }
+            } else {
+                npcGreetingFields.classList.add('hidden');
+                npcAmbientFields.classList.add('hidden');
             }
             
             updateNpcDialogueLabel();
@@ -896,6 +984,43 @@ export function initializeAdminPanel({
             const sells = Array.from(document.querySelectorAll('.npc-sells-checkbox:checked')).map(cb => cb.value);
 
             const npcData = { shortName, name, description, useAI, dialogue, triggers, sells };
+            
+            // Add wandering behavior if enabled
+            if (npcWandersCheckbox.checked) {
+                npcData.wanders = true;
+                npcData.wanderInterval = {
+                    min: parseInt(npcWanderMinInput.value) || 60,
+                    max: parseInt(npcWanderMaxInput.value) || 180
+                };
+            } else {
+                npcData.wanders = false;
+            }
+            
+            // Add proactive greeting behavior if enabled
+            if (npcProactiveGreetingCheckbox.checked) {
+                npcData.proactiveGreeting = true;
+                npcData.greetingDelay = {
+                    min: parseInt(npcGreetingDelayMinInput.value) || 5,
+                    max: parseInt(npcGreetingDelayMaxInput.value) || 30
+                };
+                npcData.greetingInterval = {
+                    min: parseInt(npcGreetingIntervalInput.value) || 120
+                };
+                
+                // Add ambient dialogue if enabled
+                if (npcAmbientDialogueCheckbox.checked) {
+                    npcData.ambientDialogue = true;
+                    npcData.ambientInterval = {
+                        min: parseInt(npcAmbientMinInput.value) || 120,
+                        max: parseInt(npcAmbientMaxInput.value) || 600
+                    };
+                } else {
+                    npcData.ambientDialogue = false;
+                }
+            } else {
+                npcData.proactiveGreeting = false;
+                npcData.ambientDialogue = false;
+            }
             
             // Add combat stats if canFight is enabled
             if (npcCanFightCheckbox.checked) {
@@ -1472,6 +1597,7 @@ export function initializeAdminPanel({
         document.getElementById('class-hp-bonus').value = classData.hpBonus || 0;
         document.getElementById('class-mp-bonus').value = classData.mpBonus || 0;
         document.getElementById('class-abilities').value = JSON.stringify(classData.abilities || []);
+        document.getElementById('class-level-titles').value = classData.levelTitles ? JSON.stringify(classData.levelTitles, null, 2) : '';
     }
     
     function clearClassForm() {
@@ -1487,6 +1613,7 @@ export function initializeAdminPanel({
         document.getElementById('class-hp-bonus').value = 0;
         document.getElementById('class-mp-bonus').value = 0;
         document.getElementById('class-abilities').value = '[]';
+        document.getElementById('class-level-titles').value = '';
     }
     
     classSelect.addEventListener('change', () => {
@@ -1529,6 +1656,22 @@ export function initializeAdminPanel({
             }
         }
         
+        let levelTitles = null;
+        const levelTitlesInput = document.getElementById('class-level-titles').value.trim();
+        
+        if (levelTitlesInput) {
+            try {
+                levelTitles = JSON.parse(levelTitlesInput);
+                if (typeof levelTitles !== 'object' || Array.isArray(levelTitles)) {
+                    adminClassStatus.textContent = 'Level Titles must be a JSON object like {"1":"Title1","5":"Title2"}';
+                    return;
+                }
+            } catch (e) {
+                adminClassStatus.textContent = 'Invalid JSON in level titles field! Use format: {"1":"Title1","5":"Title2"}';
+                return;
+            }
+        }
+        
         const classData = {
             name: className,
             description: document.getElementById('class-description').value.trim(),
@@ -1544,6 +1687,9 @@ export function initializeAdminPanel({
             mpBonus: parseInt(document.getElementById('class-mp-bonus').value) || 0,
             abilities: abilities
         };
+        
+        // Always include levelTitles (even if null) to properly update/remove it
+        classData.levelTitles = levelTitles;
         
         await setDoc(doc(db, `/artifacts/${appId}/public/data/mud-classes/${classId}`), classData);
         adminClassStatus.textContent = `Class "${className}" saved successfully!`;
@@ -1640,6 +1786,328 @@ export function initializeAdminPanel({
     
     // Initialize class selector
     populateClassSelector();
+
+    // ========== GUILD EDITOR ==========
+    const guildSelect = document.getElementById('guild-select');
+    const adminGuildStatus = document.getElementById('admin-guild-status');
+
+    function populateGuildSelector() {
+        guildSelect.innerHTML = '<option value="">-- Select Guild --</option>';
+        Object.entries(gameGuilds).forEach(([guildId, guild]) => {
+            const option = document.createElement('option');
+            option.value = guildId;
+            option.textContent = guild.name || guildId;
+            guildSelect.appendChild(option);
+        });
+    }
+
+    function loadGuildData(guildId) {
+        const guild = gameGuilds[guildId];
+        if (!guild) {
+            clearGuildForm();
+            return;
+        }
+
+        document.getElementById('guild-id').value = guildId;
+        document.getElementById('guild-name').value = guild.name || '';
+        document.getElementById('guild-description').value = guild.description || '';
+        document.getElementById('guild-motto').value = guild.motto || '';
+        document.getElementById('guild-leader').value = guild.leader || '';
+        document.getElementById('guild-treasury').value = guild.treasury || 0;
+        document.getElementById('guild-level').value = guild.level || 1;
+        document.getElementById('guild-exp').value = guild.exp || 0;
+        document.getElementById('guild-hall-room').value = guild.guildHallRoomId || '';
+        document.getElementById('guild-perks').value = guild.perks ? JSON.stringify(guild.perks, null, 2) : '';
+        document.getElementById('guild-members').value = JSON.stringify(guild.members || {}, null, 2);
+    }
+
+    function clearGuildForm() {
+        document.getElementById('guild-id').value = '';
+        document.getElementById('guild-name').value = '';
+        document.getElementById('guild-description').value = '';
+        document.getElementById('guild-motto').value = '';
+        document.getElementById('guild-leader').value = '';
+        document.getElementById('guild-treasury').value = 0;
+        document.getElementById('guild-level').value = 1;
+        document.getElementById('guild-exp').value = 0;
+        document.getElementById('guild-hall-room').value = '';
+        document.getElementById('guild-perks').value = '';
+        document.getElementById('guild-members').value = '{}';
+    }
+
+    guildSelect.addEventListener('change', () => {
+        const guildId = guildSelect.value;
+        if (guildId) {
+            loadGuildData(guildId);
+        } else {
+            clearGuildForm();
+        }
+    });
+
+    document.getElementById('new-guild-btn').addEventListener('click', () => {
+        guildSelect.value = '';
+        clearGuildForm();
+        // Generate new guild ID
+        document.getElementById('guild-id').value = `guild-${Date.now()}`;
+        document.getElementById('guild-id').removeAttribute('readonly');
+        adminGuildStatus.textContent = 'Ready to create new guild';
+    });
+
+    document.getElementById('save-guild-btn').addEventListener('click', async () => {
+        const guildId = document.getElementById('guild-id').value.trim();
+        const guildName = document.getElementById('guild-name').value.trim();
+
+        if (!guildId || !guildName) {
+            adminGuildStatus.textContent = 'Guild ID and Name are required!';
+            return;
+        }
+
+        let perks = null;
+        const perksInput = document.getElementById('guild-perks').value.trim();
+
+        if (perksInput) {
+            try {
+                perks = JSON.parse(perksInput);
+                if (typeof perks !== 'object' || Array.isArray(perks)) {
+                    adminGuildStatus.textContent = 'Perks must be a JSON object!';
+                    return;
+                }
+            } catch (e) {
+                adminGuildStatus.textContent = 'Invalid JSON in perks field!';
+                return;
+            }
+        }
+
+        let members = {};
+        const membersInput = document.getElementById('guild-members').value.trim();
+
+        if (membersInput) {
+            try {
+                members = JSON.parse(membersInput);
+            } catch (e) {
+                adminGuildStatus.textContent = 'Invalid JSON in members field!';
+                return;
+            }
+        }
+
+        const guildData = {
+            name: guildName,
+            description: document.getElementById('guild-description').value.trim(),
+            motto: document.getElementById('guild-motto').value.trim(),
+            leader: document.getElementById('guild-leader').value.trim(),
+            treasury: parseInt(document.getElementById('guild-treasury').value) || 0,
+            level: parseInt(document.getElementById('guild-level').value) || 1,
+            exp: parseInt(document.getElementById('guild-exp').value) || 0,
+            guildHallRoomId: document.getElementById('guild-hall-room').value.trim(),
+            perks: perks,
+            members: members
+        };
+
+        // Find leader ID from members
+        const leaderEntry = Object.entries(members).find(([id, member]) => member.rank === 'leader');
+        if (leaderEntry) {
+            guildData.leaderId = leaderEntry[0];
+        }
+
+        await setDoc(doc(db, `/artifacts/${appId}/public/data/mud-guilds/${guildId}`), guildData);
+        adminGuildStatus.textContent = `Guild "${guildName}" saved successfully!`;
+        document.getElementById('guild-id').setAttribute('readonly', 'readonly');
+        populateGuildSelector();
+    });
+
+    document.getElementById('delete-guild-btn').addEventListener('click', async () => {
+        const guildId = guildSelect.value;
+        if (!guildId) {
+            adminGuildStatus.textContent = 'No guild selected!';
+            return;
+        }
+
+        if (!confirm(`Delete guild "${gameGuilds[guildId]?.name}"? This cannot be undone and will remove all members from the guild.`)) {
+            return;
+        }
+
+        // Remove guild from all players
+        for (const [playerId, player] of Object.entries(gamePlayers)) {
+            if (player.guildId === guildId) {
+                const playerRef = doc(db, `/artifacts/${appId}/public/data/mud-players/${playerId}`);
+                await updateDoc(playerRef, { guildId: "" });
+            }
+        }
+
+        await deleteDoc(doc(db, `/artifacts/${appId}/public/data/mud-guilds/${guildId}`));
+        adminGuildStatus.textContent = 'Guild deleted successfully!';
+        clearGuildForm();
+        populateGuildSelector();
+    });
+
+    // Initialize guild selector
+    populateGuildSelector();
+
+    // ========== QUEST MANAGEMENT ==========
+    
+    const questSelect = document.getElementById('quest-select');
+    const questIdInput = document.getElementById('quest-id');
+    const questTitleInput = document.getElementById('quest-title');
+    const questDescriptionInput = document.getElementById('quest-description');
+    const questLevelReqInput = document.getElementById('quest-level-req');
+    const questRepeatableSelect = document.getElementById('quest-repeatable');
+    const questPartyQuestSelect = document.getElementById('quest-party-quest');
+    const questGiverNpcInput = document.getElementById('quest-giver-npc');
+    const questTurninNpcInput = document.getElementById('quest-turnin-npc');
+    const questObjectivesInput = document.getElementById('quest-objectives');
+    const questRewardsInput = document.getElementById('quest-rewards');
+    const questPrerequisitesInput = document.getElementById('quest-prerequisites');
+    const saveQuestBtn = document.getElementById('save-quest-btn');
+    const newQuestBtn = document.getElementById('new-quest-btn');
+    const deleteQuestBtn = document.getElementById('delete-quest-btn');
+    const adminQuestStatus = document.getElementById('admin-quest-status');
+
+    function populateQuestSelector() {
+        questSelect.innerHTML = '<option value="">-- Select Quest --</option>';
+        Object.values(gameQuests).forEach(quest => {
+            const option = document.createElement('option');
+            option.value = quest.id;
+            option.textContent = `${quest.title || quest.id}`;
+            questSelect.appendChild(option);
+        });
+    }
+
+    function loadQuestData(questId) {
+        const quest = gameQuests[questId];
+        if (!quest) return;
+
+        questIdInput.value = quest.id || '';
+        questTitleInput.value = quest.title || '';
+        questDescriptionInput.value = quest.description || '';
+        questLevelReqInput.value = quest.levelRequired || 1;
+        questRepeatableSelect.value = quest.isRepeatable ? 'true' : 'false';
+        questPartyQuestSelect.value = quest.isPartyQuest ? 'true' : 'false';
+        questGiverNpcInput.value = quest.giverNpcId || '';
+        questTurninNpcInput.value = quest.turninNpcId || '';
+        questObjectivesInput.value = quest.objectives ? JSON.stringify(quest.objectives, null, 2) : '[]';
+        questRewardsInput.value = quest.rewards ? JSON.stringify(quest.rewards, null, 2) : '{}';
+        questPrerequisitesInput.value = quest.prerequisites ? JSON.stringify(quest.prerequisites, null, 2) : '[]';
+    }
+
+    function clearQuestForm() {
+        questIdInput.value = '';
+        questTitleInput.value = '';
+        questDescriptionInput.value = '';
+        questLevelReqInput.value = '1';
+        questRepeatableSelect.value = 'false';
+        questPartyQuestSelect.value = 'false';
+        questGiverNpcInput.value = '';
+        questTurninNpcInput.value = '';
+        questObjectivesInput.value = '[]';
+        questRewardsInput.value = '{}';
+        questPrerequisitesInput.value = '[]';
+        questSelect.value = '';
+        adminQuestStatus.textContent = '';
+    }
+
+    questSelect.addEventListener('change', () => {
+        if (questSelect.value) {
+            loadQuestData(questSelect.value);
+        }
+    });
+
+    newQuestBtn.addEventListener('click', clearQuestForm);
+
+    saveQuestBtn.addEventListener('click', async () => {
+        const questId = questIdInput.value.trim();
+        if (!questId) {
+            adminQuestStatus.textContent = 'Quest ID is required!';
+            return;
+        }
+
+        const title = questTitleInput.value.trim();
+        if (!title) {
+            adminQuestStatus.textContent = 'Quest title is required!';
+            return;
+        }
+
+        // Parse JSON fields
+        let objectives, rewards, prerequisites;
+        try {
+            objectives = JSON.parse(questObjectivesInput.value || '[]');
+        } catch (e) {
+            adminQuestStatus.textContent = 'Invalid JSON in Objectives field!';
+            return;
+        }
+
+        try {
+            rewards = JSON.parse(questRewardsInput.value || '{}');
+        } catch (e) {
+            adminQuestStatus.textContent = 'Invalid JSON in Rewards field!';
+            return;
+        }
+
+        try {
+            prerequisites = JSON.parse(questPrerequisitesInput.value || '[]');
+        } catch (e) {
+            adminQuestStatus.textContent = 'Invalid JSON in Prerequisites field!';
+            return;
+        }
+
+        const questData = {
+            id: questId,
+            title: title,
+            description: questDescriptionInput.value.trim() || '',
+            levelRequired: parseInt(questLevelReqInput.value) || 1,
+            isRepeatable: questRepeatableSelect.value === 'true',
+            isPartyQuest: questPartyQuestSelect.value === 'true',
+            giverNpcId: questGiverNpcInput.value.trim() || '',
+            turninNpcId: questTurninNpcInput.value.trim() || questGiverNpcInput.value.trim() || '',
+            objectives: objectives,
+            rewards: rewards,
+            prerequisites: prerequisites
+        };
+
+        await setDoc(doc(db, `/artifacts/${appId}/public/data/mud-quests/${questId}`), questData);
+        adminQuestStatus.textContent = 'Quest saved successfully!';
+        populateQuestSelector();
+    });
+
+    deleteQuestBtn.addEventListener('click', async () => {
+        const questId = questIdInput.value.trim();
+        if (!questId) {
+            adminQuestStatus.textContent = 'No quest selected to delete!';
+            return;
+        }
+
+        if (!confirm(`Are you sure you want to delete quest "${questId}"? This will affect all players who have this quest!`)) {
+            return;
+        }
+
+        // Remove quest from all players' active and completed quests
+        for (const [playerId, player] of Object.entries(gamePlayers)) {
+            let needsUpdate = false;
+            const updates = {};
+
+            if (player.activeQuests && player.activeQuests.some(q => q.questId === questId)) {
+                updates.activeQuests = player.activeQuests.filter(q => q.questId !== questId);
+                needsUpdate = true;
+            }
+
+            if (player.completedQuests && player.completedQuests.includes(questId)) {
+                updates.completedQuests = player.completedQuests.filter(id => id !== questId);
+                needsUpdate = true;
+            }
+
+            if (needsUpdate) {
+                const playerRef = doc(db, `/artifacts/${appId}/public/data/mud-players/${playerId}`);
+                await updateDoc(playerRef, updates);
+            }
+        }
+
+        await deleteDoc(doc(db, `/artifacts/${appId}/public/data/mud-quests/${questId}`));
+        adminQuestStatus.textContent = 'Quest deleted successfully!';
+        clearQuestForm();
+        populateQuestSelector();
+    });
+
+    // Initialize quest selector
+    populateQuestSelector();
 
     // ========== MAP VISUALIZATION ==========
     let networkInstance = null;
@@ -2643,4 +3111,146 @@ async function initializeActionsEditor(db, appId) {
     // Initial load
     await loadActions();
     populateActionUI();
+}
+
+// ========== SETTINGS PANEL ==========
+
+let gameLogicReference = null; // Store reference to game logic
+
+/**
+ * Initialize Settings Panel
+ */
+function initializeSettingsPanel() {
+    const toggle = document.getElementById('npc-conversations-toggle');
+    const thresholdInput = document.getElementById('npc-chat-player-threshold');
+    const saveBtn = document.getElementById('save-npc-settings-btn');
+    const testBtn = document.getElementById('test-npc-conversations-btn');
+    const statusBadge = document.getElementById('npc-conversations-status');
+    const playerCountSpan = document.getElementById('active-player-count');
+    const thresholdDisplaySpan = document.getElementById('threshold-display');
+    const warningP = document.getElementById('threshold-warning');
+    
+    // Define helper functions first
+    const updatePlayerCount = () => {
+        // Get player count from global if available
+        let playerCount = 0;
+        try {
+            // This will be available from the game context
+            playerCount = window.gamePlayers ? Object.keys(window.gamePlayers).length : 0;
+        } catch (e) {
+            playerCount = 0;
+        }
+        
+        playerCountSpan.textContent = playerCount;
+        
+        const threshold = parseInt(thresholdInput.value, 10) || 0;
+        if (threshold > 0) {
+            thresholdDisplaySpan.textContent = `${threshold} players`;
+            if (playerCount > threshold) {
+                warningP.classList.remove('hidden');
+            } else {
+                warningP.classList.add('hidden');
+            }
+        } else {
+            thresholdDisplaySpan.textContent = 'No limit';
+            warningP.classList.add('hidden');
+        }
+    };
+    
+    const updateStatusDisplay = (settings) => {
+        const isEnabled = settings.enabled && !settings.autoDisabled && !settings.quotaExhausted;
+        
+        if (isEnabled) {
+            statusBadge.textContent = 'ENABLED';
+            statusBadge.className = 'px-3 py-1 rounded text-sm font-bold bg-green-500 text-white';
+        } else if (settings.quotaExhausted) {
+            statusBadge.textContent = 'QUOTA EXHAUSTED';
+            statusBadge.className = 'px-3 py-1 rounded text-sm font-bold bg-red-500 text-white';
+        } else if (settings.autoDisabled) {
+            statusBadge.textContent = 'AUTO-DISABLED';
+            statusBadge.className = 'px-3 py-1 rounded text-sm font-bold bg-yellow-500 text-black';
+        } else {
+            statusBadge.textContent = 'DISABLED';
+            statusBadge.className = 'px-3 py-1 rounded text-sm font-bold bg-gray-500 text-white';
+        }
+        
+        updatePlayerCount();
+    };
+    
+    // Load current settings
+    if (gameLogicReference) {
+        const settings = gameLogicReference.getNpcConversationSettings();
+        toggle.checked = settings.enabled;
+        thresholdInput.value = settings.threshold;
+        updateStatusDisplay(settings);
+    } else {
+        // Fallback to localStorage if gameLogic not available yet
+        const savedEnabled = localStorage.getItem('npcConversationsEnabled');
+        const enabled = savedEnabled === null ? true : savedEnabled === 'true'; // Default to true if never set
+        const threshold = parseInt(localStorage.getItem('npcChatPlayerThreshold') || '0', 10);
+        toggle.checked = enabled;
+        thresholdInput.value = threshold;
+    }
+    
+    // Update display initially and every 5 seconds
+    updatePlayerCount();
+    const intervalId = setInterval(updatePlayerCount, 5000);
+    
+    // Save settings
+    saveBtn.addEventListener('click', () => {
+        const enabled = toggle.checked;
+        const threshold = parseInt(thresholdInput.value, 10) || 0;
+        
+        if (gameLogicReference) {
+            gameLogicReference.setNpcConversationSettings(enabled, threshold);
+            const settings = gameLogicReference.getNpcConversationSettings();
+            updateStatusDisplay(settings);
+            console.log('✅ NPC conversation settings saved:', { enabled, threshold });
+            
+            // Also update the toggle to reflect saved state (in case of any processing)
+            toggle.checked = settings.enabled;
+            thresholdInput.value = settings.threshold;
+        } else {
+            // Fallback to localStorage
+            localStorage.setItem('npcConversationsEnabled', enabled.toString());
+            localStorage.setItem('npcChatPlayerThreshold', threshold.toString());
+            console.log('✅ Settings saved (will apply on page reload)');
+        }
+    });
+    
+    // Test button
+    testBtn.addEventListener('click', () => {
+        const status = gameLogicReference ? gameLogicReference.getNpcConversationSettings() : null;
+        if (status) {
+            const statusText = status.enabled ? 'ENABLED' : 'DISABLED';
+            const autoText = status.autoDisabled ? ' (auto-disabled)' : '';
+            const quotaText = status.quotaExhausted ? ' (quota exhausted)' : '';
+            console.log(`NPC Conversations: ${statusText}${autoText}${quotaText}`);
+            console.log(`Player threshold: ${status.threshold || 'none'}`);
+            console.log(`Active players: ${window.gamePlayers ? Object.keys(window.gamePlayers).length : 0}`);
+        } else {
+            console.log('Game logic not initialized yet');
+        }
+    });
+    
+    // Clean up interval when panel is hidden
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.target.classList.contains('hidden')) {
+                clearInterval(intervalId);
+            }
+        });
+    });
+    
+    const settingsPanel = document.getElementById('settings-panel');
+    if (settingsPanel) {
+        observer.observe(settingsPanel, { attributes: true, attributeFilter: ['class'] });
+    }
+}
+
+/**
+ * Set game logic reference for settings panel
+ */
+export function setGameLogicForSettings(gameLogic) {
+    gameLogicReference = gameLogic;
 }

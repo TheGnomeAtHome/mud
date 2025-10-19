@@ -5,7 +5,7 @@ import { initializeUI } from './ui.js';
 import { initializeAuth } from './auth.js';
 import { initializeDataLoader } from './data-loader.js';
 import { initializeGameLogic } from './game.js';
-import { initializeAdminPanel } from './admin.js';
+import { initializeAdminPanel, setGameLogicForSettings } from './admin.js';
 import { initializeBotSystem } from './bots.js';
 import { 
     callGeminiForText, 
@@ -145,8 +145,23 @@ export async function initializeApp() {
                     
                     const myCurrentRoom = gameLogic ? gameLogic.getCurrentRoom() : null;
                     
+                    // Special handling for NPC conversations - always show if in same room
+                    // (timestamp might be 0 due to serverTimestamp() being null initially)
+                    if (msg.isNpcConversation && msg.roomId === myCurrentRoom) {
+                        logToTerminal(`<span class="text-lime-300">${msg.username}</span> says, "${msg.text}"`, 'game');
+                        return; // Skip the normal message processing
+                    }
+                    
                     if (messageTime >= sessionStartTime && msg.roomId === myCurrentRoom) {
-                        if (msg.isEmote) {
+                        if (msg.isGuildChat) {
+                            const sender = msg.senderId === userId ? "You" : msg.senderName;
+                            logToTerminal(`[Guild] ${sender}: ${msg.text}`, 'system');
+                        } else if (msg.isPartyChat) {
+                            const sender = msg.senderId === userId ? "You" : msg.senderName;
+                            logToTerminal(`[Party] ${sender}: ${msg.text}`, 'party');
+                        } else if (msg.isSystem) {
+                            logToTerminal(msg.text, 'system');
+                        } else if (msg.isEmote) {
                             logToTerminal(msg.text, 'action');
                         } else if (msg.text.includes(' leaves ') || msg.text.includes(' arrives')) {
                             logToTerminal(msg.text, 'system');
@@ -324,15 +339,18 @@ export async function initializeApp() {
         appContainer.classList.remove('hidden');
         logToTerminal("Welcome to the M.U.D. - The Digital Realm!", "system");
         logToTerminal("Type 'help' for a list of commands.", "system");
+        logToTerminal("Loading game world...", "system");
         focusInput();
         
+        console.log('[Init] Starting game data load...');
         const worldReady = await dataLoader.loadGameData();
         if (!worldReady) {
             logToTerminal("Failed to initialize the game world. Please reload.", "error");
             return;
         }
+        console.log('[Init] Game data loaded successfully');
         
-        const { gameWorld, gameItems, gameNpcs, gameMonsters, gamePlayers, activeMonsters, gameClasses, gameSpells, gameGuilds } = dataLoader.gameData;
+        const { gameWorld, gameItems, gameNpcs, gameMonsters, gamePlayers, activeMonsters, gameClasses, gameSpells, gameGuilds, gameQuests, gameParties } = dataLoader.gameData;
         
         // Check if player should be admin - either already is, or if there are no admins
         let shouldBeAdmin = playerData.isAdmin || false;
@@ -358,6 +376,7 @@ export async function initializeApp() {
             adminToggleBtn.classList.remove('hidden');
         }
         
+        console.log('[Init] Initializing admin panel...');
         // Initialize admin panel
         adminPanelFunctions = initializeAdminPanel({
             db,
@@ -369,10 +388,14 @@ export async function initializeApp() {
             gamePlayers,
             gameClasses,
             gameSpells,
+            gameGuilds,
+            gameQuests,
             logToTerminal,
             firestoreFunctions
         });
+        console.log('[Init] Admin panel initialized');
         
+        console.log('[Init] Initializing game logic...');
         // Initialize game logic
         gameLogic = initializeGameLogic({
             db,
@@ -386,17 +409,33 @@ export async function initializeApp() {
             activeMonsters,
             gameSpells,
             gameGuilds,
+            gameQuests,
+            gameParties,
             logToTerminal,
             callGeminiForText,
             parseCommandWithGemini,
             GEMINI_API_KEY,
+            authFunctions,
             firestoreFunctions
         });
+        console.log('[Init] Game logic initialized');
         
+        console.log('[Init] Loading level config...');
         await gameLogic.loadLevelConfig(db, APP_ID);
+        console.log('[Init] Loading actions...');
         await gameLogic.loadActions(db, APP_ID);
+        console.log('[Init] Setting player info...');
+        console.log('[Init] Setting player info...');
         gameLogic.setPlayerInfo(userId, playerData.name, playerData.roomId);
         
+        // Pass gameLogic to settings panel
+        setGameLogicForSettings(gameLogic);
+        console.log('[Init] Game logic connected to settings panel');
+        
+        // Expose gamePlayers globally for admin panel
+        window.gamePlayers = gamePlayers;
+        
+        console.log('[Init] Initializing bot system...');
         // Initialize bot system
         botSystem = initializeBotSystem({
             db,
@@ -408,11 +447,16 @@ export async function initializeApp() {
             firestoreFunctions
         });
         window.botSystem = botSystem;
+        console.log('[Init] Bot system initialized');
         
+        console.log('[Init] Setting up message listener...');
         setupMessageListener();
         resetInactivityTimer();
         
+        console.log('[Init] Showing initial room...');
         await gameLogic.showRoom();
+        console.log('[Init] Initialization complete!');
+        logToTerminal("Ready to play! Game fully loaded.", "success");
     }
     
     // Command input handler
@@ -447,6 +491,11 @@ export async function initializeApp() {
                 }
                 
                 try {
+                    if (!gameLogic) {
+                        logToTerminal("Game not initialized yet. Please wait for authentication to complete.", "error");
+                        setInputEnabled(true);
+                        return;
+                    }
                     await gameLogic.executeParsedCommand(parsedCommand, cmdText);
                 } catch (error) {
                     console.error("Error executing command:", error);

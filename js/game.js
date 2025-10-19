@@ -14,9 +14,12 @@ export function initializeGameLogic(dependencies) {
         activeMonsters,
         gameSpells,
         gameGuilds,
+        gameQuests,
+        gameParties,
         logToTerminal,
         callGeminiForText,
         parseCommandWithGemini,
+        authFunctions,
         firestoreFunctions
     } = dependencies;
 
@@ -35,9 +38,10 @@ export function initializeGameLogic(dependencies) {
         arrayUnion, 
         arrayRemove,
         serverTimestamp,
-        runTransaction,
-        signOut
+        runTransaction
     } = firestoreFunctions;
+    
+    const { signOut } = authFunctions;
 
     let userId = null;
     let playerName = null;
@@ -200,6 +204,109 @@ export function initializeGameLogic(dependencies) {
         }
         
         return baseXp;
+    }
+
+    // Helper function to generate quest objective descriptions
+    function getObjectiveDescription(objective) {
+        switch (objective.type) {
+            case 'kill':
+                return `Kill ${objective.count} ${objective.target}`;
+            case 'collect':
+                return `Collect ${objective.count} ${objective.item}`;
+            case 'visit':
+                return `Visit ${objective.room}`;
+            case 'talk':
+                return `Talk to ${objective.npc}`;
+            default:
+                return `Complete objective: ${objective.type}`;
+        }
+    }
+
+    // Helper function to update quest progress
+    async function updateQuestProgress(playerId, progressType, target, count = 1) {
+        const playerData = gamePlayers[playerId];
+        if (!playerData || !playerData.activeQuests || playerData.activeQuests.length === 0) {
+            return [];
+        }
+
+        // Find player's party
+        const playerParty = Object.values(gameParties).find(p => 
+            p.members && Object.keys(p.members).includes(playerId)
+        );
+
+        const completedQuests = [];
+        const updatedQuests = [];
+        
+        for (const quest of playerData.activeQuests) {
+            const questData = gameQuests[quest.questId];
+            let questUpdated = false;
+            const updatedObjectives = quest.objectives.map(obj => {
+                if (obj.type === progressType) {
+                    // Match target (case insensitive)
+                    const objTarget = (obj.target || obj.item || obj.room || obj.npc || '').toLowerCase();
+                    const matchTarget = target.toLowerCase();
+                    
+                    if (objTarget === matchTarget || objTarget.includes(matchTarget) || matchTarget.includes(objTarget)) {
+                        if (obj.current < obj.count) {
+                            questUpdated = true;
+                            return { ...obj, current: Math.min(obj.current + count, obj.count) };
+                        }
+                    }
+                }
+                return obj;
+            });
+
+            if (questUpdated) {
+                // Check if all objectives are complete
+                const allComplete = updatedObjectives.every(obj => obj.current >= obj.count);
+                
+                if (allComplete) {
+                    completedQuests.push({ questId: quest.questId, objectives: updatedObjectives });
+                } else {
+                    updatedQuests.push({ ...quest, objectives: updatedObjectives });
+                }
+                
+                // If this is a party quest and player is in a party, update all party members
+                if (questData && questData.isPartyQuest && playerParty) {
+                    for (const memberId of Object.keys(playerParty.members)) {
+                        if (memberId !== playerId) {
+                            const memberData = gamePlayers[memberId];
+                            if (memberData && memberData.activeQuests) {
+                                // Find matching quest in member's active quests
+                                const memberQuestIndex = memberData.activeQuests.findIndex(aq => aq.questId === quest.questId);
+                                if (memberQuestIndex !== -1) {
+                                    const memberUpdatedQuests = [...memberData.activeQuests];
+                                    memberUpdatedQuests[memberQuestIndex] = {
+                                        ...memberUpdatedQuests[memberQuestIndex],
+                                        objectives: updatedObjectives
+                                    };
+                                    
+                                    // Update member's quest progress
+                                    const memberRef = doc(db, `/artifacts/${appId}/public/data/mud-players/${memberId}`);
+                                    await updateDoc(memberRef, {
+                                        activeQuests: allComplete 
+                                            ? memberUpdatedQuests.filter(q => q.questId !== quest.questId)
+                                            : memberUpdatedQuests
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                updatedQuests.push(quest);
+            }
+        }
+
+        // Update player's active quests if any changed
+        if (completedQuests.length > 0 || updatedQuests.length !== playerData.activeQuests.length) {
+            const playerRef = doc(db, `/artifacts/${appId}/public/data/mud-players/${playerId}`);
+            await updateDoc(playerRef, {
+                activeQuests: updatedQuests
+            });
+        }
+
+        return completedQuests;
     }
     
     // Calculate current level from XP (class-specific)
@@ -522,6 +629,12 @@ export function initializeGameLogic(dependencies) {
                 }
             });
         }
+        
+        // Start NPC conversations if there are 2+ AI NPCs in this room
+        startNpcConversationsInRoom(roomId);
+        
+        // Check for proactive AI NPCs that might greet the player
+        checkProactiveNpcs(roomId);
     }
     
     async function spawnMonster(monsterId, roomId) {
@@ -638,6 +751,881 @@ export function initializeGameLogic(dependencies) {
         logNpcResponse(npc, aiResponse);
     }
     
+    // NPC-to-NPC Conversation System
+    let npcConversationTimers = {}; // Track conversation timers by room
+    let npcConversationStates = {}; // Track conversation history between NPCs
+    let npcConversationsEnabled = true; // Global toggle for NPC conversations
+    let quotaExhausted = false; // Track if we've hit the daily quota
+    let npcChatPlayerThreshold = 0; // Auto-disable threshold (0 = no limit)
+    let npcConversationsAutoDisabled = false; // Track if auto-disabled due to player count
+    
+    // Wandering NPC System
+    let npcWanderTimers = {}; // Track wander timers for each NPC
+    let npcCurrentRooms = {}; // Track current room for each wandering NPC
+    
+    /**
+     * Load NPC conversation settings from localStorage
+     */
+    function loadNpcConversationSettings() {
+        try {
+            const savedEnabled = localStorage.getItem('npcConversationsEnabled');
+            const savedThreshold = localStorage.getItem('npcChatPlayerThreshold');
+            
+            if (savedEnabled !== null) {
+                npcConversationsEnabled = savedEnabled === 'true';
+            }
+            if (savedThreshold !== null) {
+                npcChatPlayerThreshold = parseInt(savedThreshold, 10) || 0;
+            }
+            
+            console.log('[NPC Conversations] Settings loaded:', { enabled: npcConversationsEnabled, threshold: npcChatPlayerThreshold });
+        } catch (error) {
+            console.error('[NPC Conversations] Error loading settings:', error);
+        }
+    }
+
+    /**
+     * Save NPC conversation settings to localStorage
+     */
+    function saveNpcConversationSettings() {
+        try {
+            localStorage.setItem('npcConversationsEnabled', npcConversationsEnabled.toString());
+            localStorage.setItem('npcChatPlayerThreshold', npcChatPlayerThreshold.toString());
+            console.log('[NPC Conversations] Settings saved');
+        } catch (error) {
+            console.error('[NPC Conversations] Error saving settings:', error);
+        }
+    }
+
+    /**
+     * Check if NPC conversations should be enabled based on player count
+     */
+    function checkNpcConversationPlayerThreshold() {
+        if (npcChatPlayerThreshold === 0) {
+            // No limit set
+            if (npcConversationsAutoDisabled) {
+                npcConversationsAutoDisabled = false;
+                console.log('[NPC Conversations] Auto-disable threshold removed, conversations allowed');
+            }
+            return true;
+        }
+
+        const activePlayers = Object.keys(gamePlayers).length;
+        const shouldDisable = activePlayers > npcChatPlayerThreshold;
+
+        if (shouldDisable && !npcConversationsAutoDisabled) {
+            npcConversationsAutoDisabled = true;
+            // Stop all active conversations
+            Object.keys(npcConversationTimers).forEach(roomId => {
+                stopNpcConversationsInRoom(roomId);
+            });
+            console.log(`[NPC Conversations] Auto-disabled: ${activePlayers} players exceeds threshold of ${npcChatPlayerThreshold}`);
+            if (logToTerminal) {
+                logToTerminal(`🔇 NPC conversations auto-disabled (${activePlayers} players > ${npcChatPlayerThreshold} threshold)`, "system");
+            }
+        } else if (!shouldDisable && npcConversationsAutoDisabled) {
+            npcConversationsAutoDisabled = false;
+            console.log(`[NPC Conversations] Auto-enabled: ${activePlayers} players within threshold of ${npcChatPlayerThreshold}`);
+            if (logToTerminal) {
+                logToTerminal(`💬 NPC conversations auto-enabled (${activePlayers} players ≤ ${npcChatPlayerThreshold} threshold)`, "system");
+            }
+            // Restart conversations in current room if applicable
+            const currentPlayer = gamePlayers[userId];
+            if (currentPlayer?.roomId && npcConversationsEnabled) {
+                startNpcConversationsInRoom(currentPlayer.roomId);
+            }
+        }
+
+        return !shouldDisable;
+    }
+
+    /**
+     * Load NPC conversation history from Firebase
+     */
+    async function loadNpcConversationHistory(roomId, npc1Id, npc2Id) {
+        const conversationKey = [npc1Id, npc2Id].sort().join('-') + '-' + roomId;
+        
+        try {
+            const conversationDoc = await getDoc(doc(db, `/artifacts/${appId}/public/data/mud-npc-conversations/${conversationKey}`));
+            
+            if (conversationDoc.exists()) {
+                const data = conversationDoc.data();
+                npcConversationStates[conversationKey] = {
+                    exchanges: data.exchanges || 0,
+                    history: data.history || []
+                };
+                console.log('[NPC Conversations] Loaded', data.history?.length || 0, 'messages from Firebase for', conversationKey);
+            } else {
+                npcConversationStates[conversationKey] = {
+                    exchanges: 0,
+                    history: []
+                };
+                console.log('[NPC Conversations] No previous conversation found, starting fresh');
+            }
+        } catch (error) {
+            console.error('[NPC Conversations] Error loading conversation history:', error);
+            npcConversationStates[conversationKey] = {
+                exchanges: 0,
+                history: []
+            };
+        }
+    }
+    
+    /**
+     * Save NPC conversation history to Firebase
+     */
+    async function saveNpcConversationHistory(conversationKey, state) {
+        try {
+            await setDoc(doc(db, `/artifacts/${appId}/public/data/mud-npc-conversations/${conversationKey}`), {
+                exchanges: state.exchanges,
+                history: state.history,
+                lastUpdated: serverTimestamp()
+            });
+            console.log('[NPC Conversations] Saved conversation history to Firebase');
+        } catch (error) {
+            console.error('[NPC Conversations] Error saving conversation history:', error);
+        }
+    }
+    
+    /**
+     * Start NPC conversations in a room if there are 2+ AI NPCs
+     */
+    async function startNpcConversationsInRoom(roomId) {
+        // Check if NPC conversations are enabled
+        if (!npcConversationsEnabled || quotaExhausted) {
+            console.log('[NPC Conversations] Disabled or quota exhausted');
+            return;
+        }
+
+        // Check player count threshold
+        if (!checkNpcConversationPlayerThreshold()) {
+            console.log('[NPC Conversations] Disabled due to player count threshold');
+            return;
+        }
+        
+        const room = gameWorld[roomId];
+        if (!room || !room.npcs || room.npcs.length < 2) {
+            console.log('[NPC Conversations] Not starting - need 2+ NPCs in room');
+            return;
+        }
+        
+        console.log('[NPC Conversations] Checking NPCs in room:', roomId);
+        
+        // Find AI NPCs in the room
+        const aiNpcs = room.npcs
+            .map(npcId => {
+                const npc = gameNpcs[npcId];
+                console.log('[NPC Conversations] Checking NPC:', npcId, 'dialogue:', npc?.dialogue);
+                return { id: npcId, ...npc };
+            })
+            .filter(npc => {
+                // AI NPCs have dialogue (either string or array with personality prompt)
+                // Traditional NPCs with random dialogue arrays usually have multiple short phrases
+                if (!npc.dialogue) return false;
+                
+                // If it's a string, it's a personality prompt (AI NPC)
+                if (typeof npc.dialogue === 'string' && npc.dialogue.length > 20) {
+                    console.log('[NPC Conversations] NPC', npc.id, 'is AI NPC: true (string personality)');
+                    return true;
+                }
+                
+                // If it's an array with one long element, it's a personality prompt (AI NPC)
+                if (Array.isArray(npc.dialogue) && npc.dialogue.length === 1 && npc.dialogue[0].length > 20) {
+                    console.log('[NPC Conversations] NPC', npc.id, 'is AI NPC: true (array personality)');
+                    return true;
+                }
+                
+                // Arrays with multiple short phrases are traditional random dialogue NPCs
+                console.log('[NPC Conversations] NPC', npc.id, 'is AI NPC: false (traditional NPC)');
+                return false;
+            });
+        
+        console.log('[NPC Conversations] Found AI NPCs:', aiNpcs.length);
+        
+        if (aiNpcs.length < 2) {
+            console.log('[NPC Conversations] Not enough AI NPCs for conversation');
+            return;
+        }
+        
+        console.log('[NPC Conversations] Starting conversations with NPCs:', aiNpcs.map(n => n.name));
+        
+        // Clear existing timer if any
+        if (npcConversationTimers[roomId]) {
+            clearInterval(npcConversationTimers[roomId]);
+        }
+        
+        // Start conversation cycle (every 60-120 seconds to avoid rate limits)
+        const conversationInterval = 60000 + Math.random() * 60000;
+        npcConversationTimers[roomId] = setInterval(() => {
+            triggerNpcConversation(roomId, aiNpcs);
+        }, conversationInterval);
+        
+        // Trigger initial conversation after longer delay (20-40 seconds)
+        const initialDelay = 20000 + Math.random() * 20000;
+        console.log('[NPC Conversations] First conversation will trigger in', Math.round(initialDelay/1000), 'seconds');
+        setTimeout(() => triggerNpcConversation(roomId, aiNpcs), initialDelay);
+    }
+    
+    /**
+     * Stop NPC conversations in a room
+     */
+    function stopNpcConversationsInRoom(roomId) {
+        if (npcConversationTimers[roomId]) {
+            clearInterval(npcConversationTimers[roomId]);
+            delete npcConversationTimers[roomId];
+        }
+    }
+    
+    /**
+     * Trigger a conversation between two random AI NPCs in a room
+     */
+    async function triggerNpcConversation(roomId, aiNpcs) {
+        console.log('[NPC Conversations] Triggering conversation in room:', roomId);
+        
+        if (!aiNpcs || aiNpcs.length < 2) {
+            console.log('[NPC Conversations] Not enough AI NPCs');
+            return;
+        }
+        
+        // Pick two random NPCs
+        const shuffled = [...aiNpcs].sort(() => Math.random() - 0.5);
+        const npc1 = shuffled[0];
+        const npc2 = shuffled[1];
+        
+        console.log('[NPC Conversations] Conversation between:', npc1.name, 'and', npc2.name);
+        
+        // Create consistent conversation key (sorted IDs to maintain history regardless of who speaks first)
+        const conversationKey = [npc1.id, npc2.id].sort().join('-') + '-' + roomId;
+        
+        // Load conversation history from Firebase if not in memory
+        if (!npcConversationStates[conversationKey]) {
+            await loadNpcConversationHistory(roomId, npc1.id, npc2.id);
+        }
+        
+        const state = npcConversationStates[conversationKey];
+        
+        console.log('[NPC Conversations] Conversation history has', state.history.length, 'previous messages');
+        
+        // Generate conversation (2-3 exchanges to reduce API calls and avoid rate limits)
+        const maxExchanges = 2 + Math.floor(Math.random() * 2);
+        
+        console.log('[NPC Conversations] Generating', maxExchanges, 'exchanges');
+        
+        for (let i = 0; i < maxExchanges && i < 3; i++) {
+            const speaker = i % 2 === 0 ? npc1 : npc2;
+            const listener = i % 2 === 0 ? npc2 : npc1;
+            
+            console.log('[NPC Conversations] Exchange', i+1, '- Speaker:', speaker.name);
+            
+            const response = await generateNpcDialogue(speaker, listener, roomId, state.history);
+            
+            if (response) {
+                console.log('[NPC Conversations]', speaker.name, 'says:', response);
+                
+                // Broadcast to all players in the room
+                broadcastNpcConversation(roomId, speaker, response);
+                
+                // Update conversation history (PERSIST across conversation cycles)
+                state.history.push({
+                    speaker: speaker.shortName || speaker.name,
+                    text: response
+                });
+                
+                // Keep last 12 messages (6 exchanges) for better context persistence
+                if (state.history.length > 12) {
+                    state.history.shift();
+                }
+                
+                state.exchanges++;
+                
+                // Add longer delay between exchanges (3-6 seconds) to avoid rate limits
+                await new Promise(resolve => setTimeout(resolve, 3000 + Math.random() * 3000));
+            } else {
+                console.log('[NPC Conversations] No response generated for', speaker.name);
+                // If we failed to generate (possibly rate limit), stop this conversation cycle
+                break;
+            }
+        }
+        
+        // Save conversation history to Firebase
+        await saveNpcConversationHistory(conversationKey, state);
+        
+        console.log('[NPC Conversations] Conversation complete. Total history:', state.history.length, 'messages');
+    }
+    
+    /**
+     * Generate dialogue for an NPC talking to another NPC
+     */
+    async function generateNpcDialogue(speaker, listener, roomId, history) {
+        const room = gameWorld[roomId];
+        
+        // Get personality prompts
+        let speakerPersonality = 'You are a friendly character.';
+        if (Array.isArray(speaker.dialogue)) {
+            speakerPersonality = speaker.dialogue.join(' ');
+        } else if (typeof speaker.dialogue === 'string') {
+            speakerPersonality = speaker.dialogue;
+        }
+        
+        let listenerPersonality = 'You are a friendly character.';
+        if (Array.isArray(listener.dialogue)) {
+            listenerPersonality = listener.dialogue.join(' ');
+        } else if (typeof listener.dialogue === 'string') {
+            listenerPersonality = listener.dialogue;
+        }
+        
+        // Build conversation history
+        let historyContext = "";
+        if (history.length > 0) {
+            historyContext = "\n\nCONVERSATION HISTORY (including past discussions):\n";
+            history.slice(-10).forEach(msg => {
+                historyContext += `${msg.speaker}: ${msg.text}\n`;
+            });
+        }
+        
+        // Check if last message was a question
+        const lastMessage = history.length > 0 ? history[history.length - 1] : null;
+        const lastWasQuestion = lastMessage && (lastMessage.text.includes('?') || lastMessage.text.match(/\b(what|where|when|why|how|who|which|could|would|should|can|will|did|do|does|is|are)\b/i));
+        
+        // Build prompt
+        const isFirstMessage = history.length === 0;
+        const prompt = `CONTEXT: You are ${speaker.shortName || speaker.name}, an NPC in a fantasy game. You are in "${room.name}". You are having an ongoing casual conversation with ${listener.shortName || listener.name}, another character in this location.
+
+YOUR PERSONALITY: ${speakerPersonality}
+
+${listener.shortName || listener.name}'S PERSONALITY: ${listenerPersonality}
+${historyContext}
+TASK: ${isFirstMessage ? 
+    `Start a natural conversation with ${listener.shortName || listener.name}. Maybe comment on the location, ask them a question, or mention something relevant to your personalities.` : 
+    lastWasQuestion ?
+    `${listener.shortName || listener.name} just asked you something. Answer their question naturally, staying in character. Keep it brief (1-2 sentences).` :
+    `Continue the conversation naturally. You can respond to what was just said, bring up a related topic from your past discussions, or take the conversation in a new direction. Keep it brief (1-2 sentences).`}
+
+IMPORTANT: 
+- Keep your response SHORT (1-2 sentences maximum)
+- Stay in character and maintain continuity with past conversations
+- Don't use quotation marks or attribution (just the dialogue)
+- If they asked a question, answer it before changing topics
+- Reference past discussions naturally when relevant
+- Be conversational and engaging`;
+
+        try {
+            const response = await callGeminiForText(prompt, logToTerminal);
+            // Clean up the response
+            let cleaned = response
+                .replace(/^["']|["']$/g, '') // Remove quotes at start/end
+                .replace(/^[^:]+:\s*/, '') // Remove "Speaker:" prefix if present
+                .trim();
+            
+            return cleaned;
+        } catch (error) {
+            console.error('Error generating NPC dialogue:', error);
+            // If it's a rate limit or quota error, disable NPC conversations
+            if (error.message && (error.message.includes('429') || error.message.includes('quota'))) {
+                console.log('[NPC Conversations] API limit reached - disabling NPC conversations');
+                quotaExhausted = true;
+                // Stop all NPC conversation timers
+                Object.keys(npcConversationTimers).forEach(roomId => {
+                    stopNpcConversationsInRoom(roomId);
+                });
+                return null;
+            }
+            return null;
+        }
+    }
+    
+    /**
+     * Broadcast NPC conversation to all players in the room
+     */
+    function broadcastNpcConversation(roomId, npc, message) {
+        console.log('[NPC Conversations] Broadcasting to room:', roomId, 'Message:', message);
+        
+        // Debug: Log all players
+        console.log('[NPC Conversations] All players in gamePlayers:', Object.keys(gamePlayers).length);
+        Object.values(gamePlayers).forEach(p => {
+            console.log('[NPC Conversations] Player:', p.name, 'RoomId:', p.roomId);
+        });
+        
+        // Find all players in this room
+        const playersInRoom = Object.values(gamePlayers).filter(p => p.roomId === roomId);
+        
+        console.log('[NPC Conversations] Players in room:', playersInRoom.length);
+        
+        // If no players found, still send the message (it will be picked up by message listener)
+        const messageRef = collection(db, `/artifacts/${appId}/public/data/mud-messages`);
+        addDoc(messageRef, {
+            roomId: roomId,
+            userId: 'npc-conversation',
+            username: npc.shortName || npc.name,
+            text: message,
+            timestamp: serverTimestamp(),
+            isNpcConversation: true
+        }).then(() => {
+            console.log('[NPC Conversations] Message sent successfully');
+        }).catch(err => {
+            console.error('[NPC Conversations] Error broadcasting:', err);
+        });
+    }
+    
+    // ========== WANDERING NPC SYSTEM ==========
+    
+    /**
+     * Initialize wandering behavior for NPCs that have wandering enabled
+     */
+    function initializeWanderingNpcs() {
+        console.log('[Wandering NPCs] Initializing wandering NPC system...');
+        
+        Object.entries(gameNpcs).forEach(([npcId, npc]) => {
+            if (npc.wanders) {
+                // Set initial room if not already set
+                if (!npcCurrentRooms[npcId]) {
+                    // Find NPC's starting room
+                    const startingRoom = Object.values(gameWorld).find(room => 
+                        room.npcs && room.npcs.includes(npcId)
+                    );
+                    if (startingRoom) {
+                        npcCurrentRooms[npcId] = startingRoom.id;
+                        console.log(`[Wandering NPCs] ${npc.name} starts in room: ${startingRoom.id}`);
+                    }
+                }
+                
+                // Start wandering timer
+                startNpcWandering(npcId, npc);
+            }
+        });
+    }
+    
+    /**
+     * Start wandering behavior for a specific NPC
+     */
+    function startNpcWandering(npcId, npc) {
+        // Stop any existing timer
+        if (npcWanderTimers[npcId]) {
+            clearInterval(npcWanderTimers[npcId]);
+        }
+        
+        // Default wander interval: 60-180 seconds (1-3 minutes)
+        const minInterval = (npc.wanderInterval?.min || 60) * 1000;
+        const maxInterval = (npc.wanderInterval?.max || 180) * 1000;
+        
+        const scheduleNextMove = () => {
+            const interval = Math.floor(Math.random() * (maxInterval - minInterval) + minInterval);
+            
+            npcWanderTimers[npcId] = setTimeout(() => {
+                moveNpcToRandomRoom(npcId, npc);
+                scheduleNextMove(); // Schedule next move
+            }, interval);
+            
+            console.log(`[Wandering NPCs] ${npc.name} will move in ${Math.floor(interval/1000)} seconds`);
+        };
+        
+        scheduleNextMove();
+    }
+    
+    /**
+     * Stop wandering for a specific NPC
+     */
+    function stopNpcWandering(npcId) {
+        if (npcWanderTimers[npcId]) {
+            clearTimeout(npcWanderTimers[npcId]);
+            delete npcWanderTimers[npcId];
+            console.log(`[Wandering NPCs] Stopped wandering for NPC: ${npcId}`);
+        }
+    }
+    
+    /**
+     * Move an NPC to a random connected room
+     */
+    async function moveNpcToRandomRoom(npcId, npc) {
+        const currentRoomId = npcCurrentRooms[npcId];
+        if (!currentRoomId) {
+            console.log(`[Wandering NPCs] ${npc.name} has no current room`);
+            return;
+        }
+        
+        const currentRoom = gameWorld[currentRoomId];
+        if (!currentRoom || !currentRoom.exits) {
+            console.log(`[Wandering NPCs] ${npc.name} in room with no exits`);
+            return;
+        }
+        
+        // Get list of valid exits
+        let exits = [];
+        try {
+            exits = typeof currentRoom.exits === 'string' 
+                ? JSON.parse(currentRoom.exits) 
+                : currentRoom.exits;
+        } catch (e) {
+            console.error(`[Wandering NPCs] Error parsing exits for room ${currentRoomId}:`, e);
+            return;
+        }
+        
+        const exitDirections = Object.keys(exits);
+        if (exitDirections.length === 0) {
+            console.log(`[Wandering NPCs] ${npc.name} in room with no valid exits`);
+            return;
+        }
+        
+        // Choose random exit
+        const randomDirection = exitDirections[Math.floor(Math.random() * exitDirections.length)];
+        const newRoomId = exits[randomDirection];
+        
+        if (!gameWorld[newRoomId]) {
+            console.log(`[Wandering NPCs] Invalid destination room: ${newRoomId}`);
+            return;
+        }
+        
+        // Update room data in Firebase
+        try {
+            // Remove NPC from old room
+            const oldRoomRef = doc(db, `/artifacts/${appId}/public/data/mud-rooms/${currentRoomId}`);
+            const oldRoomDoc = await getDoc(oldRoomRef);
+            if (oldRoomDoc.exists()) {
+                const oldRoomData = oldRoomDoc.data();
+                const updatedNpcs = (oldRoomData.npcs || []).filter(id => id !== npcId);
+                await updateDoc(oldRoomRef, { npcs: updatedNpcs });
+            }
+            
+            // Add NPC to new room
+            const newRoomRef = doc(db, `/artifacts/${appId}/public/data/mud-rooms/${newRoomId}`);
+            const newRoomDoc = await getDoc(newRoomRef);
+            if (newRoomDoc.exists()) {
+                const newRoomData = newRoomDoc.data();
+                const updatedNpcs = [...(newRoomData.npcs || []), npcId];
+                await updateDoc(newRoomRef, { npcs: updatedNpcs });
+            }
+            
+            // Update local state
+            npcCurrentRooms[npcId] = newRoomId;
+            
+            // Broadcast movement to players in both rooms
+            await broadcastNpcMovement(npcId, npc, currentRoomId, newRoomId, randomDirection);
+            
+            console.log(`[Wandering NPCs] ${npc.name} moved from ${currentRoomId} to ${newRoomId} (${randomDirection})`);
+            
+        } catch (error) {
+            console.error(`[Wandering NPCs] Error moving ${npc.name}:`, error);
+        }
+    }
+    
+    /**
+     * Broadcast NPC movement to players in affected rooms
+     */
+    async function broadcastNpcMovement(npcId, npc, fromRoomId, toRoomId, direction) {
+        const npcName = npc.shortName || npc.name;
+        
+        // Message to players in the room the NPC is leaving
+        const leaveMessage = `${npcName} leaves ${direction}.`;
+        const messageRef1 = collection(db, `/artifacts/${appId}/public/data/mud-messages`);
+        await addDoc(messageRef1, {
+            roomId: fromRoomId,
+            userId: 'system',
+            username: 'System',
+            text: leaveMessage,
+            timestamp: serverTimestamp(),
+            isSystem: true
+        });
+        
+        // Message to players in the room the NPC is entering
+        const arriveMessage = `${npcName} arrives.`;
+        const messageRef2 = collection(db, `/artifacts/${appId}/public/data/mud-messages`);
+        await addDoc(messageRef2, {
+            roomId: toRoomId,
+            userId: 'system',
+            username: 'System',
+            text: arriveMessage,
+            timestamp: serverTimestamp(),
+            isSystem: true
+        });
+        
+        // If current player is in either room, refresh their view
+        const currentPlayer = gamePlayers[userId];
+        if (currentPlayer && (currentPlayer.roomId === fromRoomId || currentPlayer.roomId === toRoomId)) {
+            // Give a slight delay to let Firebase sync
+            setTimeout(() => {
+                showRoom(currentPlayer.roomId);
+            }, 500);
+        }
+    }
+    
+    // ========== PROACTIVE NPC SYSTEM ==========
+    
+    let npcGreetingTimers = {}; // Track greeting timers by NPC ID
+    let npcLastGreeting = {}; // Track last greeting time to avoid spam
+    
+    /**
+     * Check for proactive AI NPCs in the room and potentially trigger greeting/ambient dialogue
+     */
+    function checkProactiveNpcs(roomId) {
+        const room = gameWorld[roomId];
+        if (!room || !room.npcs) return;
+        
+        // Find AI NPCs in the room
+        const aiNpcs = room.npcs.filter(npcId => {
+            const npc = gameNpcs[npcId];
+            if (!npc) return false;
+            
+            // Check if NPC uses AI (string dialogue >20 chars OR array with 1 element >20 chars)
+            const isAiNpc = typeof npc.dialogue === 'string' && npc.dialogue.length > 20 ||
+                           (Array.isArray(npc.dialogue) && npc.dialogue.length === 1 && npc.dialogue[0].length > 20);
+            
+            return isAiNpc && npc.proactiveGreeting;
+        });
+        
+        if (aiNpcs.length === 0) return;
+        
+        // Schedule proactive greetings for each AI NPC
+        aiNpcs.forEach(npcId => {
+            scheduleProactiveGreeting(npcId, roomId);
+        });
+    }
+    
+    /**
+     * Schedule a proactive greeting from an NPC
+     */
+    function scheduleProactiveGreeting(npcId, roomId) {
+        const npc = gameNpcs[npcId];
+        if (!npc) return;
+        
+        // Don't greet too frequently - check last greeting time
+        const now = Date.now();
+        const lastGreeting = npcLastGreeting[npcId] || 0;
+        const minTimeBetweenGreetings = (npc.greetingInterval?.min || 120) * 1000; // Default 2 minutes
+        
+        if (now - lastGreeting < minTimeBetweenGreetings) {
+            console.log(`[Proactive NPCs] ${npc.name} greeted recently, skipping`);
+            return;
+        }
+        
+        // Clear any existing timer for this NPC
+        if (npcGreetingTimers[npcId]) {
+            clearTimeout(npcGreetingTimers[npcId]);
+        }
+        
+        // Random delay before greeting (5-30 seconds after player enters)
+        const minDelay = (npc.greetingDelay?.min || 5) * 1000;
+        const maxDelay = (npc.greetingDelay?.max || 30) * 1000;
+        const delay = Math.floor(Math.random() * (maxDelay - minDelay) + minDelay);
+        
+        npcGreetingTimers[npcId] = setTimeout(async () => {
+            await triggerProactiveGreeting(npcId, roomId);
+        }, delay);
+        
+        console.log(`[Proactive NPCs] ${npc.name} will greet in ${Math.floor(delay/1000)} seconds`);
+    }
+    
+    /**
+     * Trigger a proactive greeting from an NPC
+     */
+    async function triggerProactiveGreeting(npcId, roomId) {
+        const npc = gameNpcs[npcId];
+        if (!npc) return;
+        
+        // Check if NPC is still in the room (could have wandered away)
+        const room = gameWorld[roomId];
+        if (!room || !room.npcs || !room.npcs.includes(npcId)) {
+            console.log(`[Proactive NPCs] ${npc.name} no longer in room ${roomId}`);
+            return;
+        }
+        
+        // Check if there are still players in the room
+        const playersInRoom = Object.values(gamePlayers).filter(p => p.roomId === roomId);
+        if (playersInRoom.length === 0) {
+            console.log(`[Proactive NPCs] No players in room ${roomId}`);
+            return;
+        }
+        
+        // Generate greeting using AI
+        const greeting = await generateProactiveGreeting(npc, playersInRoom);
+        
+        if (greeting) {
+            // Broadcast greeting to room
+            const messageRef = collection(db, `/artifacts/${appId}/public/data/mud-messages`);
+            await addDoc(messageRef, {
+                roomId: roomId,
+                userId: `npc-${npcId}`,
+                username: npc.shortName || npc.name,
+                text: greeting,
+                timestamp: serverTimestamp(),
+                isNpcGreeting: true
+            });
+            
+            // Update last greeting time
+            npcLastGreeting[npcId] = Date.now();
+            
+            console.log(`[Proactive NPCs] ${npc.name} greeted players: "${greeting}"`);
+            
+            // Schedule next ambient dialogue
+            scheduleAmbientDialogue(npcId, roomId);
+        }
+    }
+    
+    /**
+     * Generate proactive greeting text using AI
+     */
+    async function generateProactiveGreeting(npc, playersInRoom) {
+        const playerCount = playersInRoom.length;
+        const playerNames = playersInRoom.map(p => p.name).join(', ');
+        
+        const prompt = `You are ${npc.shortName || npc.name}, an NPC in a fantasy game.
+Your personality: ${npc.dialogue}
+
+${playerCount} player${playerCount > 1 ? 's have' : ' has'} just entered your location: ${playerNames}.
+
+Generate a SHORT proactive greeting, action, or ambient dialogue (1-2 sentences max).
+This could be:
+- A friendly greeting
+- A song or poem (if you're a bard/minstrel)
+- An observation or comment
+- An action you're performing
+- Something related to your role/personality
+
+IMPORTANT:
+- Keep it very brief (1-2 sentences)
+- Don't use quotation marks
+- Don't include your name
+- Be in character
+- Make it feel natural and spontaneous
+- Match your personality from above
+
+Examples:
+- A minstrel: "strums a lute and begins singing a ballad about ancient heroes"
+- A merchant: "looks up from counting coins and waves enthusiastically"
+- A guard: "nods in acknowledgment and continues sharpening a blade"
+- A wizard: "glances up from a dusty tome with curiosity"`;
+
+        try {
+            const response = await callGeminiForText(prompt, logToTerminal);
+            return response.replace(/^["']|["']$/g, '').trim();
+        } catch (error) {
+            console.error('[Proactive NPCs] Error generating greeting:', error);
+            return null;
+        }
+    }
+    
+    /**
+     * Schedule periodic ambient dialogue from an NPC
+     */
+    function scheduleAmbientDialogue(npcId, roomId) {
+        const npc = gameNpcs[npcId];
+        if (!npc || !npc.ambientDialogue) return;
+        
+        // Clear any existing timer
+        if (npcGreetingTimers[`${npcId}-ambient`]) {
+            clearTimeout(npcGreetingTimers[`${npcId}-ambient`]);
+        }
+        
+        // Random interval for ambient dialogue (2-10 minutes)
+        const minInterval = (npc.ambientInterval?.min || 120) * 1000;
+        const maxInterval = (npc.ambientInterval?.max || 600) * 1000;
+        const interval = Math.floor(Math.random() * (maxInterval - minInterval) + minInterval);
+        
+        npcGreetingTimers[`${npcId}-ambient`] = setTimeout(async () => {
+            await triggerAmbientDialogue(npcId, roomId);
+            // Reschedule
+            scheduleAmbientDialogue(npcId, roomId);
+        }, interval);
+        
+        console.log(`[Proactive NPCs] ${npc.name} will perform ambient action in ${Math.floor(interval/1000)} seconds`);
+    }
+    
+    /**
+     * Trigger ambient dialogue/action from an NPC
+     */
+    async function triggerAmbientDialogue(npcId, roomId) {
+        const npc = gameNpcs[npcId];
+        if (!npc) return;
+        
+        // Check if NPC is still in the room
+        const room = gameWorld[roomId];
+        if (!room || !room.npcs || !room.npcs.includes(npcId)) {
+            console.log(`[Proactive NPCs] ${npc.name} no longer in room for ambient dialogue`);
+            return;
+        }
+        
+        // Check if there are players in the room
+        const playersInRoom = Object.values(gamePlayers).filter(p => p.roomId === roomId);
+        if (playersInRoom.length === 0) {
+            console.log(`[Proactive NPCs] No players in room for ambient dialogue`);
+            return;
+        }
+        
+        // Generate ambient dialogue
+        const dialogue = await generateAmbientDialogue(npc);
+        
+        if (dialogue) {
+            // Broadcast to room
+            const messageRef = collection(db, `/artifacts/${appId}/public/data/mud-messages`);
+            await addDoc(messageRef, {
+                roomId: roomId,
+                userId: `npc-${npcId}`,
+                username: npc.shortName || npc.name,
+                text: dialogue,
+                timestamp: serverTimestamp(),
+                isNpcAmbient: true
+            });
+            
+            console.log(`[Proactive NPCs] ${npc.name} ambient: "${dialogue}"`);
+        }
+    }
+    
+    /**
+     * Generate ambient dialogue/action using AI
+     */
+    async function generateAmbientDialogue(npc) {
+        const prompt = `You are ${npc.shortName || npc.name}, an NPC in a fantasy game.
+Your personality: ${npc.dialogue}
+
+Generate a SHORT ambient action or dialogue (1 sentence max) that you might do while going about your business.
+This should be something natural that doesn't require player response:
+- Humming a tune
+- Polishing equipment
+- Making an observation
+- Performing your craft
+- A brief comment about the weather/location
+
+IMPORTANT:
+- ONE sentence maximum
+- Don't use quotation marks
+- Don't include your name
+- Be in character
+- Don't directly address players
+- Make it atmospheric
+
+Examples:
+- A minstrel: "hums a cheerful melody while tuning the lute"
+- A blacksmith: "wipes sweat from brow and examines a freshly forged blade"
+- A merchant: "rearranges some items on the counter, muttering about inventory"
+- A wizard: "traces glowing runes in the air absentmindedly"`;
+
+        try {
+            const response = await callGeminiForText(prompt, logToTerminal);
+            return response.replace(/^["']|["']$/g, '').trim();
+        } catch (error) {
+            console.error('[Proactive NPCs] Error generating ambient dialogue:', error);
+            return null;
+        }
+    }
+    
+    /**
+     * Stop all proactive behavior for NPCs in a room
+     */
+    function stopProactiveNpcsInRoom(roomId) {
+        const room = gameWorld[roomId];
+        if (!room || !room.npcs) return;
+        
+        room.npcs.forEach(npcId => {
+            if (npcGreetingTimers[npcId]) {
+                clearTimeout(npcGreetingTimers[npcId]);
+                delete npcGreetingTimers[npcId];
+            }
+            if (npcGreetingTimers[`${npcId}-ambient`]) {
+                clearTimeout(npcGreetingTimers[`${npcId}-ambient`]);
+                delete npcGreetingTimers[`${npcId}-ambient`];
+            }
+        });
+    }
+    
     async function executeParsedCommand(parsedCommand, cmdText) {
         const { action, target, npc_target, topic, verb } = parsedCommand;
         
@@ -691,91 +1679,308 @@ export function initializeGameLogic(dependencies) {
             return null;
         };
 
-        // Generate combat description based on verb and damage
-        const getCombatDescription = (verb, attacker, target, damage, weaponName = null) => {
+        // ========== VERBOSE COMBAT DESCRIPTION SYSTEM ==========
+        
+        // Get dodge description based on defender's DEX
+        const getDodgeDescription = (defenderName, defenderDex, isPlayer = true) => {
+            const dex = defenderDex || 10;
+            const pronoun = isPlayer ? 'You' : defenderName;
+            const verb = isPlayer ? 'dodge' : 'dodges';
+            const possessive = isPlayer ? 'your' : 'the';
+            
+            if (dex >= 18) {
+                // High DEX - graceful, acrobatic dodges
+                const descriptions = [
+                    `${pronoun} ${verb} with lightning reflexes!`,
+                    `${pronoun} effortlessly sidestep${isPlayer ? '' : 's'} the attack!`,
+                    `${pronoun} ${verb} the blow with incredible agility!`,
+                    `${pronoun} duck${isPlayer ? '' : 's'} and weave${isPlayer ? '' : 's'}, avoiding the attack completely!`,
+                    `${pronoun} spin${isPlayer ? '' : 's'} away gracefully, the attack missing by mere inches!`
+                ];
+                return descriptions[Math.floor(Math.random() * descriptions.length)];
+            } else if (dex >= 14) {
+                // Medium DEX - competent dodges
+                const descriptions = [
+                    `${pronoun} ${verb} the attack!`,
+                    `${pronoun} quickly step${isPlayer ? '' : 's'} aside!`,
+                    `${pronoun} ${verb} out of the way!`,
+                    `${pronoun} lean${isPlayer ? '' : 's'} back, avoiding the strike!`,
+                    `${pronoun} nimbly avoid${isPlayer ? '' : 's'} the blow!`
+                ];
+                return descriptions[Math.floor(Math.random() * descriptions.length)];
+            } else {
+                // Low DEX - barely dodges
+                const descriptions = [
+                    `${pronoun} barely ${verb} the attack!`,
+                    `${pronoun} clumsily stumble${isPlayer ? '' : 's'} out of the way!`,
+                    `${pronoun} manage${isPlayer ? '' : 's'} to avoid the blow!`,
+                    `By luck, the attack misses ${isPlayer ? 'you' : defenderName}!`,
+                    `${pronoun} awkwardly ${verb} aside!`
+                ];
+                return descriptions[Math.floor(Math.random() * descriptions.length)];
+            }
+        };
+        
+        // Get block description (for shields or armor)
+        const getBlockDescription = (defenderName, blockType, itemName, isPlayer = true) => {
+            const pronoun = isPlayer ? 'You' : defenderName;
+            const verb = isPlayer ? 'raise' : 'raises';
+            const possessive = isPlayer ? 'your' : 'their';
+            
+            if (blockType === 'shield') {
+                const descriptions = [
+                    `${pronoun} ${verb} ${possessive} ${itemName} and block${isPlayer ? '' : 's'} the attack!`,
+                    `${pronoun} intercept${isPlayer ? '' : 's'} the blow with ${possessive} ${itemName}!`,
+                    `${possessive.charAt(0).toUpperCase() + possessive.slice(1)} ${itemName} absorbs the impact!`,
+                    `The attack strikes ${possessive} ${itemName} with a resounding CLANG!`,
+                    `${pronoun} deflect${isPlayer ? '' : 's'} the strike with ${possessive} ${itemName}!`
+                ];
+                return descriptions[Math.floor(Math.random() * descriptions.length)];
+            } else if (blockType === 'armor') {
+                const descriptions = [
+                    `The blow glances off ${possessive} ${itemName}!`,
+                    `${possessive.charAt(0).toUpperCase() + possessive.slice(1)} ${itemName} absorbs most of the impact!`,
+                    `The attack deflects off ${possessive} ${itemName}!`,
+                    `${possessive.charAt(0).toUpperCase() + possessive.slice(1)} ${itemName} protects ${isPlayer ? 'you' : 'them'} from the worst of it!`,
+                    `The strike clangs harmlessly against ${possessive} ${itemName}!`
+                ];
+                return descriptions[Math.floor(Math.random() * descriptions.length)];
+            }
+        };
+        
+        // Get damage severity level
+        const getDamageSeverity = (damage) => {
+            if (damage <= 3) return 'light';
+            if (damage <= 7) return 'moderate';
+            if (damage <= 12) return 'heavy';
+            if (damage <= 20) return 'severe';
+            return 'devastating';
+        };
+        
+        // Generate verbose combat description based on verb, damage, and context
+        const getVerboseCombatDescription = (verb, attacker, target, damage, weaponName = null, isCritical = false) => {
             const defaultVerb = 'hit';
             const actionVerb = verb || defaultVerb;
+            const severity = getDamageSeverity(damage);
             
-            // If we have a weapon, sometimes include it in the description (50% chance)
-            const useWeaponInDesc = weaponName && Math.random() < 0.5;
-            const weaponPhrase = useWeaponInDesc ? ` with ${weaponName}` : '';
+            // Weapon integration
+            const weaponPhrase = weaponName ? ` with ${weaponName}` : '';
+            const useWeapon = weaponName && Math.random() < 0.7; // 70% chance to mention weapon
             
-            const descriptions = {
-                'kick': [
-                    `${attacker} kicks ${target}`,
-                    `${attacker} delivers a powerful kick to ${target}`,
-                    `${attacker} boots ${target}`
-                ],
-                'punch': [
-                    `${attacker} punches ${target}`,
-                    `${attacker} lands a solid punch on ${target}`,
-                    `${attacker} strikes ${target} with a fist`
-                ],
-                'slash': [
-                    `${attacker} slashes at ${target}${weaponPhrase}`,
-                    `${attacker} cuts ${target}${weaponPhrase}`,
-                    `${attacker} swipes at ${target}${weaponPhrase}`
-                ],
-                'stab': [
-                    `${attacker} stabs ${target}${weaponPhrase}`,
-                    `${attacker} thrusts${weaponPhrase} into ${target}`,
-                    `${attacker} pierces ${target}${weaponPhrase}`
-                ],
-                'bite': [
-                    `${attacker} bites ${target}`,
-                    `${attacker} sinks teeth into ${target}`,
-                    `${attacker} snaps at ${target}`
-                ],
-                'headbutt': [
-                    `${attacker} headbutts ${target}`,
-                    `${attacker} rams their head into ${target}`,
-                    `${attacker} delivers a crushing headbutt to ${target}`
-                ],
-                'claw': [
-                    `${attacker} claws at ${target}`,
-                    `${attacker} rakes ${target} with sharp claws`,
-                    `${attacker} scratches ${target}`
-                ],
-                'hit': [
-                    `${attacker} hits ${target}${weaponPhrase}`,
-                    `${attacker} strikes ${target}${weaponPhrase}`,
-                    `${attacker} attacks ${target}${weaponPhrase}`
-                ],
-                'attack': [
-                    `${attacker} attacks ${target}${weaponPhrase}`,
-                    `${attacker} strikes ${target}${weaponPhrase}`,
-                    `${attacker} hits ${target}${weaponPhrase}`
-                ],
-                'swing': [
-                    `${attacker} swings${weaponPhrase} at ${target}`,
-                    `${attacker} takes a swing at ${target}${weaponPhrase}`,
-                    `${attacker} swings wildly at ${target}${weaponPhrase}`
-                ]
+            // Severity modifiers
+            const severityPhrases = {
+                'light': ['grazes', 'scratches', 'clips', 'nicks'],
+                'moderate': ['strikes', 'hits', 'wounds'],
+                'heavy': ['smashes', 'pounds', 'batters', 'crushes'],
+                'severe': ['devastates', 'pummels', 'savages', 'mauls'],
+                'devastating': ['annihilates', 'obliterates', 'decimates', 'pulverizes']
             };
             
-            const verbList = descriptions[actionVerb.toLowerCase()] || descriptions['hit'];
-            const description = verbList[Math.floor(Math.random() * verbList.length)];
-            return `${description} for ${damage} damage!`;
+            // Build descriptions based on verb and severity
+            let description = '';
+            
+            switch(actionVerb.toLowerCase()) {
+                case 'kick':
+                    if (severity === 'light') {
+                        description = `${attacker} delivers a glancing kick to ${target}`;
+                    } else if (severity === 'moderate') {
+                        description = `${attacker} kicks ${target} solidly`;
+                    } else if (severity === 'heavy') {
+                        description = `${attacker} delivers a crushing kick to ${target}`;
+                    } else {
+                        description = `${attacker} lands a bone-shattering kick on ${target}`;
+                    }
+                    break;
+                    
+                case 'punch':
+                    if (severity === 'light') {
+                        description = `${attacker} grazes ${target} with a quick jab`;
+                    } else if (severity === 'moderate') {
+                        description = `${attacker} lands a solid punch on ${target}`;
+                    } else if (severity === 'heavy') {
+                        description = `${attacker} drives a powerful fist into ${target}`;
+                    } else {
+                        description = `${attacker} unleashes a devastating haymaker on ${target}`;
+                    }
+                    break;
+                    
+                case 'slash':
+                case 'cut':
+                    const slashWeapon = useWeapon ? weaponPhrase : '';
+                    if (severity === 'light') {
+                        description = `${attacker} nicks ${target}${slashWeapon}, drawing a thin line of blood`;
+                    } else if (severity === 'moderate') {
+                        description = `${attacker} slashes across ${target}${slashWeapon}, opening a wound`;
+                    } else if (severity === 'heavy') {
+                        description = `${attacker} carves a deep gash in ${target}${slashWeapon}`;
+                    } else {
+                        description = `${attacker} cleaves into ${target}${slashWeapon} with tremendous force`;
+                    }
+                    break;
+                    
+                case 'stab':
+                case 'pierce':
+                    const stabWeapon = useWeapon ? weaponPhrase : '';
+                    if (severity === 'light') {
+                        description = `${attacker} scratches ${target}${stabWeapon}`;
+                    } else if (severity === 'moderate') {
+                        description = `${attacker} pierces ${target}${stabWeapon}`;
+                    } else if (severity === 'heavy') {
+                        description = `${attacker} drives${stabWeapon} deep into ${target}`;
+                    } else {
+                        description = `${attacker} impales ${target}${stabWeapon}, blood spraying from the wound`;
+                    }
+                    break;
+                    
+                case 'bite':
+                    if (severity === 'light') {
+                        description = `${attacker} nips at ${target}`;
+                    } else if (severity === 'moderate') {
+                        description = `${attacker} sinks teeth into ${target}`;
+                    } else if (severity === 'heavy') {
+                        description = `${attacker} savagely bites ${target}`;
+                    } else {
+                        description = `${attacker} clamps powerful jaws on ${target}, tearing flesh`;
+                    }
+                    break;
+                    
+                case 'claw':
+                    if (severity === 'light') {
+                        description = `${attacker} scratches ${target} lightly`;
+                    } else if (severity === 'moderate') {
+                        description = `${attacker} rakes sharp claws across ${target}`;
+                    } else if (severity === 'heavy') {
+                        description = `${attacker} shreds ${target} with vicious claws`;
+                    } else {
+                        description = `${attacker} tears into ${target} with razor-sharp talons`;
+                    }
+                    break;
+                    
+                case 'swing':
+                case 'hit':
+                case 'attack':
+                default:
+                    const hitWeapon = useWeapon ? weaponPhrase : '';
+                    if (severity === 'light') {
+                        const lightVerbs = ['taps', 'grazes', 'clips'];
+                        const lightVerb = lightVerbs[Math.floor(Math.random() * lightVerbs.length)];
+                        description = `${attacker} ${lightVerb} ${target}${hitWeapon}`;
+                    } else if (severity === 'moderate') {
+                        const modVerbs = ['strikes', 'hits', 'connects with'];
+                        const modVerb = modVerbs[Math.floor(Math.random() * modVerbs.length)];
+                        description = `${attacker} ${modVerb} ${target}${hitWeapon}`;
+                    } else if (severity === 'heavy') {
+                        const heavyVerbs = ['smashes', 'pounds', 'hammers'];
+                        const heavyVerb = heavyVerbs[Math.floor(Math.random() * heavyVerbs.length)];
+                        description = `${attacker} ${heavyVerb} ${target}${hitWeapon}`;
+                    } else {
+                        const devVerbs = ['crushes', 'devastates', 'obliterates'];
+                        const devVerb = devVerbs[Math.floor(Math.random() * devVerbs.length)];
+                        description = `${attacker} ${devVerb} ${target}${hitWeapon}`;
+                    }
+                    break;
+            }
+            
+            // Add critical hit flair
+            if (isCritical) {
+                const critPhrases = [
+                    ' in a masterful strike',
+                    ' with perfect precision',
+                    ' finding a vulnerable spot',
+                    ' in a devastating blow',
+                    ' with lethal accuracy'
+                ];
+                description += critPhrases[Math.floor(Math.random() * critPhrases.length)];
+            }
+            
+            // Add damage amount with appropriate flair
+            if (isCritical) {
+                return `${description} for <span class="critical-damage">${damage} damage</span>! ⚡ <span class="critical-text">CRITICAL HIT!</span>`;
+            } else {
+                return `${description} for ${damage} damage!`;
+            }
         };
-
-        // Generate enemy counter-attack description
-        const getEnemyAttackDescription = (enemyName, damage) => {
-            const actions = [
-                `The ${enemyName} strikes back`,
-                `The ${enemyName} retaliates`,
-                `The ${enemyName} attacks`,
-                `The ${enemyName} lashes out`,
-                `The ${enemyName} counter-attacks`
-            ];
-            const action = actions[Math.floor(Math.random() * actions.length)];
-            return `${action}, hitting you for ${damage} damage!`;
+        
+        // Generate verbose enemy counter-attack description
+        const getVerboseEnemyAttackDescription = (enemyName, damage, attackType = 'standard', isCritical = false) => {
+            const severity = getDamageSeverity(damage);
+            const article = ['a', 'e', 'i', 'o', 'u'].includes(enemyName[0].toLowerCase()) ? 'an' : 'a';
+            
+            let description = '';
+            
+            // Varied attack descriptions based on severity
+            if (severity === 'light') {
+                const lightAttacks = [
+                    `The ${enemyName} lashes out weakly`,
+                    `The ${enemyName} strikes with a glancing blow`,
+                    `The ${enemyName} delivers a light attack`,
+                    `The ${enemyName} scratches you`
+                ];
+                description = lightAttacks[Math.floor(Math.random() * lightAttacks.length)];
+            } else if (severity === 'moderate') {
+                const modAttacks = [
+                    `The ${enemyName} counter-attacks`,
+                    `The ${enemyName} strikes back`,
+                    `The ${enemyName} retaliates`,
+                    `The ${enemyName} lands a solid hit`
+                ];
+                description = modAttacks[Math.floor(Math.random() * modAttacks.length)];
+            } else if (severity === 'heavy') {
+                const heavyAttacks = [
+                    `The ${enemyName} savagely counter-attacks`,
+                    `The ${enemyName} strikes with brutal force`,
+                    `The ${enemyName} delivers a crushing blow`,
+                    `The ${enemyName} hammers you with a powerful strike`
+                ];
+                description = heavyAttacks[Math.floor(Math.random() * heavyAttacks.length)];
+            } else {
+                const devAttacks = [
+                    `The ${enemyName} unleashes a devastating assault`,
+                    `The ${enemyName} attacks with terrifying power`,
+                    `The ${enemyName} delivers a bone-crushing strike`,
+                    `The ${enemyName} strikes with overwhelming force`
+                ];
+                description = devAttacks[Math.floor(Math.random() * devAttacks.length)];
+            }
+            
+            // Add damage
+            const damageText = isCritical ? 
+                `<span class="critical-damage">${damage} damage</span>! ⚡ <span class="critical-text">CRITICAL HIT!</span>` : 
+                `${damage} damage!`;
+                
+            return `${description}, hitting you for ${damageText}`;
         };
 
         // ========== ENHANCED COMBAT SYSTEM ==========
         // Calculate damage output based on all relevant attributes
+        // Helper function to get effective attributes including guild bonuses
+        const getEffectiveAttributes = (entity) => {
+            const baseAttrs = entity.attributes || { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
+            
+            // Check if entity is a player with a guild
+            if (entity.guildId && gameGuilds[entity.guildId]) {
+                const guild = gameGuilds[entity.guildId];
+                if (guild.perks && guild.perks.statBonus) {
+                    const bonuses = guild.perks.statBonus;
+                    const effectiveAttrs = { ...baseAttrs };
+                    
+                    // Apply guild stat bonuses
+                    Object.keys(baseAttrs).forEach(stat => {
+                        if (bonuses[stat]) {
+                            effectiveAttrs[stat] = baseAttrs[stat] + bonuses[stat];
+                        }
+                    });
+                    
+                    return effectiveAttrs;
+                }
+            }
+            
+            return baseAttrs;
+        };
+        
         const calculateDamage = (attacker, defender, weaponBonus = 0, isMagical = false) => {
-            const attackerAttrs = attacker.attributes || { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
-            const defenderAttrs = defender.attributes || { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
+            const attackerAttrs = getEffectiveAttributes(attacker);
+            const defenderAttrs = getEffectiveAttributes(defender);
             
             // Base damage: 1-6 + stat modifier
             let baseDamage = Math.ceil(Math.random() * 6);
@@ -819,7 +2024,7 @@ export function initializeGameLogic(dependencies) {
         
         // Calculate dodge chance based on DEX and WIS
         const calculateDodge = (defender) => {
-            const defenderAttrs = defender.attributes || { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
+            const defenderAttrs = getEffectiveAttributes(defender);
             
             // Base dodge: 5% + DEX modifier + WIS modifier
             const dexMod = Math.floor((defenderAttrs.dex - 10) / 2);
@@ -829,23 +2034,125 @@ export function initializeGameLogic(dependencies) {
             return Math.min(0.50, Math.max(0, dodgeChance)); // Cap at 50%
         };
         
-        // Apply combat result with detailed logging
-        const applyCombatResult = (result, attackerName, defenderName, combatMessages) => {
+        // Calculate shield block chance (if equipped)
+        const calculateShieldBlock = (defender) => {
+            // Check if defender has a shield equipped
+            if (!defender.equippedShield) return 0;
+            
+            const shield = gameItems[defender.equippedShield];
+            if (!shield || shield.type !== 'shield') return 0;
+            
+            // Base block chance: 15% + DEX modifier
+            const defenderAttrs = getEffectiveAttributes(defender);
+            const dexMod = Math.floor((defenderAttrs.dex - 10) / 2);
+            const blockChance = 0.15 + (dexMod * 0.02);
+            
+            return Math.min(0.40, Math.max(0, blockChance)); // Cap at 40%
+        };
+        
+        // Calculate armor damage reduction
+        const calculateArmorReduction = (defender, incomingDamage) => {
+            if (!defender.equippedArmor) return { reduction: 0, armorName: null };
+            
+            const armor = gameItems[defender.equippedArmor];
+            if (!armor || armor.type !== 'armor') return { reduction: 0, armorName: null };
+            
+            // Armor reduces damage by its damageReduction value (or defaults based on subtype)
+            let reduction = armor.damageReduction || 0;
+            
+            // Default reduction based on armor type if not specified
+            if (reduction === 0 && armor.subtype) {
+                const armorReductions = {
+                    'leather': 2,
+                    'chainmail': 3,
+                    'plate': 5,
+                    'cloth': 1
+                };
+                reduction = armorReductions[armor.subtype.toLowerCase()] || 0;
+            }
+            
+            // Random chance for armor to fully deflect weak attacks (10% for light damage)
+            const severity = getDamageSeverity(incomingDamage);
+            if (severity === 'light' && Math.random() < 0.10) {
+                return { reduction: incomingDamage, armorName: armor.name, fullDeflect: true };
+            }
+            
+            return { reduction, armorName: armor.name, fullDeflect: false };
+        };
+        
+        // Enhanced combat result application with verbose descriptions
+        const applyVerboseCombatResult = (result, attackerName, defenderName, combatMessages, defenderData = null, verb = 'hit', weaponName = null) => {
+            const defenderAttrs = defenderData ? getEffectiveAttributes(defenderData) : { dex: 10 };
+            
+            // Handle dodge
             if (result.dodged) {
+                const dodgeMsg = getDodgeDescription(defenderName, defenderAttrs.dex, attackerName === 'You');
                 combatMessages.push({ 
-                    msg: `${defenderName} dodges your attack!`, 
+                    msg: dodgeMsg, 
                     type: 'combat-log' 
                 });
-                return;
+                return { finalDamage: 0, blocked: false, dodged: true };
             }
             
-            let damageMsg = `${attackerName} hit ${defenderName} for ${result.damage} damage`;
-            
-            if (result.isCritical) {
-                damageMsg += ` (Critical Hit!)`;
+            // Handle shield block
+            if (result.blocked) {
+                const shieldName = defenderData?.equippedShield ? gameItems[defenderData.equippedShield]?.name : 'shield';
+                const blockMsg = getBlockDescription(defenderName, 'shield', shieldName, attackerName === 'You');
+                combatMessages.push({ 
+                    msg: blockMsg, 
+                    type: 'combat-log' 
+                });
+                
+                // Shield blocks reduce damage by 50-100%
+                const blockReduction = Math.floor(result.damage * (0.5 + Math.random() * 0.5));
+                const finalDamage = Math.max(0, result.damage - blockReduction);
+                
+                if (finalDamage > 0) {
+                    combatMessages.push({ 
+                        msg: `Some of the impact gets through for ${finalDamage} damage!`, 
+                        type: 'combat-log' 
+                    });
+                }
+                
+                return { finalDamage, blocked: true, dodged: false };
             }
             
-            combatMessages.push({ msg: damageMsg + '!', type: 'combat-log' });
+            // Handle armor reduction
+            let finalDamage = result.damage;
+            let armorReduction = 0;
+            let armorName = null;
+            let fullDeflect = false;
+            
+            if (defenderData && defenderData.equippedArmor) {
+                const armorResult = calculateArmorReduction(defenderData, result.damage);
+                armorReduction = armorResult.reduction;
+                armorName = armorResult.armorName;
+                fullDeflect = armorResult.fullDeflect;
+                finalDamage = Math.max(0, finalDamage - armorReduction);
+            }
+            
+            // Use verbose combat description
+            const combatMsg = getVerboseCombatDescription(
+                verb, 
+                attackerName, 
+                defenderName, 
+                finalDamage, 
+                weaponName, 
+                result.isCritical
+            );
+            
+            combatMessages.push({ msg: combatMsg, type: 'combat-log' });
+            
+            // Show armor deflection/reduction if applicable
+            if (fullDeflect && armorName) {
+                const deflectMsg = getBlockDescription(defenderName, 'armor', armorName, attackerName === 'You');
+                combatMessages.push({ msg: deflectMsg, type: 'game' });
+            } else if (armorReduction > 0 && armorName) {
+                combatMessages.push({ 
+                    msg: `(${armorName} absorbed ${armorReduction} damage)`, 
+                    type: 'game' 
+                });
+            }
             
             // Show combat breakdown if significant bonuses
             const bonusDetails = [];
@@ -853,13 +2160,16 @@ export function initializeGameLogic(dependencies) {
             if (result.dexBonus > 0) bonusDetails.push(`+${result.dexBonus} DEX`);
             if (result.weaponBonus > 0) bonusDetails.push(`+${result.weaponBonus} weapon`);
             if (result.conReduction > 0) bonusDetails.push(`-${result.conReduction} target CON`);
+            if (armorReduction > 0) bonusDetails.push(`-${armorReduction} armor`);
             
-            if (bonusDetails.length > 0) {
+            if (bonusDetails.length > 0 && !result.isCritical) {
                 combatMessages.push({ 
                     msg: `(${bonusDetails.join(', ')})`, 
                     type: 'game' 
                 });
             }
+            
+            return { finalDamage, blocked: false, dodged: false };
         };
 
         // Handle special item types (keys, teleport devices, etc.)
@@ -1198,6 +2508,24 @@ export function initializeGameLogic(dependencies) {
                     const destinationRoom = gameWorld[destinationRoomId];
                     const playerDoc = await getDoc(playerRef);
                     const playerData = playerDoc.data();
+                    
+                    // Stop NPC conversations and proactive NPCs in the old room
+                    stopNpcConversationsInRoom(currentPlayerRoomId);
+                    stopProactiveNpcsInRoom(currentPlayerRoomId);
+                    
+                    // Check if destination is a guild hall
+                    const guildHallGuild = Object.values(gameGuilds).find(g => g.guildHallRoomId === destinationRoomId);
+                    
+                    if (guildHallGuild) {
+                        // Check if player is a member of this guild
+                        const playerGuildId = playerData.guildId;
+                        
+                        if (playerGuildId !== guildHallGuild.id && !playerData.isAdmin) {
+                            logToTerminal(`The entrance to ${guildHallGuild.name}'s guild hall is restricted to members only.`, 'error');
+                            break;
+                        }
+                    }
+                    
                     const updates = { roomId: destinationRoomId };
                     
                     // Direction names for messages
@@ -1251,6 +2579,16 @@ export function initializeGameLogic(dependencies) {
                         timestamp: serverTimestamp()
                     });
                     
+                    // Check quest progress for visiting room
+                    const completedQuests = await updateQuestProgress(userId, 'visit', destinationRoomId, 1);
+                    for (const completed of completedQuests) {
+                        const quest = gameQuests[completed.questId];
+                        if (quest) {
+                            logToTerminal(`🎉 Quest Objectives Complete: ${quest.title}!`, 'quest');
+                            logToTerminal(`Return to ${quest.turninNpcId || quest.giverNpcId} to claim your reward.`, 'quest');
+                        }
+                    }
+                    
                     // Show the new room
                     await showRoom(destinationRoomId);
                 } else { logToTerminal("You can't go that way.", "error"); }
@@ -1285,6 +2623,16 @@ export function initializeGameLogic(dependencies) {
                     await updateDoc(roomRef, { items: arrayRemove(itemIdToGet) });
                     logToTerminal(`You take the ${item.name}.`, 'game');
                     
+                    // Check quest progress for item collection
+                    const completedQuests = await updateQuestProgress(userId, 'collect', itemIdToGet, 1);
+                    for (const completed of completedQuests) {
+                        const quest = gameQuests[completed.questId];
+                        if (quest) {
+                            logToTerminal(`🎉 Quest Objectives Complete: ${quest.title}!`, 'quest');
+                            logToTerminal(`Return to ${quest.turninNpcId || quest.giverNpcId} to claim your reward.`, 'quest');
+                        }
+                    }
+                    
                     // Log to news if item is newsworthy
                     if (item.newsworthy) {
                         await logNews('found', playerName, `found the ${item.name}!`);
@@ -1294,7 +2642,9 @@ export function initializeGameLogic(dependencies) {
             case 'drop':
                 const playerDocDrop = await getDoc(playerRef);
                 const inventoryDrop = playerDocDrop.data().inventory || [];
-                const itemToDrop = inventoryDrop.find(i => i.id.toLowerCase() === target || i.name.toLowerCase().includes(target));
+                const itemToDrop = inventoryDrop.find(i => 
+                    i && i.id && i.name && (i.id.toLowerCase() === target || i.name.toLowerCase().includes(target))
+                );
 
                 if (itemToDrop) {
                     await updateDoc(playerRef, { inventory: arrayRemove(itemToDrop) });
@@ -1437,11 +2787,14 @@ export function initializeGameLogic(dependencies) {
                 const playerDataUse = playerDocUse.data();
                 const currentInventory = playerDataUse.inventory || [];
 
-                // Find the item in inventory
-                const itemInInventory = currentInventory.find(item => 
-                    item.name.toLowerCase().includes(itemNameToUse.toLowerCase()) ||
-                    item.id.toLowerCase().includes(itemNameToUse.toLowerCase())
-                );
+                // Find the item in inventory (with safety checks)
+                const itemInInventory = currentInventory.find(item => {
+                    if (!item || !item.name || !item.id) return false;
+                    const itemName = item.name.toLowerCase();
+                    const itemId = item.id.toLowerCase();
+                    const searchTerm = itemNameToUse.toLowerCase();
+                    return itemName.includes(searchTerm) || itemId.includes(searchTerm);
+                });
 
                 if (!itemInInventory) {
                     logToTerminal("You don't have that item.", 'error');
@@ -1520,7 +2873,7 @@ export function initializeGameLogic(dependencies) {
                 }
                 
                 // Check if item is in inventory
-                const itemInInventoryRead = inventoryRead.find(item => item.id === itemToRead.id);
+                const itemInInventoryRead = inventoryRead.find(item => item && item.id === itemToRead.id);
                 
                 if (itemInInventoryRead) {
                     // Reading an item from inventory
@@ -1535,7 +2888,7 @@ export function initializeGameLogic(dependencies) {
                 } else {
                     // Check if it's a room detail that can be read
                     const roomDetails = currentRoom.details || {};
-                    const detailKey = Object.keys(roomDetails).find(key => key.toLowerCase() === target.toLowerCase());
+                    const detailKey = target ? Object.keys(roomDetails).find(key => key.toLowerCase() === target.toLowerCase()) : null;
                     
                     if (detailKey) {
                         const detailText = roomDetails[detailKey];
@@ -1832,20 +3185,30 @@ export function initializeGameLogic(dependencies) {
                     let newMonsterHp = monsterData.hp;
                     
                     if (monsterDodged) {
-                        combatMessages.push({ msg: `The ${monsterData.name} dodges your attack!`, type: 'combat-log' });
+                        // Use verbose dodge description for monster
+                        const monsterDodgeMsg = getDodgeDescription(`the ${monsterData.name}`, 10, false);
+                        combatMessages.push({ msg: monsterDodgeMsg, type: 'combat-log' });
                     } else {
                         // Calculate damage with enhanced combat system
                         const attackResult = calculateDamage(playerData, monsterAsEntity, weaponBonus, false);
-                        playerDamage = attackResult.damage;
-                        newMonsterHp = monsterData.hp - playerDamage;
                         
-                        // Apply combat result with detailed logging
-                        applyCombatResult(
-                            { ...attackResult, dodged: false },
+                        // Get weapon name for description
+                        const weaponName = bestWeapon ? bestWeapon.name : null;
+                        const attackVerb = parsedCommand.verb || 'attack';
+                        
+                        // Apply verbose combat result
+                        const combatResult = applyVerboseCombatResult(
+                            { ...attackResult, dodged: false, blocked: false },
                             'You',
                             `the ${monsterData.name}`,
-                            combatMessages
+                            combatMessages,
+                            null, // monster doesn't have equipment
+                            attackVerb,
+                            weaponName
                         );
+                        
+                        playerDamage = combatResult.finalDamage;
+                        newMonsterHp = monsterData.hp - playerDamage;
                     }
                     
                     if (newMonsterHp <= 0) {
@@ -1853,14 +3216,46 @@ export function initializeGameLogic(dependencies) {
                         transaction.delete(monsterRef);
 
                         const updates = {};
-                        const newXp = (playerData.xp || 0) + monsterTemplate.xp;
+                        let xpGain = monsterTemplate.xp;
+                        
+                        // Track quest progress for monster kill
+                        combatMessages.push({ 
+                            msg: 'QUEST_PROGRESS', 
+                            type: 'quest-check',
+                            progressType: 'kill',
+                            target: monsterData.monsterId
+                        });
+                        
+                        // Apply guild experience bonus if in a guild
+                        if (playerData.guildId && gameGuilds[playerData.guildId]) {
+                            const guild = gameGuilds[playerData.guildId];
+                            if (guild.perks && guild.perks.expBonus) {
+                                const bonusPercent = guild.perks.expBonus;
+                                const bonusXp = Math.floor(xpGain * (bonusPercent / 100));
+                                xpGain += bonusXp;
+                                combatMessages.push({ msg: `Guild bonus: +${bonusXp} XP (+${bonusPercent}%)`, type: 'system' });
+                            }
+                        }
+                        
+                        const newXp = (playerData.xp || 0) + xpGain;
                         const currentLevel = playerData.level || 1;
                         
                         updates.xp = newXp;
-                        updates.score = (playerData.score || 0) + monsterTemplate.xp;
+                        updates.score = (playerData.score || 0) + xpGain;
                         updates.money = (playerData.money || 0) + monsterTemplate.gold;
 
-                        combatMessages.push({ msg: `You gain ${monsterTemplate.xp} XP and ${monsterTemplate.gold} gold.`, type: 'loot-log' });
+                        combatMessages.push({ msg: `You gain ${xpGain} XP and ${monsterTemplate.gold} gold.`, type: 'loot-log' });
+                        
+                        // Award guild experience
+                        if (playerData.guildId && gameGuilds[playerData.guildId]) {
+                            const guildExpGain = Math.floor(xpGain * 0.1); // Guild gets 10% of player XP
+                            combatMessages.push({
+                                msg: 'ADD_GUILD_EXP',
+                                type: 'guild-exp',
+                                guildId: playerData.guildId,
+                                expGain: guildExpGain
+                            });
+                        }
                         
                         // Log to news if monster is newsworthy
                         if (monsterTemplate.newsworthy) {
@@ -1909,22 +3304,72 @@ export function initializeGameLogic(dependencies) {
                         const playerDodgeChance = calculateDodge(playerData);
                         const playerDodged = Math.random() < playerDodgeChance;
                         
+                        // Check if player blocks with shield
+                        const playerBlockChance = calculateShieldBlock(playerData);
+                        const playerBlocked = !playerDodged && Math.random() < playerBlockChance;
+                        
                         let monsterDamage = 0;
+                        let finalMonsterDamage = 0;
                         let newPlayerHp = playerData.hp || playerData.maxHp;
                         
                         if (playerDodged) {
-                            combatMessages.push({ msg: `You dodge the ${monsterData.name}'s attack!`, type: 'combat-log' });
+                            // Player dodges - use verbose dodge description
+                            const playerAttrs = getEffectiveAttributes(playerData);
+                            const dodgeMsg = getDodgeDescription('You', playerAttrs.dex, true);
+                            combatMessages.push({ msg: dodgeMsg, type: 'combat-log' });
                         } else {
-                            // Calculate monster's counter-attack damage (enhanced with player's CON defense)
+                            // Calculate monster's counter-attack damage
                             const monsterCounterResult = calculateDamage(monsterAsEntity, playerData, 0, false);
                             monsterDamage = monsterCounterResult.damage;
-                            newPlayerHp = (playerData.hp || playerData.maxHp) - monsterDamage;
                             
-                            let counterMsg = `The ${monsterData.name} counter-attacks for ${monsterDamage} damage`;
-                            if (monsterCounterResult.isCritical) {
-                                counterMsg += ` (Critical Hit!)`;
+                            // Apply shield block if successful
+                            if (playerBlocked) {
+                                const shieldName = playerData.equippedShield ? gameItems[playerData.equippedShield]?.name : 'shield';
+                                const blockMsg = getBlockDescription('You', 'shield', shieldName, true);
+                                combatMessages.push({ msg: blockMsg, type: 'combat-log' });
+                                
+                                // Shield blocks reduce damage by 50-100%
+                                const blockReduction = Math.floor(monsterDamage * (0.5 + Math.random() * 0.5));
+                                finalMonsterDamage = Math.max(0, monsterDamage - blockReduction);
+                                
+                                if (finalMonsterDamage > 0) {
+                                    combatMessages.push({ 
+                                        msg: `Some of the impact gets through for ${finalMonsterDamage} damage!`, 
+                                        type: 'combat-log' 
+                                    });
+                                } else {
+                                    combatMessages.push({ 
+                                        msg: `You completely block the attack!`, 
+                                        type: 'combat-log' 
+                                    });
+                                }
+                            } else {
+                                // No block - apply armor reduction
+                                const armorResult = calculateArmorReduction(playerData, monsterDamage);
+                                finalMonsterDamage = Math.max(0, monsterDamage - armorResult.reduction);
+                                
+                                // Use verbose enemy attack description
+                                const counterMsg = getVerboseEnemyAttackDescription(
+                                    monsterData.name, 
+                                    finalMonsterDamage, 
+                                    'standard', 
+                                    monsterCounterResult.isCritical
+                                );
+                                combatMessages.push({ msg: counterMsg, type: 'combat-log' });
+                                
+                                // Show armor deflection/reduction if applicable
+                                if (armorResult.fullDeflect && armorResult.armorName) {
+                                    const deflectMsg = getBlockDescription('You', 'armor', armorResult.armorName, true);
+                                    combatMessages.push({ msg: deflectMsg, type: 'game' });
+                                } else if (armorResult.reduction > 0 && armorResult.armorName) {
+                                    combatMessages.push({ 
+                                        msg: `(Your ${armorResult.armorName} absorbed ${armorResult.reduction} damage)`, 
+                                        type: 'game' 
+                                    });
+                                }
                             }
-                            combatMessages.push({ msg: counterMsg + '!', type: 'combat-log' });
+                            
+                            newPlayerHp = (playerData.hp || playerData.maxHp) - finalMonsterDamage;
                         }
 
                         if (!playerDodged && newPlayerHp <= 0) {
@@ -1935,18 +3380,53 @@ export function initializeGameLogic(dependencies) {
                                 money: Math.floor((playerData.money || 0) * 0.9),
                                 inventory: [] // Clear inventory on death
                             });
-                        } else {
+                        } else if (!playerDodged) {
                             transaction.update(playerRef, { hp: newPlayerHp });
                         }
                     }
                 });
                 
                 // Log all messages after transaction completes
-                for (const { msg, type, newsData } of combatMessages) {
+                for (const { msg, type, newsData, guildId, expGain, progressType, target } of combatMessages) {
                     if (type === 'news' && newsData) {
                         // Log news entry
                         await logNews(newsData.type, newsData.playerName, newsData.event);
-                    } else if (msg !== 'LOG_NEWS') {
+                    } else if (type === 'guild-exp' && guildId && expGain) {
+                        // Add guild experience
+                        const guildRef = doc(db, `/artifacts/${appId}/public/data/mud-guilds/${guildId}`);
+                        await updateDoc(guildRef, {
+                            exp: increment(expGain)
+                        });
+                        
+                        // Check for guild level up
+                        const guildDoc = await getDoc(guildRef);
+                        if (guildDoc.exists()) {
+                            const guildData = guildDoc.data();
+                            const currentGuildLevel = guildData.level || 1;
+                            const currentGuildExp = guildData.exp || 0;
+                            const expNeeded = currentGuildLevel * 1000; // 1000 exp per level
+                            
+                            if (currentGuildExp >= expNeeded && currentGuildLevel < 10) {
+                                await updateDoc(guildRef, {
+                                    level: currentGuildLevel + 1,
+                                    exp: currentGuildExp - expNeeded
+                                });
+                                logToTerminal(`🎉 Your guild "${guildData.name}" has reached level ${currentGuildLevel + 1}!`, 'success');
+                            }
+                        }
+                    } else if (type === 'quest-check' && progressType && target) {
+                        // Update quest progress
+                        const completedQuests = await updateQuestProgress(userId, progressType, target, 1);
+                        
+                        // Notify player of completed quests
+                        for (const completed of completedQuests) {
+                            const quest = gameQuests[completed.questId];
+                            if (quest) {
+                                logToTerminal(`🎉 Quest Objectives Complete: ${quest.title}!`, 'quest');
+                                logToTerminal(`Return to ${quest.turninNpcId || quest.giverNpcId} to claim your reward.`, 'quest');
+                            }
+                        }
+                    } else if (msg !== 'LOG_NEWS' && msg !== 'ADD_GUILD_EXP' && msg !== 'QUEST_PROGRESS') {
                         logToTerminal(msg, type);
                     }
                 }
@@ -1961,6 +3441,129 @@ export function initializeGameLogic(dependencies) {
             case 'talk':
                 const npcToTalkTo = findNpcInRoom(npc_target);
                 if(npcToTalkTo) {
+                    // Check if player has completed quests to turn in to this NPC
+                    const playerData = gamePlayers[userId];
+                    const activeQuests = playerData.activeQuests || [];
+                    const completedQuests = playerData.completedQuests || [];
+                    
+                    // Find quests that are ready to turn in to this NPC
+                    const readyToTurnIn = activeQuests.filter(aq => {
+                        const quest = gameQuests[aq.questId];
+                        if (!quest) return false;
+                        
+                        // Check if this is the turn-in NPC
+                        const turninNpc = quest.turninNpcId || quest.giverNpcId;
+                        if (turninNpc !== npcToTalkTo.id) return false;
+                        
+                        // Check if all objectives are complete
+                        return aq.objectives.every(obj => obj.current >= obj.count);
+                    });
+                    
+                    // Auto turn-in completed quests
+                    for (const questToTurnIn of readyToTurnIn) {
+                        const quest = gameQuests[questToTurnIn.questId];
+                        
+                        // Check if this is a party quest
+                        const playerParty = Object.values(gameParties).find(p => 
+                            p.members && Object.keys(p.members).includes(userId)
+                        );
+                        
+                        const isPartyQuest = quest.isPartyQuest && playerParty;
+                        const rewardRecipients = isPartyQuest 
+                            ? Object.keys(playerParty.members) 
+                            : [userId];
+                        
+                        // Award rewards to all recipients (player or party members)
+                        for (const recipientId of rewardRecipients) {
+                            const recipientData = gamePlayers[recipientId];
+                            if (!recipientData) continue;
+                            
+                            const recipientActiveQuests = recipientData.activeQuests || [];
+                            const recipientCompletedQuests = recipientData.completedQuests || [];
+                            
+                            // Remove from active quests
+                            const newActiveQuests = recipientActiveQuests.filter(aq => aq.questId !== quest.id);
+                            
+                            // Add to completed quests (unless repeatable)
+                            const newCompletedQuests = quest.isRepeatable 
+                                ? recipientCompletedQuests 
+                                : [...recipientCompletedQuests, quest.id];
+                            
+                            // Award rewards
+                            const rewards = quest.rewards || {};
+                            const updates = {
+                                activeQuests: newActiveQuests,
+                                completedQuests: newCompletedQuests
+                            };
+                            
+                            if (rewards.xp) {
+                                updates.xp = (recipientData.xp || 0) + rewards.xp;
+                                updates.score = (recipientData.score || 0) + rewards.xp;
+                            }
+                            
+                            if (rewards.gold) {
+                                updates.money = (recipientData.money || 0) + rewards.gold;
+                            }
+                            
+                            if (rewards.items && Array.isArray(rewards.items)) {
+                                for (const itemId of rewards.items) {
+                                    const item = gameItems[itemId];
+                                    if (item) {
+                                        const fullItemObject = { id: itemId, ...item };
+                                        updates.inventory = arrayUnion(fullItemObject);
+                                    }
+                                }
+                            }
+                            
+                            const recipientRef = doc(db, `/artifacts/${appId}/public/data/mud-players/${recipientId}`);
+                            await updateDoc(recipientRef, updates);
+                            
+                            // Check for level up
+                            if (rewards.xp) {
+                                await checkLevelUp(recipientRef, updates.xp, recipientData.level || 1);
+                            }
+                            
+                            // Notify recipient if not the current player
+                            if (recipientId !== userId && recipientData.roomId) {
+                                await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                                    senderId: 'system',
+                                    senderName: 'System',
+                                    roomId: recipientData.roomId,
+                                    text: `🎉 Party Quest Complete: ${quest.title}! You received ${rewards.xp || 0} XP and ${rewards.gold || 0} gold.`,
+                                    isSystem: true,
+                                    timestamp: serverTimestamp()
+                                });
+                            }
+                        }
+                        
+                        // Display quest completion to current player
+                        logToTerminal(`\n🎉 Quest Complete: ${quest.title}!`, 'quest');
+                        if (isPartyQuest) {
+                            logToTerminal(`All party members have been rewarded!`, 'success');
+                        }
+                        logToTerminal(`${npcToTalkTo.shortName || npcToTalkTo.name} thanks you for your help.`, 'npc');
+                        
+                        const rewards = quest.rewards || {};
+                        if (rewards.xp) logToTerminal(`  Reward: +${rewards.xp} XP`, 'success');
+                        if (rewards.gold) logToTerminal(`  Reward: +${rewards.gold} gold`, 'success');
+                        if (rewards.items && rewards.items.length > 0) {
+                            for (const itemId of rewards.items) {
+                                const item = gameItems[itemId];
+                                if (item) logToTerminal(`  Reward: ${item.name}`, 'success');
+                            }
+                        }
+                    }
+                    
+                    // Check quest progress for talking to NPC
+                    const talkCompletedQuests = await updateQuestProgress(userId, 'talk', npcToTalkTo.id, 1);
+                    for (const completed of talkCompletedQuests) {
+                        const quest = gameQuests[completed.questId];
+                        if (quest) {
+                            logToTerminal(`🎉 Quest Objectives Complete: ${quest.title}!`, 'quest');
+                            logToTerminal(`Return to ${quest.turninNpcId || quest.giverNpcId} to claim your reward.`, 'quest');
+                        }
+                    }
+                    
                     if (npcToTalkTo.useAI) {
                         await handleAiNpcInteraction(npcToTalkTo, 'talk', currentRoom);
                     } else {
@@ -2517,9 +4120,27 @@ export function initializeGameLogic(dependencies) {
                     logToTerminal(`Level: ${statsLevel} - ${getLevelName(statsLevel, statsClass)}`, 'game');
                     logToTerminal(`HP: ${statsHp} / ${statsMaxHp}`, 'game');
                     logToTerminal("", 'game'); // Blank line
+                    
+                    // Check for guild stat bonuses
+                    let guildBonuses = {};
+                    if (pDataStats.guildId && gameGuilds[pDataStats.guildId]) {
+                        const guild = gameGuilds[pDataStats.guildId];
+                        if (guild.perks && guild.perks.statBonus) {
+                            guildBonuses = guild.perks.statBonus;
+                        }
+                    }
+                    
                     Object.entries(pDataStats.attributes).forEach(([key, value]) => {
-                         logToTerminal(`${key.toUpperCase()}: ${value}`, 'game');
+                        const bonus = guildBonuses[key] || 0;
+                        const totalValue = value + bonus;
+                        const bonusText = bonus > 0 ? ` (+${bonus} guild bonus)` : '';
+                        logToTerminal(`${key.toUpperCase()}: ${totalValue}${bonusText}`, bonus > 0 ? 'success' : 'game');
                     });
+                    
+                    if (Object.keys(guildBonuses).length > 0) {
+                        logToTerminal("", 'game');
+                        logToTerminal(`Guild perks active!`, 'system');
+                    }
                 } else { logToTerminal("You have no attributes to display.", 'error'); }
                 break;
             case 'news':
@@ -2560,10 +4181,23 @@ export function initializeGameLogic(dependencies) {
                         if (guild) {
                             logToTerminal(`=== ${guild.name} ===`, 'system');
                             logToTerminal(`${guild.description || 'A mighty guild'}`, 'game');
+                            logToTerminal(`Level: ${guild.level || 1} (${guild.exp || 0}/${(guild.level || 1) * 1000} XP)`, 'game');
                             logToTerminal(`Leader: ${guild.leader}`, 'game');
                             logToTerminal(`Members: ${Object.keys(guild.members || {}).length}`, 'game');
                             logToTerminal(`Treasury: ${guild.treasury || 0} gold`, 'game');
                             if (guild.motto) logToTerminal(`Motto: "${guild.motto}"`, 'game');
+                            
+                            // Show guild perks
+                            if (guild.perks) {
+                                logToTerminal(`\nGuild Perks:`, 'system');
+                                if (guild.perks.expBonus) logToTerminal(`  +${guild.perks.expBonus}% Experience`, 'success');
+                                if (guild.perks.statBonus) {
+                                    const statBonuses = Object.entries(guild.perks.statBonus)
+                                        .map(([stat, bonus]) => `${stat.toUpperCase()}: +${bonus}`)
+                                        .join(', ');
+                                    logToTerminal(`  Stat Bonuses: ${statBonuses}`, 'success');
+                                }
+                            }
                             
                             logToTerminal(`\nMembers:`, 'system');
                             Object.entries(guild.members || {}).forEach(([memberId, memberData]) => {
@@ -2822,12 +4456,263 @@ export function initializeGameLogic(dependencies) {
                             logToTerminal(`[Guild] You: ${guildArg}`, 'system');
                             break;
                         
+                        case 'deposit':
+                            if (!guildArg) {
+                                logToTerminal("Usage: guild deposit [amount]", 'error');
+                                break;
+                            }
+                            
+                            const depositAmount = parseInt(guildArg);
+                            if (isNaN(depositAmount) || depositAmount <= 0) {
+                                logToTerminal("Please specify a valid amount to deposit.", 'error');
+                                break;
+                            }
+                            
+                            const pDocDeposit = await getDoc(playerRef);
+                            const pDataDeposit = pDocDeposit.data();
+                            const depositGuildId = pDataDeposit.guildId;
+                            
+                            if (!depositGuildId) {
+                                logToTerminal("You're not in a guild.", 'error');
+                                break;
+                            }
+                            
+                            if (pDataDeposit.gold < depositAmount) {
+                                logToTerminal(`You don't have ${depositAmount} gold!`, 'error');
+                                break;
+                            }
+                            
+                            // Deduct from player
+                            await updateDoc(playerRef, {
+                                gold: increment(-depositAmount)
+                            });
+                            
+                            // Add to guild treasury
+                            const depositGuildRef = doc(db, `/artifacts/${appId}/public/data/mud-guilds/${depositGuildId}`);
+                            await updateDoc(depositGuildRef, {
+                                treasury: increment(depositAmount)
+                            });
+                            
+                            logToTerminal(`You deposited ${depositAmount} gold into the guild treasury.`, 'success');
+                            break;
+                        
+                        case 'withdraw':
+                            if (!guildArg) {
+                                logToTerminal("Usage: guild withdraw [amount]", 'error');
+                                break;
+                            }
+                            
+                            const withdrawAmount = parseInt(guildArg);
+                            if (isNaN(withdrawAmount) || withdrawAmount <= 0) {
+                                logToTerminal("Please specify a valid amount to withdraw.", 'error');
+                                break;
+                            }
+                            
+                            const pDocWithdraw = await getDoc(playerRef);
+                            const pDataWithdraw = pDocWithdraw.data();
+                            const withdrawGuildId = pDataWithdraw.guildId;
+                            
+                            if (!withdrawGuildId) {
+                                logToTerminal("You're not in a guild.", 'error');
+                                break;
+                            }
+                            
+                            const withdrawGuild = gameGuilds[withdrawGuildId];
+                            const withdrawMember = withdrawGuild.members[userId];
+                            
+                            if (!withdrawMember || (withdrawMember.rank !== 'leader' && withdrawMember.rank !== 'officer')) {
+                                logToTerminal("Only guild leaders and officers can withdraw from the treasury.", 'error');
+                                break;
+                            }
+                            
+                            if ((withdrawGuild.treasury || 0) < withdrawAmount) {
+                                logToTerminal(`The guild treasury doesn't have ${withdrawAmount} gold!`, 'error');
+                                break;
+                            }
+                            
+                            // Add to player
+                            await updateDoc(playerRef, {
+                                gold: increment(withdrawAmount)
+                            });
+                            
+                            // Deduct from guild treasury
+                            const withdrawGuildRef = doc(db, `/artifacts/${appId}/public/data/mud-guilds/${withdrawGuildId}`);
+                            await updateDoc(withdrawGuildRef, {
+                                treasury: increment(-withdrawAmount)
+                            });
+                            
+                            logToTerminal(`You withdrew ${withdrawAmount} gold from the guild treasury.`, 'success');
+                            break;
+                        
+                        case 'promote':
+                            if (!guildArg) {
+                                logToTerminal("Usage: guild promote [player name]", 'error');
+                                break;
+                            }
+                            
+                            const pDocPromote = await getDoc(playerRef);
+                            const pDataPromote = pDocPromote.data();
+                            const promoteGuildId = pDataPromote.guildId;
+                            
+                            if (!promoteGuildId) {
+                                logToTerminal("You're not in a guild.", 'error');
+                                break;
+                            }
+                            
+                            const promoteGuild = gameGuilds[promoteGuildId];
+                            
+                            if (promoteGuild.leaderId !== userId) {
+                                logToTerminal("Only the guild leader can promote members.", 'error');
+                                break;
+                            }
+                            
+                            // Find target player
+                            const promoteTargetEntry = Object.entries(gamePlayers).find(([id, p]) => 
+                                p.name.toLowerCase() === guildArg.toLowerCase()
+                            );
+                            
+                            if (!promoteTargetEntry) {
+                                logToTerminal(`Player "${guildArg}" not found.`, 'error');
+                                break;
+                            }
+                            
+                            const [promoteTargetId, promoteTargetPlayer] = promoteTargetEntry;
+                            
+                            if (promoteTargetPlayer.guildId !== promoteGuildId) {
+                                logToTerminal(`${promoteTargetPlayer.name} is not in your guild.`, 'error');
+                                break;
+                            }
+                            
+                            const currentRank = promoteGuild.members[promoteTargetId]?.rank || 'member';
+                            
+                            if (currentRank === 'leader') {
+                                logToTerminal("Cannot promote the guild leader!", 'error');
+                                break;
+                            }
+                            
+                            const newRank = currentRank === 'member' ? 'officer' : 'officer';
+                            
+                            if (currentRank === 'officer') {
+                                logToTerminal(`${promoteTargetPlayer.name} is already an officer.`, 'game');
+                                break;
+                            }
+                            
+                            const promoteGuildRef = doc(db, `/artifacts/${appId}/public/data/mud-guilds/${promoteGuildId}`);
+                            await updateDoc(promoteGuildRef, {
+                                [`members.${promoteTargetId}.rank`]: newRank
+                            });
+                            
+                            logToTerminal(`${promoteTargetPlayer.name} has been promoted to ${newRank}!`, 'success');
+                            break;
+                        
+                        case 'demote':
+                            if (!guildArg) {
+                                logToTerminal("Usage: guild demote [player name]", 'error');
+                                break;
+                            }
+                            
+                            const pDocDemote = await getDoc(playerRef);
+                            const pDataDemote = pDocDemote.data();
+                            const demoteGuildId = pDataDemote.guildId;
+                            
+                            if (!demoteGuildId) {
+                                logToTerminal("You're not in a guild.", 'error');
+                                break;
+                            }
+                            
+                            const demoteGuild = gameGuilds[demoteGuildId];
+                            
+                            if (demoteGuild.leaderId !== userId) {
+                                logToTerminal("Only the guild leader can demote members.", 'error');
+                                break;
+                            }
+                            
+                            // Find target player
+                            const demoteTargetEntry = Object.entries(gamePlayers).find(([id, p]) => 
+                                p.name.toLowerCase() === guildArg.toLowerCase()
+                            );
+                            
+                            if (!demoteTargetEntry) {
+                                logToTerminal(`Player "${guildArg}" not found.`, 'error');
+                                break;
+                            }
+                            
+                            const [demoteTargetId, demoteTargetPlayer] = demoteTargetEntry;
+                            
+                            if (demoteTargetPlayer.guildId !== demoteGuildId) {
+                                logToTerminal(`${demoteTargetPlayer.name} is not in your guild.`, 'error');
+                                break;
+                            }
+                            
+                            const demoteCurrentRank = demoteGuild.members[demoteTargetId]?.rank || 'member';
+                            
+                            if (demoteCurrentRank === 'leader') {
+                                logToTerminal("Cannot demote the guild leader!", 'error');
+                                break;
+                            }
+                            
+                            if (demoteCurrentRank === 'member') {
+                                logToTerminal(`${demoteTargetPlayer.name} is already a member (lowest rank).`, 'game');
+                                break;
+                            }
+                            
+                            const demoteGuildRef = doc(db, `/artifacts/${appId}/public/data/mud-guilds/${demoteGuildId}`);
+                            await updateDoc(demoteGuildRef, {
+                                [`members.${demoteTargetId}.rank`]: 'member'
+                            });
+                            
+                            logToTerminal(`${demoteTargetPlayer.name} has been demoted to member.`, 'success');
+                            break;
+                        
+                        case 'disband':
+                            const pDocDisband = await getDoc(playerRef);
+                            const pDataDisband = pDocDisband.data();
+                            const disbandGuildId = pDataDisband.guildId;
+                            
+                            if (!disbandGuildId) {
+                                logToTerminal("You're not in a guild.", 'error');
+                                break;
+                            }
+                            
+                            const disbandGuild = gameGuilds[disbandGuildId];
+                            
+                            if (disbandGuild.leaderId !== userId) {
+                                logToTerminal("Only the guild leader can disband the guild.", 'error');
+                                break;
+                            }
+                            
+                            // Confirm disbanding
+                            if (!guildArg || guildArg.toLowerCase() !== 'confirm') {
+                                logToTerminal(`Are you sure you want to disband "${disbandGuild.name}"?`, 'system');
+                                logToTerminal(`This will remove all members and delete the guild permanently!`, 'error');
+                                logToTerminal(`Type 'guild disband confirm' to proceed.`, 'game');
+                                break;
+                            }
+                            
+                            // Remove guild from all members
+                            const disbandMemberIds = Object.keys(disbandGuild.members || {});
+                            for (const memberId of disbandMemberIds) {
+                                const memberRef = doc(db, `/artifacts/${appId}/public/data/mud-players/${memberId}`);
+                                await updateDoc(memberRef, { guildId: "" });
+                            }
+                            
+                            // Delete the guild
+                            const disbandGuildRef = doc(db, `/artifacts/${appId}/public/data/mud-guilds/${disbandGuildId}`);
+                            await deleteDoc(disbandGuildRef);
+                            
+                            logToTerminal(`Guild "${disbandGuild.name}" has been disbanded.`, 'system');
+                            break;
+                        
                         default:
                             logToTerminal("Guild commands: create, list, invite, accept, leave, chat (or gc)", 'system');
+                            logToTerminal("Management: deposit, withdraw, promote, demote, disband", 'system');
                             logToTerminal("Usage examples:", 'game');
                             logToTerminal("  guild create My Awesome Guild", 'game');
                             logToTerminal("  guild list", 'game');
                             logToTerminal("  guild invite PlayerName", 'game');
+                            logToTerminal("  guild deposit 100", 'game');
+                            logToTerminal("  guild withdraw 50 (leader/officer only)", 'game');
+                            logToTerminal("  guild promote PlayerName (leader only)", 'game');
                             logToTerminal("  guild chat Hello everyone!", 'game');
                             logToTerminal("  gc Quick message! (short for guild chat)", 'game');
                     }
@@ -2872,6 +4757,531 @@ export function initializeGameLogic(dependencies) {
                 
                 logToTerminal(`[Guild] You: ${fullMessage}`, 'system');
                 break;
+
+            case 'quest':
+            case 'quests':
+                if (!parsedCommand.target) {
+                    // List available quests from NPCs in current room or show active quests
+                    const activeQuests = playerData.activeQuests || [];
+                    const completedQuests = playerData.completedQuests || [];
+                    
+                    if (activeQuests.length > 0) {
+                        logToTerminal("=== Your Active Quests ===", "system");
+                        for (const activeQuest of activeQuests) {
+                            const quest = gameQuests[activeQuest.questId];
+                            if (quest) {
+                                logToTerminal(`📜 ${quest.title}`, "quest");
+                                logToTerminal(`  ${quest.description}`, "system");
+                                
+                                // Show objective progress
+                                if (activeQuest.objectives) {
+                                    logToTerminal("  Objectives:", "system");
+                                    for (const obj of activeQuest.objectives) {
+                                        const done = obj.current >= obj.count ? "✓" : " ";
+                                        logToTerminal(`  [${done}] ${obj.description || obj.type}: ${obj.current}/${obj.count}`, "system");
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        logToTerminal("You have no active quests.", "system");
+                    }
+                    
+                    // Show available quests from NPCs in the room
+                    const npcsInRoom = Object.values(gameNpcs).filter(npc => npc.roomId === playerData.currentRoom);
+                    const availableQuests = Object.values(gameQuests).filter(quest => {
+                        // Check if NPC is in room
+                        if (!npcsInRoom.some(npc => npc.id === quest.giverNpcId)) return false;
+                        // Check level requirement
+                        if (quest.levelRequired && playerData.level < quest.levelRequired) return false;
+                        // Check if already active
+                        if (activeQuests.some(aq => aq.questId === quest.id)) return false;
+                        // Check if already completed and not repeatable
+                        if (completedQuests.includes(quest.id) && !quest.isRepeatable) return false;
+                        // Check prerequisites
+                        if (quest.prerequisites && quest.prerequisites.length > 0) {
+                            if (!quest.prerequisites.every(prereq => completedQuests.includes(prereq))) return false;
+                        }
+                        return true;
+                    });
+                    
+                    if (availableQuests.length > 0) {
+                        logToTerminal("\n=== Available Quests ===", "system");
+                        for (const quest of availableQuests) {
+                            const npc = gameNpcs[quest.giverNpcId];
+                            logToTerminal(`📜 ${quest.title} (Level ${quest.levelRequired || 1})`, "quest");
+                            logToTerminal(`  Talk to ${npc?.name || quest.giverNpcId} to accept`, "system");
+                        }
+                    }
+                } else {
+                    // Handle quest subcommands
+                    const subcommand = parsedCommand.target.toLowerCase();
+                    const questName = parsedCommand.topic || '';
+                    
+                    if (subcommand === 'accept') {
+                        // Find quest by name
+                        const quest = Object.values(gameQuests).find(q => 
+                            q.title.toLowerCase().includes(questName.toLowerCase())
+                        );
+                        
+                        if (!quest) {
+                            logToTerminal("Quest not found.", "error");
+                            break;
+                        }
+                        
+                        // Check if quest giver NPC is in room
+                        const npc = gameNpcs[quest.giverNpcId];
+                        if (!npc || npc.roomId !== playerData.currentRoom) {
+                            logToTerminal(`You need to talk to ${npc?.name || quest.giverNpcId} to accept this quest.`, "error");
+                            break;
+                        }
+                        
+                        // Check level requirement
+                        if (quest.levelRequired && playerData.level < quest.levelRequired) {
+                            logToTerminal(`You must be level ${quest.levelRequired} to accept this quest.`, "error");
+                            break;
+                        }
+                        
+                        // Check prerequisites
+                        const completedQuests = playerData.completedQuests || [];
+                        if (quest.prerequisites && quest.prerequisites.length > 0) {
+                            if (!quest.prerequisites.every(prereq => completedQuests.includes(prereq))) {
+                                logToTerminal("You must complete prerequisite quests first.", "error");
+                                break;
+                            }
+                        }
+                        
+                        // Check if already active
+                        const activeQuests = playerData.activeQuests || [];
+                        if (activeQuests.some(aq => aq.questId === quest.id)) {
+                            logToTerminal("You already have this quest active.", "error");
+                            break;
+                        }
+                        
+                        // Check if already completed and not repeatable
+                        if (completedQuests.includes(quest.id) && !quest.isRepeatable) {
+                            logToTerminal("You have already completed this quest.", "error");
+                            break;
+                        }
+                        
+                        // Initialize quest objectives
+                        const questObjectives = quest.objectives.map(obj => ({
+                            ...obj,
+                            current: 0,
+                            description: getObjectiveDescription(obj)
+                        }));
+                        
+                        // Add quest to player's active quests
+                        const newActiveQuest = {
+                            questId: quest.id,
+                            objectives: questObjectives,
+                            acceptedAt: Date.now()
+                        };
+                        
+                        await updateDoc(doc(db, `/artifacts/${appId}/public/data/mud-players/${userId}`), {
+                            activeQuests: arrayUnion(newActiveQuest)
+                        });
+                        
+                        logToTerminal(`Quest accepted: ${quest.title}`, "success");
+                        logToTerminal(quest.description, "system");
+                        logToTerminal("Objectives:", "system");
+                        for (const obj of questObjectives) {
+                            logToTerminal(`  - ${obj.description}: 0/${obj.count}`, "system");
+                        }
+                        
+                    } else if (subcommand === 'abandon') {
+                        // Find and remove quest from active quests
+                        const activeQuests = playerData.activeQuests || [];
+                        const questIndex = activeQuests.findIndex(aq => {
+                            const quest = gameQuests[aq.questId];
+                            return quest && quest.title.toLowerCase().includes(questName.toLowerCase());
+                        });
+                        
+                        if (questIndex === -1) {
+                            logToTerminal("You don't have that quest active.", "error");
+                            break;
+                        }
+                        
+                        const abandonedQuest = gameQuests[activeQuests[questIndex].questId];
+                        const newActiveQuests = activeQuests.filter((_, i) => i !== questIndex);
+                        
+                        await updateDoc(doc(db, `/artifacts/${appId}/public/data/mud-players/${userId}`), {
+                            activeQuests: newActiveQuests
+                        });
+                        
+                        logToTerminal(`Quest abandoned: ${abandonedQuest.title}`, "system");
+                        
+                    } else if (subcommand === 'progress' || subcommand === 'log') {
+                        // Show detailed progress for all active quests
+                        const activeQuests = playerData.activeQuests || [];
+                        
+                        if (activeQuests.length === 0) {
+                            logToTerminal("You have no active quests.", "system");
+                            break;
+                        }
+                        
+                        logToTerminal("=== Quest Progress ===", "system");
+                        for (const activeQuest of activeQuests) {
+                            const quest = gameQuests[activeQuest.questId];
+                            if (quest) {
+                                logToTerminal(`\n📜 ${quest.title}`, "quest");
+                                logToTerminal(`  ${quest.description}`, "system");
+                                
+                                if (activeQuest.objectives) {
+                                    logToTerminal("  Progress:", "system");
+                                    for (const obj of activeQuest.objectives) {
+                                        const progress = Math.min(100, Math.floor((obj.current / obj.count) * 100));
+                                        const bar = '█'.repeat(Math.floor(progress / 10)) + '░'.repeat(10 - Math.floor(progress / 10));
+                                        logToTerminal(`  ${obj.description}: [${bar}] ${obj.current}/${obj.count}`, "system");
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        logToTerminal("Unknown quest command. Try 'quest accept [name]', 'quest abandon [name]', or 'quest progress'.", "error");
+                    }
+                }
+                break;
+
+            case 'party':
+                const partySubcommand = parsedCommand.target?.toLowerCase() || '';
+                const partyTarget = parsedCommand.npc_target || parsedCommand.topic || '';
+                
+                if (!partySubcommand) {
+                    // Show current party info
+                    const playerParty = Object.values(gameParties).find(p => 
+                        p.members && Object.keys(p.members).includes(userId)
+                    );
+                    
+                    if (playerParty) {
+                        logToTerminal("=== Your Party ===", "system");
+                        logToTerminal(`Leader: ${playerParty.leaderName}`, "system");
+                        logToTerminal(`Members (${Object.keys(playerParty.members).length}):`, "system");
+                        for (const [memberId, member] of Object.entries(playerParty.members)) {
+                            const statusIcon = member.isLeader ? "👑" : "⚔️";
+                            const levelInfo = gamePlayers[memberId] ? ` (Level ${gamePlayers[memberId].level || 1})` : '';
+                            logToTerminal(`  ${statusIcon} ${member.name}${levelInfo}`, "system");
+                        }
+                    } else {
+                        logToTerminal("You are not in a party.", "system");
+                        logToTerminal("Use 'party create' to form a new party, or wait for an invitation.", "system");
+                    }
+                } else if (partySubcommand === 'create') {
+                    // Check if already in a party
+                    const existingParty = Object.values(gameParties).find(p => 
+                        p.members && Object.keys(p.members).includes(userId)
+                    );
+                    
+                    if (existingParty) {
+                        logToTerminal("You are already in a party. Leave your current party first.", "error");
+                        break;
+                    }
+                    
+                    // Create new party
+                    const partyId = `party-${Date.now()}`;
+                    const partyRef = doc(db, `/artifacts/${appId}/public/data/mud-parties/${partyId}`);
+                    
+                    await setDoc(partyRef, {
+                        leaderId: userId,
+                        leaderName: playerName,
+                        members: {
+                            [userId]: {
+                                name: playerName,
+                                isLeader: true,
+                                joinedAt: serverTimestamp()
+                            }
+                        },
+                        invitations: {},
+                        createdAt: serverTimestamp()
+                    });
+                    
+                    logToTerminal("You have formed a new party!", "success");
+                    logToTerminal("Use 'party invite [player name]' to invite others.", "system");
+                    
+                } else if (partySubcommand === 'invite') {
+                    if (!partyTarget) {
+                        logToTerminal("Who do you want to invite? Use 'party invite [player name]'.", "error");
+                        break;
+                    }
+                    
+                    // Find party where player is leader
+                    const playerParty = Object.values(gameParties).find(p => p.leaderId === userId);
+                    
+                    if (!playerParty) {
+                        logToTerminal("You must be a party leader to invite others. Use 'party create' first.", "error");
+                        break;
+                    }
+                    
+                    // Find target player
+                    const targetPlayer = Object.values(gamePlayers).find(p => 
+                        p.name && p.name.toLowerCase() === partyTarget.toLowerCase()
+                    );
+                    
+                    if (!targetPlayer) {
+                        logToTerminal("Player not found.", "error");
+                        break;
+                    }
+                    
+                    if (Object.keys(playerParty.members).includes(targetPlayer.id)) {
+                        logToTerminal("That player is already in your party.", "error");
+                        break;
+                    }
+                    
+                    // Check if target is already in another party
+                    const targetInParty = Object.values(gameParties).find(p => 
+                        p.members && Object.keys(p.members).includes(targetPlayer.id)
+                    );
+                    
+                    if (targetInParty) {
+                        logToTerminal("That player is already in another party.", "error");
+                        break;
+                    }
+                    
+                    // Add invitation
+                    const partyRef = doc(db, `/artifacts/${appId}/public/data/mud-parties/${playerParty.id}`);
+                    await updateDoc(partyRef, {
+                        [`invitations.${targetPlayer.id}`]: {
+                            name: targetPlayer.name,
+                            invitedAt: serverTimestamp(),
+                            invitedBy: playerName
+                        }
+                    });
+                    
+                    logToTerminal(`Party invitation sent to ${targetPlayer.name}!`, "success");
+                    
+                    // Notify target player if online
+                    if (targetPlayer.roomId) {
+                        await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                            senderId: 'system',
+                            senderName: 'System',
+                            roomId: targetPlayer.roomId,
+                            text: `${playerName} has invited you to join their party! Type 'party join ${playerName}' to accept.`,
+                            isSystem: true,
+                            timestamp: serverTimestamp()
+                        });
+                    }
+                    
+                } else if (partySubcommand === 'join') {
+                    if (!partyTarget) {
+                        logToTerminal("Whose party do you want to join? Use 'party join [leader name]'.", "error");
+                        break;
+                    }
+                    
+                    // Check if already in a party
+                    const existingParty = Object.values(gameParties).find(p => 
+                        p.members && Object.keys(p.members).includes(userId)
+                    );
+                    
+                    if (existingParty) {
+                        logToTerminal("You are already in a party. Leave your current party first.", "error");
+                        break;
+                    }
+                    
+                    // Find party with invitation
+                    const invitingParty = Object.values(gameParties).find(p => 
+                        p.leaderName.toLowerCase() === partyTarget.toLowerCase() &&
+                        p.invitations && p.invitations[userId]
+                    );
+                    
+                    if (!invitingParty) {
+                        logToTerminal("No pending invitation from that player.", "error");
+                        break;
+                    }
+                    
+                    // Join party
+                    const partyRef = doc(db, `/artifacts/${appId}/public/data/mud-parties/${invitingParty.id}`);
+                    const newInvitations = { ...invitingParty.invitations };
+                    delete newInvitations[userId];
+                    
+                    await updateDoc(partyRef, {
+                        [`members.${userId}`]: {
+                            name: playerName,
+                            isLeader: false,
+                            joinedAt: serverTimestamp()
+                        },
+                        invitations: newInvitations
+                    });
+                    
+                    logToTerminal(`You have joined ${invitingParty.leaderName}'s party!`, "success");
+                    
+                    // Notify party members
+                    for (const memberId of Object.keys(invitingParty.members)) {
+                        const member = gamePlayers[memberId];
+                        if (member && member.roomId) {
+                            await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                                senderId: 'system',
+                                senderName: 'System',
+                                roomId: member.roomId,
+                                text: `${playerName} has joined the party!`,
+                                isSystem: true,
+                                timestamp: serverTimestamp()
+                            });
+                        }
+                    }
+                    
+                } else if (partySubcommand === 'leave') {
+                    const playerParty = Object.values(gameParties).find(p => 
+                        p.members && Object.keys(p.members).includes(userId)
+                    );
+                    
+                    if (!playerParty) {
+                        logToTerminal("You are not in a party.", "error");
+                        break;
+                    }
+                    
+                    const partyRef = doc(db, `/artifacts/${appId}/public/data/mud-parties/${playerParty.id}`);
+                    
+                    if (playerParty.leaderId === userId) {
+                        // Leader leaving - disband party
+                        await deleteDoc(partyRef);
+                        logToTerminal("You have disbanded the party.", "system");
+                        
+                        // Notify all members
+                        for (const memberId of Object.keys(playerParty.members)) {
+                            if (memberId !== userId) {
+                                const member = gamePlayers[memberId];
+                                if (member && member.roomId) {
+                                    await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                                        senderId: 'system',
+                                        senderName: 'System',
+                                        roomId: member.roomId,
+                                        text: `The party has been disbanded by the leader.`,
+                                        isSystem: true,
+                                        timestamp: serverTimestamp()
+                                    });
+                                }
+                            }
+                        }
+                    } else {
+                        // Member leaving
+                        const newMembers = { ...playerParty.members };
+                        delete newMembers[userId];
+                        
+                        await updateDoc(partyRef, {
+                            members: newMembers
+                        });
+                        
+                        logToTerminal("You have left the party.", "system");
+                        
+                        // Notify remaining members
+                        for (const memberId of Object.keys(newMembers)) {
+                            const member = gamePlayers[memberId];
+                            if (member && member.roomId) {
+                                await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                                    senderId: 'system',
+                                    senderName: 'System',
+                                    roomId: member.roomId,
+                                    text: `${playerName} has left the party.`,
+                                    isSystem: true,
+                                    timestamp: serverTimestamp()
+                                });
+                            }
+                        }
+                    }
+                    
+                } else if (partySubcommand === 'kick') {
+                    if (!partyTarget) {
+                        logToTerminal("Who do you want to kick? Use 'party kick [player name]'.", "error");
+                        break;
+                    }
+                    
+                    const playerParty = Object.values(gameParties).find(p => p.leaderId === userId);
+                    
+                    if (!playerParty) {
+                        logToTerminal("You must be the party leader to kick members.", "error");
+                        break;
+                    }
+                    
+                    // Find target member
+                    const targetMemberId = Object.keys(playerParty.members).find(id => {
+                        const member = playerParty.members[id];
+                        return member.name.toLowerCase() === partyTarget.toLowerCase();
+                    });
+                    
+                    if (!targetMemberId) {
+                        logToTerminal("That player is not in your party.", "error");
+                        break;
+                    }
+                    
+                    if (targetMemberId === userId) {
+                        logToTerminal("You can't kick yourself. Use 'party leave' to disband.", "error");
+                        break;
+                    }
+                    
+                    const newMembers = { ...playerParty.members };
+                    const kickedName = newMembers[targetMemberId].name;
+                    delete newMembers[targetMemberId];
+                    
+                    const partyRef = doc(db, `/artifacts/${appId}/public/data/mud-parties/${playerParty.id}`);
+                    await updateDoc(partyRef, {
+                        members: newMembers
+                    });
+                    
+                    logToTerminal(`${kickedName} has been removed from the party.`, "system");
+                    
+                    // Notify kicked player
+                    const kickedPlayer = gamePlayers[targetMemberId];
+                    if (kickedPlayer && kickedPlayer.roomId) {
+                        await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                            senderId: 'system',
+                            senderName: 'System',
+                            roomId: kickedPlayer.roomId,
+                            text: `You have been removed from the party.`,
+                            isSystem: true,
+                            timestamp: serverTimestamp()
+                        });
+                    }
+                    
+                } else if (partySubcommand === 'list') {
+                    const parties = Object.values(gameParties);
+                    if (parties.length === 0) {
+                        logToTerminal("There are no active parties.", "system");
+                    } else {
+                        logToTerminal("=== Active Parties ===", "system");
+                        for (const party of parties) {
+                            const memberCount = Object.keys(party.members).length;
+                            logToTerminal(`${party.leaderName}'s party (${memberCount} members)`, "system");
+                        }
+                    }
+                } else {
+                    logToTerminal("Unknown party command. Try 'party', 'party create', 'party invite [name]', 'party join [name]', 'party leave', 'party kick [name]', or 'party list'.", "error");
+                }
+                break;
+
+            case 'pc':
+                // Party chat
+                const playerPartyChat = Object.values(gameParties).find(p => 
+                    p.members && Object.keys(p.members).includes(userId)
+                );
+                
+                if (!playerPartyChat) {
+                    logToTerminal("You are not in a party.", "error");
+                    break;
+                }
+                
+                const partyMessage = parsedCommand.target || '';
+                if (!partyMessage) {
+                    logToTerminal("What do you want to say to your party? Use 'pc [message]'.", "error");
+                    break;
+                }
+                
+                // Send message to all party members' rooms
+                for (const memberId of Object.keys(playerPartyChat.members)) {
+                    const member = gamePlayers[memberId];
+                    if (member && member.roomId) {
+                        await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                            senderId: userId,
+                            senderName: playerName,
+                            roomId: member.roomId,
+                            text: partyMessage,
+                            isPartyChat: true,
+                            timestamp: serverTimestamp()
+                        });
+                    }
+                }
+                
+                logToTerminal(`[Party] You: ${partyMessage}`, 'system');
+                break;
             
             case 'help':
                 logToTerminal("--- Help ---", "system");
@@ -2881,6 +5291,8 @@ export function initializeGameLogic(dependencies) {
                 logToTerminal("Combat: 'attack [monster]' or 'attack [player]' - Fight monsters or other players! PvP combat is active.", "system");
                 logToTerminal("Magic: 'spells' to view your spells, 'cast [spell name] [target]' to cast spells.", "system");
                 logToTerminal("Guilds: 'guild' to view your guild, 'guild create [name]' to make one, 'guild list' to see all guilds, 'gc [message]' for guild chat.", "system");
+                logToTerminal("Quests: 'quests' to see active and available quests, 'quest accept [name]' to accept, 'quest progress' to view details, 'quest abandon [name]' to drop.", "system");
+                logToTerminal("Parties: 'party create' to form a party, 'party invite [name]' to invite, 'party join [name]' to join, 'party leave' to leave, 'pc [message]' for party chat.", "system");
                 logToTerminal("Emotes: wave, dance, laugh, smile, nod, bow, clap, cheer, cry, sigh, shrug, grin, frown, wink, yawn, stretch, jump, sit, stand, kneel, salute, think, ponder, scratch.", "system");
                 logToTerminal("Or use 'emote [action]' for custom actions!", "system");
                 logToTerminal("Special: 'examine frame' to view the leaderboard!", "system");
@@ -2893,6 +5305,44 @@ export function initializeGameLogic(dependencies) {
                     logToTerminal("spawnbot - Manually spawn one bot", "system");
                     logToTerminal("listbots - List all active bots", "system");
                     logToTerminal("killbots - Remove all bots from the game", "system");
+                    logToTerminal("npcchats [on/off] - Enable/disable NPC conversations", "system");
+                }
+                break;
+            case 'npcchats':
+                if (!gamePlayers[userId]?.isAdmin) {
+                    logToTerminal("Admin only command.", "error");
+                    break;
+                }
+                const setting = target?.toLowerCase();
+                if (setting === 'on') {
+                    npcConversationsEnabled = true;
+                    quotaExhausted = false;
+                    saveNpcConversationSettings();
+                    logToTerminal("✅ NPC conversations enabled. NPCs will start chatting when you enter rooms.", "system");
+                    // Restart conversations in current room if applicable
+                    const currentPlayer = gamePlayers[userId];
+                    if (currentPlayer?.roomId) {
+                        startNpcConversationsInRoom(currentPlayer.roomId);
+                    }
+                } else if (setting === 'off') {
+                    npcConversationsEnabled = false;
+                    saveNpcConversationSettings();
+                    // Stop all active conversations
+                    Object.keys(npcConversationTimers).forEach(roomId => {
+                        stopNpcConversationsInRoom(roomId);
+                    });
+                    logToTerminal("🔇 NPC conversations disabled.", "system");
+                } else {
+                    const status = npcConversationsEnabled ? 'ENABLED' : 'DISABLED';
+                    const quotaStatus = quotaExhausted ? ' (QUOTA EXHAUSTED)' : '';
+                    const autoStatus = npcConversationsAutoDisabled ? ' (AUTO-DISABLED DUE TO PLAYER COUNT)' : '';
+                    const activePlayers = Object.keys(gamePlayers).length;
+                    logToTerminal(`NPC conversations: ${status}${quotaStatus}${autoStatus}`, "system");
+                    logToTerminal(`Active players: ${activePlayers}`, "system");
+                    if (npcChatPlayerThreshold > 0) {
+                        logToTerminal(`Player threshold: ${npcChatPlayerThreshold}`, "system");
+                    }
+                    logToTerminal("Usage: npcchats on/off", "system");
                 }
                 break;
             case 'listmodels':
@@ -3100,6 +5550,14 @@ export function initializeGameLogic(dependencies) {
     }
 
     // Return public functions
+    // Load settings on initialization
+    loadNpcConversationSettings();
+    
+    // Initialize wandering NPCs after a short delay to ensure data is loaded
+    setTimeout(() => {
+        initializeWanderingNpcs();
+    }, 2000);
+
     return {
         setPlayerInfo,
         setCurrentRoom,
@@ -3110,7 +5568,25 @@ export function initializeGameLogic(dependencies) {
         executeParsedCommand,
         logNpcResponse,
         loadLevelConfig,
-        loadActions
+        loadActions,
+        // NPC Conversation Settings
+        getNpcConversationSettings: () => ({
+            enabled: npcConversationsEnabled,
+            threshold: npcChatPlayerThreshold,
+            autoDisabled: npcConversationsAutoDisabled,
+            quotaExhausted
+        }),
+        setNpcConversationSettings: (enabled, threshold) => {
+            npcConversationsEnabled = enabled;
+            npcChatPlayerThreshold = threshold;
+            saveNpcConversationSettings();
+            checkNpcConversationPlayerThreshold();
+        },
+        checkNpcConversationPlayerThreshold,
+        // Wandering NPC System
+        initializeWanderingNpcs,
+        stopNpcWandering,
+        getNpcCurrentRoom: (npcId) => npcCurrentRooms[npcId]
     };
 }
 

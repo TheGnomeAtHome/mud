@@ -68,7 +68,7 @@ export async function parseCommandWithGemini(command, logToTerminal) {
 User command: "${command}"
 
 Rules:
-- The action must be one of: "go", "get", "drop", "examine", "say", "buy", "attack", "ask_dm", "talk", "ask_npc", "look", "inventory", "who", "score", "stats", "help", "logout", "use", "drink", "consume", "eat", "read", "cast", "spells", "spell", "learn", "guild", "guilds", "gc", "unknown"
+- The action must be one of: "go", "get", "drop", "examine", "say", "buy", "attack", "ask_dm", "talk", "ask_npc", "look", "inventory", "who", "score", "stats", "help", "logout", "use", "drink", "consume", "eat", "read", "cast", "spells", "spell", "learn", "guild", "guilds", "gc", "quest", "quests", "party", "pc", "npcchats", "unknown"
 - For movement: "go north" -> {"action": "go", "target": "north"}
 - For items: "get torch" -> {"action": "get", "target": "torch"}
 - For NPCs: "talk to guard" -> {"action": "talk", "npc_target": "guard"}
@@ -88,8 +88,27 @@ Rules:
 - For guilds: "guild" -> {"action": "guild"}
 - For guilds: "guild create Dragons" -> {"action": "guild", "target": "create", "npc_target": "Dragons"}
 - For guilds: "guild invite John" -> {"action": "guild", "target": "invite", "npc_target": "John"}
+- For guilds: "guild deposit 100" -> {"action": "guild", "target": "deposit", "npc_target": "100"}
+- For guilds: "guild withdraw 50" -> {"action": "guild", "target": "withdraw", "npc_target": "50"}
+- For guilds: "guild promote PlayerName" -> {"action": "guild", "target": "promote", "npc_target": "PlayerName"}
+- For guilds: "guild demote PlayerName" -> {"action": "guild", "target": "demote", "npc_target": "PlayerName"}
+- For guilds: "guild disband" -> {"action": "guild", "target": "disband"}
+- For guilds: "guild disband confirm" -> {"action": "guild", "target": "disband", "npc_target": "confirm"}
 - For guild chat: "gc Hello everyone" -> {"action": "gc", "target": "Hello everyone"}
-- Accept synonyms: "purchase"="buy", "fight"="attack", "speak"="talk", "consume"="use", "eat"="use", "drink"="use", "magic"="spells"
+- For quests: "quests" -> {"action": "quests"}
+- For quests: "quest accept dragon slayer" -> {"action": "quest", "target": "accept", "topic": "dragon slayer"}
+- For quests: "quest abandon dragon slayer" -> {"action": "quest", "target": "abandon", "topic": "dragon slayer"}
+- For quests: "quest progress" -> {"action": "quest", "target": "progress"}
+- For quests: "quest log" -> {"action": "quest", "target": "log"}
+- For parties: "party" -> {"action": "party"}
+- For parties: "party create" -> {"action": "party", "target": "create"}
+- For parties: "party invite John" -> {"action": "party", "target": "invite", "npc_target": "John"}
+- For parties: "party join Sarah" -> {"action": "party", "target": "join", "npc_target": "Sarah"}
+- For parties: "party leave" -> {"action": "party", "target": "leave"}
+- For parties: "party kick PlayerName" -> {"action": "party", "target": "kick", "npc_target": "PlayerName"}
+- For parties: "party list" -> {"action": "party", "target": "list"}
+- For party chat: "pc Hello team" -> {"action": "pc", "target": "Hello team"}
+- Accept synonyms: "purchase"="buy", "fight"="attack", "speak"="talk", "consume"="use", "eat"="use", "drink"="use", "magic"="spells", "missions"="quests", "tasks"="quests", "group"="party", "team"="party"
 
 Respond with ONLY valid JSON in this exact format:
 {"action": "...", "target": "...", "npc_target": "...", "topic": "...", "verb": "..."}
