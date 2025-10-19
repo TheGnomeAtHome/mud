@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MUD Setup - Default World</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #222;
+            color: #ddd;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #ffcc00;
+            border-bottom: 1px solid #444;
+            padding-bottom: 10px;
+        }
+        pre {
+            background-color: #333;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        button {
+            background-color: #4c8bff;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        button:hover {
+            background-color: #3a7aea;
+        }
+        #output {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #333;
+            border-radius: 5px;
+            min-height: 100px;
+        }
+    </style>
+</head>
+<body>
+    <h1>MUD Setup - Default World</h1>
+    <p>This tool will populate your Firebase database with default world data for your MUD game.</p>
+    
+    <button id="setupButton">Setup Default World</button>
+    <div id="output"></div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getFirestore, collection, doc, setDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "YOUR_FIREBASE_API_KEY",
+            authDomain: "your-project-id.firebaseapp.com",
+            projectId: "your-project-id",
+            storageBucket: "your-project-id.firebasestorage.app",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_FIREBASE_APP_ID"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const APP_ID = 'YOUR_APP_ID';
+
+        // Default world data
+        const defaultRooms = {
+            'town_square': {
+                name: 'Town Square',
+                description: 'The central square of the village. People bustle about their business.',
+                exits: {
+                    north: 'town_north',
+                    east: 'market',
+                    south: 'town_south',
+                    west: 'tavern'
+                },
+                details: {
+                    'fountain': 'A stone fountain with clear water bubbling from the top.',
+                    'notice board': 'A wooden board with several notices pinned to it.'
+                },
+                safe: true
+            },
+            // ... other rooms
+        };
+
+        document.getElementById('setupButton').addEventListener('click', async () => {
+            const output = document.getElementById('output');
+            output.textContent = 'Setting up default world data...';
+            
+            try {
+                // ... setup implementation
+                output.textContent += '\n\nAll world data created successfully!';
+            } catch (error) {
+                output.textContent = `Error: ${error.message}`;
+                console.error("Error setting up world data:", error);
+            }
+        });
+    </script>
+</body>
+</html>

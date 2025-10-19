@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>M.U.D. - The Digital Realm</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <header>
+        <h1>M.U.D. - The Digital Realm</h1>
+        <div class="tagline">A modern text adventure in your browser</div>
+    </header>
+
+    <section class="hero">
+        <div class="hero-content">
+            <h2>Enter The Digital Realm</h2>
+            <p>Experience an immersive text-based world with real-time multiplayer and AI-powered NPCs</p>
+            <a href="mud.html" class="cta-button">Start Playing</a>
+        </div>
+    </section>
+
+    <section class="features">
+        <div class="feature">
+            <div class="feature-icon">🌐</div>
+            <h3>Real-Time Multiplayer</h3>
+            <p>Interact with other players in a persistent world</p>
+        </div>
+        <div class="feature">
+            <div class="feature-icon">🤖</div>
+            <h3>AI-Powered NPCs</h3>
+            <p>Talk to characters with intelligent, contextual responses</p>
+        </div>
+        <div class="feature">
+            <div class="feature-icon">⚔️</div>
+            <h3>Dynamic Combat</h3>
+            <p>Engage in turn-based battles with strategic depth</p>
+        </div>
+        <div class="feature">
+            <div class="feature-icon">📱</div>
+            <h3>Mobile Friendly</h3>
+            <p>Play anywhere on any device with internet access</p>
+        </div>
+    </section>
+
+    <section class="how-to-play">
+        <h2>Getting Started</h2>
+        <div class="steps">
+            <div class="step">
+                <div class="step-number">1</div>
+                <div class="step-content">
+                    <h3>Create an Account</h3>
+                    <p>Sign up with an email and password</p>
+                </div>
+            </div>
+            <div class="step">
+                <div class="step-number">2</div>
+                <div class="step-content">
+                    <h3>Choose Your Class</h3>
+                    <p>Select from warrior, mage, rogue and more</p>
+                </div>
+            </div>
+            <div class="step">
+                <div class="step-number">3</div>
+                <div class="step-content">
+                    <h3>Explore & Adventure</h3>
+                    <p>Discover the world and complete quests</p>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, collection, getDocs, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "YOUR_FIREBASE_API_KEY",
+            authDomain: "your-project-id.firebaseapp.com",
+            projectId: "your-project-id",
+            storageBucket: "your-project-id.appspot.com",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_FIREBASE_APP_ID"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const appId = 'YOUR_APP_ID';
+
+        // Get latest updates for homepage
+        async function fetchUpdates() {
+            try {
+                const updatesQuery = query(
+                    collection(db, `/artifacts/${appId}/public/data/mud-announcements`),
+                    orderBy('date', 'desc'),
+                    limit(3)
+                );
+                const snapshot = await getDocs(updatesQuery);
+                const updates = [];
+                snapshot.forEach(doc => {
+                    updates.push({ id: doc.id, ...doc.data() });
+                });
+                displayUpdates(updates);
+            } catch (error) {
+                console.error("Error fetching updates:", error);
+            }
+        }
+
+        function displayUpdates(updates) {
+            const updatesSection = document.createElement('section');
+            updatesSection.className = 'updates';
+            updatesSection.innerHTML = `
+                <h2>Latest Updates</h2>
+                <div class="updates-container">
+                    ${updates.map(update => `
+                        <div class="update-card">
+                            <div class="update-date">${new Date(update.date).toLocaleDateString()}</div>
+                            <h3>${update.title}</h3>
+                            <p>${update.content}</p>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            document.body.insertBefore(updatesSection, document.querySelector('footer'));
+        }
+
+        // Fetch online player count
+        async function fetchPlayerCount() {
+            try {
+                // Implementation would go here
+            } catch (error) {
+                console.error("Error fetching player count:", error);
+            }
+        }
+
+        // Call functions when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchUpdates();
+            fetchPlayerCount();
+        });
+    </script>
+
+    <footer>
+        <div>
+            <h3>Documentation</h3>
+            <ul>
+                <li><a href="docs/getting-started.html">Getting Started</a></li>
+                <li><a href="docs/commands.html">Command Reference</a></li>
+                <li><a href="docs/combat-guide.html">Combat Guide</a></li>
+            </ul>
+        </div>
+        <div>
+            <h3>Community</h3>
+            <ul>
+                <li><a href="#">Discord Server</a></li>
+                <li><a href="#">Community Forum</a></li>
+                <li><a href="#">Report a Bug</a></li>
+            </ul>
+        </div>
+        <div class="copyright">
+            &copy; 2025 JPH Software. All rights reserved.
+        </div>
+    </footer>
+</body>
+
+</html>

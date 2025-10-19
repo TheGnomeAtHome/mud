@@ -17,3 +17,10 @@ desktop.ini
 # Temporary files
 *.tmp
 *~
+
+# API Keys and Sensitive Configuration
+js/config.js
+setup-default-classes.html
+setup-default-spells.html
+setup-default-world.html
+index.html

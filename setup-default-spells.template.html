@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MUD Setup - Default Spells</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #222;
+            color: #ddd;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #ffcc00;
+            border-bottom: 1px solid #444;
+            padding-bottom: 10px;
+        }
+        pre {
+            background-color: #333;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        button {
+            background-color: #4c8bff;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        button:hover {
+            background-color: #3a7aea;
+        }
+        #output {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #333;
+            border-radius: 5px;
+            min-height: 100px;
+        }
+    </style>
+</head>
+<body>
+    <h1>MUD Setup - Default Spells</h1>
+    <p>This tool will populate your Firebase database with default spells for your MUD game.</p>
+    
+    <button id="setupButton">Setup Default Spells</button>
+    <div id="output"></div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getFirestore, doc, setDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "YOUR_FIREBASE_API_KEY",
+            authDomain: "your-project-id.firebaseapp.com",
+            projectId: "your-project-id",
+            storageBucket: "your-project-id.appspot.com",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_FIREBASE_APP_ID"
+        };
+        
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const APP_ID = 'YOUR_APP_ID';
+
+        // Default spells
+        const defaultSpells = {
+            // Mage Spells
+            fireball: {
+                name: "Fireball",
+                description: "Hurls a ball of fire that deals damage to all enemies in an area.",
+                manaCost: 15,
+                cooldown: 6,
+                effectType: "damage",
+                damageType: "fire",
+                baseDamage: 25,
+                areaEffect: true,
+                level: 5,
+                class: "mage",
+                icon: "🔥"
+            },
+            /* ... other spells ... */
+        };
+
+        document.getElementById('setupButton').addEventListener('click', async () => {
+            const output = document.getElementById('output');
+            output.textContent = 'Setting up default spells...';
+            
+            try {
+                for (const [spellId, spellData] of Object.entries(defaultSpells)) {
+                    await setDoc(doc(db, `/artifacts/${APP_ID}/public/data/mud-spells/${spellId}`), spellData);
+                    output.textContent += `\nCreated spell: ${spellData.name}`;
+                }
+                output.textContent += '\n\nAll spells created successfully!';
+            } catch (error) {
+                output.textContent = `Error: ${error.message}`;
+                console.error("Error setting up spells:", error);
+            }
+        });
+    </script>
+</body>
+</html>

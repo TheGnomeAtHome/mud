@@ -95,7 +95,7 @@ mud/
    - `inventory` - Check your items
    - `help` - See all commands
 
-## 🔧 Development Setup
+## Setup
 
 1. Clone the repository:
    ```bash
@@ -103,12 +103,22 @@ mud/
    cd mud
    ```
 
-2. Configure Firebase:
-   - Update `js/config.js` with your Firebase credentials
-   - Set up Firestore collections (see structure below)
+2. Set up configuration files from templates:
+   - Copy all template files to create your local configuration files:
+     ```bash
+     copy js\config.template.js js\config.js
+     copy index.template.html index.html
+     copy setup-default-classes.template.html setup-default-classes.html
+     copy setup-default-spells.template.html setup-default-spells.html
+     copy setup-default-world.template.html setup-default-world.html
+     ```
+   - Edit each file to add your Firebase and Gemini API credentials:
+     - Replace `YOUR_APP_ID` with your Firebase App ID
+     - Replace `YOUR_GEMINI_API_KEY` with your Gemini API key
+     - Replace Firebase configuration values with your project values
 
-3. Configure Gemini API:
-   - Add your API key to `js/config.js`
+3. Configure Firebase:
+   - Set up Firestore collections (see structure below)
 
 4. Serve locally:
    ```bash
