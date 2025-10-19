@@ -59,17 +59,17 @@
         
         // Firebase configuration
         const firebaseConfig = {
-            apiKey: "AIzaSyCxlPIOexempyCmO3Ljs_T00-Tr_YjNY0o",
-            authDomain: "artifact-1b17c.firebaseapp.com",
-            projectId: "artifact-1b17c",
-            storageBucket: "artifact-1b17c.appspot.com",
-            messagingSenderId: "207174998358",
-            appId: "1:207174998358:web:69e80cc7aeeabca8c51f1b"
+            apiKey: "FIREBASE_API_KEY",
+            authDomain: "your-project-id.firebaseapp.com",
+            projectId: "your-project-id",
+            storageBucket: "your-project-id.appspot.com",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_FIREBASE_APP_ID"
         };
         
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
-        const APP_ID = 'mud-game-v1';
+        const APP_ID = 'YOUR_APP_ID';
         
         // Default spells to create
         const defaultSpells = [
