@@ -5,7 +5,7 @@
 export const APP_ID = 'YOUR_APP_ID';
 
 // Gemini AI Configuration
-export const GEMINI_API_KEY = "YOUR_GEMINI_API_KEY";
+export const GEMINI_API_KEY = "PASTE_YOUR_API_KEY_HERE";
 export const GEMINI_MODEL = "gemini-2.0-flash";
 export const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
