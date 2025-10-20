@@ -24,7 +24,7 @@
             THE DIGITAL REALM
         </h1>
         <p class="text-2xl mb-10 text-gray-400">
-            A text-based multiplayer adventure
+            A text-based multiplayer adventure powered by AI
         </p>
         <a href="mud.html" class="bg-[#00ff41] text-black px-12 py-6 rounded-lg text-2xl font-bold hover:bg-white transition-all glow inline-block">
             🎮 Enter The Realm
@@ -66,17 +66,17 @@
         import { getFirestore, collection, getDocs, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
-            apiKey: "FIREBASE_API_KEY",
-            authDomain: "your-project-id.firebaseapp.com",
-            projectId: "your-project-id",
-            storageBucket: "your-project-id.appspot.com",
-            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-            appId: "YOUR_FIREBASE_APP_ID"
+            apiKey: "AIzaSyCscVJaLJV1FoOulHQBateoRh1UYhEE5gg",
+            authDomain: "mudgame-3cbb1.firebaseapp.com",
+            projectId: "mudgame-3cbb1",
+            storageBucket: "mudgame-3cbb1.appspot.com",
+            messagingSenderId: "1004334145379",
+            appId: "1:1004334145379:web:3db9fda346526a64e67d56"
         };
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
-        const appId = 'YOUR_APP_ID';
+        const appId = 'mudgame-3cbb1';
 
         async function loadStats() {
             try {

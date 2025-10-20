@@ -1,0 +1,121 @@
+{
+  "raincoat": {
+    "name": "a waterproof raincoat",
+    "description": "A sturdy raincoat that repels water effectively",
+    "itemType": "clothing",
+    "slot": "body",
+    "cost": 50,
+    "movable": true,
+    "isWeapon": false,
+    "weatherProtection": {
+      "rainy": 0.9,
+      "stormy": 0.7,
+      "cold": 0.2,
+      "snowy": 0.3
+    },
+    "consumable": false
+  },
+  "warm-cloak": {
+    "name": "a thick woolen cloak",
+    "description": "A heavy cloak lined with warm wool, perfect for cold weather",
+    "itemType": "clothing",
+    "slot": "body",
+    "cost": 75,
+    "movable": true,
+    "isWeapon": false,
+    "weatherProtection": {
+      "cold": 0.8,
+      "snowy": 0.7,
+      "freezing": 0.85,
+      "rainy": 0.4,
+      "stormy": 0.5
+    },
+    "consumable": false
+  },
+  "desert-robes": {
+    "name": "light desert robes",
+    "description": "Flowing robes designed to keep you cool in scorching heat",
+    "itemType": "clothing",
+    "slot": "body",
+    "cost": 60,
+    "movable": true,
+    "isWeapon": false,
+    "weatherProtection": {
+      "hot": 0.85,
+      "sunny": 0.7
+    },
+    "consumable": false
+  },
+  "leather-boots": {
+    "name": "sturdy leather boots",
+    "description": "Well-made boots that keep your feet dry and warm",
+    "itemType": "clothing",
+    "slot": "feet",
+    "cost": 30,
+    "movable": true,
+    "isWeapon": false,
+    "weatherProtection": {
+      "rainy": 0.3,
+      "snowy": 0.4,
+      "cold": 0.2
+    },
+    "consumable": false
+  },
+  "fur-hat": {
+    "name": "a warm fur hat",
+    "description": "A hat made from thick animal fur, keeps your head toasty",
+    "itemType": "clothing",
+    "slot": "head",
+    "cost": 25,
+    "movable": true,
+    "isWeapon": false,
+    "weatherProtection": {
+      "cold": 0.5,
+      "snowy": 0.6,
+      "freezing": 0.55
+    },
+    "consumable": false
+  },
+  "umbrella": {
+    "name": "a sturdy umbrella",
+    "description": "A collapsible umbrella that shields you from rain",
+    "itemType": "tool",
+    "cost": 15,
+    "movable": true,
+    "isWeapon": false,
+    "weatherProtection": {
+      "rainy": 0.6,
+      "stormy": 0.3
+    },
+    "consumable": false
+  },
+  "wool-gloves": {
+    "name": "warm wool gloves",
+    "description": "Soft gloves that keep your hands warm in the cold",
+    "itemType": "clothing",
+    "slot": "hands",
+    "cost": 20,
+    "movable": true,
+    "isWeapon": false,
+    "weatherProtection": {
+      "cold": 0.4,
+      "snowy": 0.5,
+      "freezing": 0.6
+    },
+    "consumable": false
+  },
+  "sun-hat": {
+    "name": "a wide-brimmed sun hat",
+    "description": "A hat with a wide brim to shade you from the sun",
+    "itemType": "clothing",
+    "slot": "head",
+    "cost": 20,
+    "movable": true,
+    "isWeapon": false,
+    "weatherProtection": {
+      "hot": 0.5,
+      "sunny": 0.6
+    },
+    "consumable": false
+  }
+}

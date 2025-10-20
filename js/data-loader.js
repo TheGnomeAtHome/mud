@@ -5,8 +5,22 @@ export function initializeDataLoader(firebase, appId) {
     
     // Configuration: Set to true to use static JSON files instead of Firebase for game content
     // NOTE: Set to FALSE first time to export your data, then set to TRUE after placing JSON files in /data/
-    const USE_STATIC_FILES = true;  // TODO: Change to true after exporting
+    const USE_STATIC_FILES = false;  // DISABLED - Using MySQL backend instead
+    const USE_MYSQL_BACKEND = true;  // ✓ ENABLED - Using MySQL via PHP API
     const STATIC_FILES_PATH = './data/';
+    const MYSQL_API_URL = 'https://jphsoftware.com/api';  // PHP API endpoint
+    
+    // Hybrid mode: Load some collections from Firebase (for live editing) and others from static files
+    // Set individual collections to false to load from Firebase/MySQL instead of static files
+    const STATIC_CONFIG = {
+        rooms: false,      // FALSE = Load from MySQL (live editing for admins)
+        items: false,      // FALSE = Load from MySQL
+        npcs: false,       // FALSE = Load from MySQL (admins can edit NPCs)
+        monsters: false,   // FALSE = Load from MySQL
+        classes: false,    // FALSE = Load from MySQL
+        spells: false,     // FALSE = Load from MySQL
+        quests: false      // FALSE = Load from MySQL
+    };
     
     const gameData = {
         gameWorld: {},
@@ -60,9 +74,49 @@ export function initializeDataLoader(firebase, appId) {
             return data;
         }
     }
+    
+    /**
+     * Load data from MySQL API server with fallback to Firebase
+     */
+    async function loadFromMySQL(collectionName) {
+        try {
+            console.log(`[DataLoader] Attempting to load ${collectionName} from MySQL...`);
+            const response = await fetch(`${MYSQL_API_URL}/${collectionName}`);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            const count = Object.keys(data).length;
+            console.log(`[DataLoader] ✓ Loaded ${count} ${collectionName} from MySQL`);
+            return data;
+            
+        } catch (error) {
+            console.error(`[DataLoader] Failed to load ${collectionName} from MySQL:`, error.message);
+            console.log(`[DataLoader] Falling back to Firebase for ${collectionName}...`);
+            
+            // Fallback to Firebase
+            const snapshot = await getDocs(collection(db, `/artifacts/${appId}/public/data/mud-${collectionName}`));
+            const data = {};
+            snapshot.forEach(doc => {
+                data[doc.id] = { id: doc.id, ...doc.data() };
+            });
+            
+            const count = Object.keys(data).length;
+            console.log(`[DataLoader] ✓ Loaded ${count} ${collectionName} from Firebase (fallback)`);
+            return data;
+        }
+    }
 
     
-    function loadGameData() {
+    function loadGameData(userId = null) {
+        // Store userId for death detection
+        if (userId) {
+            gameData.userId = userId;
+            gameData.deathHandled = false;
+        }
+        
         // If already loaded, return resolved promise
         if (isLoaded) {
             return Promise.resolve(true);
@@ -123,7 +177,20 @@ export function initializeDataLoader(firebase, appId) {
             const playersUnsub = onSnapshot(collection(db, `/artifacts/${appId}/public/data/mud-players`), (snapshot) => {
                 let count = 0;
                 snapshot.forEach(doc => {
-                    gameData.gamePlayers[doc.id] = { id: doc.id, ...doc.data() };
+                    const playerData = { id: doc.id, ...doc.data() };
+                    gameData.gamePlayers[doc.id] = playerData;
+                    
+                    // Check if THIS player just died
+                    if (doc.id === gameData.userId && playerData.isDead && !gameData.deathHandled) {
+                        gameData.deathHandled = true;
+                        // Import and call the death choice function from game.js
+                        if (window.offerDeathChoice) {
+                            setTimeout(() => {
+                                window.offerDeathChoice(playerData, playerData.deathCause || 'unknown');
+                            }, 500);
+                        }
+                    }
+                    
                     count++;
                 });
                 console.log(`[Firestore] Loaded ${count} players.`);
@@ -154,40 +221,142 @@ export function initializeDataLoader(firebase, appId) {
             }, reject);
             unsubscribers.push(partiesUnsub);
             
-            // Load classes, spells, guilds, quests - from STATIC FILES or Firebase
+            // Load classes, spells, guilds, quests - from STATIC FILES, MySQL, or Firebase
             // These are admin-only data that changes infrequently
             try {
-                if (USE_STATIC_FILES) {
-                    // Load from static JSON files (MUCH faster, 90% fewer reads)
-                    console.log('[DataLoader] Using static file mode for game content');
+                if (USE_STATIC_FILES || USE_MYSQL_BACKEND) {
+                    // Load from static JSON files or MySQL (MUCH faster, 90% fewer reads)
+                    if (USE_STATIC_FILES) {
+                        console.log('[DataLoader] Using hybrid/static file mode for game content');
+                    } else if (USE_MYSQL_BACKEND) {
+                        console.log('[DataLoader] Using MySQL backend for game content');
+                    }
                     
-                    // Load rooms from static files
-                    gameData.gameWorld = await loadFromStaticFile('rooms', 'mud-rooms');
-                    checkComplete('rooms');
+                    // Load rooms - check config
+                    if (STATIC_CONFIG.rooms) {
+                        gameData.gameWorld = await loadFromStaticFile('rooms', 'mud-rooms');
+                        checkComplete('rooms');
+                    } else if (USE_MYSQL_BACKEND) {
+                        console.log('[DataLoader] Loading rooms from MySQL (live editing enabled)');
+                        gameData.gameWorld = await loadFromMySQL('rooms');
+                        checkComplete('rooms');
+                    } else {
+                        console.log('[DataLoader] Loading rooms from Firebase (live editing enabled)');
+                        const roomsSnapshot = await getDocs(collection(db, `/artifacts/${appId}/public/data/mud-rooms`));
+                        gameData.gameWorld = {};
+                        roomsSnapshot.forEach(doc => {
+                            gameData.gameWorld[doc.id] = { id: doc.id, ...doc.data() };
+                        });
+                        checkComplete('rooms');
+                    }
                     
-                    // Load items from static files
-                    gameData.gameItems = await loadFromStaticFile('items', 'mud-items');
-                    checkComplete('items');
+                    // Load items - check config
+                    if (STATIC_CONFIG.items) {
+                        gameData.gameItems = await loadFromStaticFile('items', 'mud-items');
+                        checkComplete('items');
+                    } else if (USE_MYSQL_BACKEND) {
+                        console.log('[DataLoader] Loading items from MySQL (live editing enabled)');
+                        gameData.gameItems = await loadFromMySQL('items');
+                        checkComplete('items');
+                    } else {
+                        console.log('[DataLoader] Loading items from Firebase (live editing enabled)');
+                        const itemsSnapshot = await getDocs(collection(db, `/artifacts/${appId}/public/data/mud-items`));
+                        gameData.gameItems = {};
+                        itemsSnapshot.forEach(doc => {
+                            gameData.gameItems[doc.id] = { id: doc.id, ...doc.data() };
+                        });
+                        checkComplete('items');
+                    }
                     
-                    // Load NPCs from static files
-                    gameData.gameNpcs = await loadFromStaticFile('npcs', 'mud-npcs');
-                    checkComplete('npcs');
+                    // Load NPCs - check config
+                    if (STATIC_CONFIG.npcs) {
+                        gameData.gameNpcs = await loadFromStaticFile('npcs', 'mud-npcs');
+                        checkComplete('npcs');
+                    } else if (USE_MYSQL_BACKEND) {
+                        console.log('[DataLoader] Loading NPCs from MySQL (live editing enabled)');
+                        gameData.gameNpcs = await loadFromMySQL('npcs');
+                        checkComplete('npcs');
+                    } else {
+                        console.log('[DataLoader] Loading NPCs from Firebase (live editing enabled)');
+                        const npcsSnapshot = await getDocs(collection(db, `/artifacts/${appId}/public/data/mud-npcs`));
+                        gameData.gameNpcs = {};
+                        npcsSnapshot.forEach(doc => {
+                            gameData.gameNpcs[doc.id] = { id: doc.id, ...doc.data() };
+                        });
+                        checkComplete('npcs');
+                    }
                     
-                    // Load monsters from static files
-                    gameData.gameMonsters = await loadFromStaticFile('monsters', 'mud-monsters');
-                    checkComplete('monsters');
+                    // Load monsters - check config
+                    if (STATIC_CONFIG.monsters) {
+                        gameData.gameMonsters = await loadFromStaticFile('monsters', 'mud-monsters');
+                        checkComplete('monsters');
+                    } else if (USE_MYSQL_BACKEND) {
+                        console.log('[DataLoader] Loading monsters from MySQL...');
+                        gameData.gameMonsters = await loadFromMySQL('monsters');
+                        checkComplete('monsters');
+                    } else {
+                        console.log('[DataLoader] Loading monsters from Firebase (live editing enabled)');
+                        const monstersSnapshot = await getDocs(collection(db, `/artifacts/${appId}/public/data/mud-monsters`));
+                        gameData.gameMonsters = {};
+                        monstersSnapshot.forEach(doc => {
+                            gameData.gameMonsters[doc.id] = { id: doc.id, ...doc.data() };
+                        });
+                        checkComplete('monsters');
+                    }
                     
-                    // Load classes from static files
-                    gameData.gameClasses = await loadFromStaticFile('classes', 'mud-classes');
-                    checkComplete('classes');
+                    // Load classes - check config
+                    if (STATIC_CONFIG.classes) {
+                        gameData.gameClasses = await loadFromStaticFile('classes', 'mud-classes');
+                        checkComplete('classes');
+                    } else if (USE_MYSQL_BACKEND) {
+                        console.log('[DataLoader] Loading classes from MySQL...');
+                        gameData.gameClasses = await loadFromMySQL('classes');
+                        checkComplete('classes');
+                    } else {
+                        console.log('[DataLoader] Loading classes from Firebase (live editing enabled)');
+                        const classesSnapshot = await getDocs(collection(db, `/artifacts/${appId}/public/data/mud-classes`));
+                        gameData.gameClasses = {};
+                        classesSnapshot.forEach(doc => {
+                            gameData.gameClasses[doc.id] = { id: doc.id, ...doc.data() };
+                        });
+                        checkComplete('classes');
+                    }
                     
-                    // Load spells from static files
-                    gameData.gameSpells = await loadFromStaticFile('spells', 'mud-spells');
-                    checkComplete('spells');
+                    // Load spells - check config
+                    if (STATIC_CONFIG.spells) {
+                        gameData.gameSpells = await loadFromStaticFile('spells', 'mud-spells');
+                        checkComplete('spells');
+                    } else if (USE_MYSQL_BACKEND) {
+                        console.log('[DataLoader] Loading spells from MySQL...');
+                        gameData.gameSpells = await loadFromMySQL('spells');
+                        checkComplete('spells');
+                    } else {
+                        console.log('[DataLoader] Loading spells from Firebase (live editing enabled)');
+                        const spellsSnapshot = await getDocs(collection(db, `/artifacts/${appId}/public/data/mud-spells`));
+                        gameData.gameSpells = {};
+                        spellsSnapshot.forEach(doc => {
+                            gameData.gameSpells[doc.id] = { id: doc.id, ...doc.data() };
+                        });
+                        checkComplete('spells');
+                    }
                     
-                    // Load quests from static files
-                    gameData.gameQuests = await loadFromStaticFile('quests', 'mud-quests');
-                    checkComplete('quests');
+                    // Load quests - check config
+                    if (STATIC_CONFIG.quests) {
+                        gameData.gameQuests = await loadFromStaticFile('quests', 'mud-quests');
+                        checkComplete('quests');
+                    } else if (USE_MYSQL_BACKEND) {
+                        console.log('[DataLoader] Loading quests from MySQL...');
+                        gameData.gameQuests = await loadFromMySQL('quests');
+                        checkComplete('quests');
+                    } else {
+                        console.log('[DataLoader] Loading quests from Firebase (live editing enabled)');
+                        const questsSnapshot = await getDocs(collection(db, `/artifacts/${appId}/public/data/mud-quests`));
+                        gameData.gameQuests = {};
+                        questsSnapshot.forEach(doc => {
+                            gameData.gameQuests[doc.id] = { id: doc.id, ...doc.data() };
+                        });
+                        checkComplete('quests');
+                    }
                     
                     // Still load guilds from Firebase (changes more frequently)
                     const guildsSnapshot = await getDocs(collection(db, `/artifacts/${appId}/public/data/mud-guilds`));

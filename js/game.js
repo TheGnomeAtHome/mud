@@ -34,6 +34,7 @@ export function initializeGameLogic(dependencies) {
         gamePlayers,
         activeMonsters,
         gameSpells,
+        gameClasses,
         gameGuilds,
         gameQuests,
         gameParties,
@@ -70,6 +71,15 @@ export function initializeGameLogic(dependencies) {
     let lastNpcInteraction = null;
     let conversationHistory = []; // Track conversation with AI NPCs
     let gameActions = {}; // Store custom actions/emotes
+    
+    // Helper function to add appropriate article (a/an) to a noun
+    function addArticle(name) {
+        if (!name) return 'something';
+        const firstChar = name.charAt(0).toLowerCase();
+        const vowels = ['a', 'e', 'i', 'o', 'u'];
+        const article = vowels.includes(firstChar) ? 'an' : 'a';
+        return `${article} ${name}`;
+    }
     
     // Level configuration (can be overridden from Firebase)
     let LEVEL_NAMES = {
@@ -117,6 +127,160 @@ export function initializeGameLogic(dependencies) {
         
         // Fall back to generic level names
         return LEVEL_NAMES[level] || `Level ${level}`;
+    }
+    
+    // Store pending death choice
+    let pendingDeathChoice = null;
+    
+    // Offer death choice to player
+    function offerDeathChoice(playerData, causeOfDeath) {
+        const MIN_LEVEL_FOR_PERMADEATH = 10;
+        const playerLevel = playerData.level || 1;
+        
+        // Store the death context
+        pendingDeathChoice = {
+            playerData: playerData,
+            causeOfDeath: causeOfDeath,
+            timestamp: Date.now()
+        };
+        
+        if (playerLevel >= MIN_LEVEL_FOR_PERMADEATH) {
+            logToTerminal(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, 'error');
+            logToTerminal(`YOU HAVE BEEN DEFEATED!`, 'error');
+            logToTerminal(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, 'error');
+            logToTerminal(`As a level ${playerLevel} ${playerData.class || 'Adventurer'}, you have earned the right to choose your fate:`, 'system');
+            logToTerminal(``, 'system');
+            logToTerminal(`1. RESPAWN - Return to the Nexus, lose your inventory and 10% of your gold`, 'game');
+            logToTerminal(`2. PERMADEATH - Your character dies permanently, but receives a memorial gravestone`, 'game');
+            logToTerminal(``, 'system');
+            logToTerminal(`Type: respawn or permadeath`, 'system');
+            logToTerminal(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, 'error');
+        } else {
+            // Below level 10 - auto-respawn, no choice
+            logToTerminal(`You have been defeated! You respawn at the Nexus and lose all your items.`, 'error');
+            logToTerminal(`(Reach level 10 to unlock the permadeath option)`, 'system');
+            handleRespawn();
+        }
+    }
+    
+    // Handle respawn choice
+    async function handleRespawn() {
+        if (!pendingDeathChoice) return;
+        
+        const { playerData } = pendingDeathChoice;
+        const playerRef = doc(db, `/artifacts/${appId}/public/data/mud-players/${userId}`);
+        
+        try {
+            await updateDoc(playerRef, {
+                roomId: 'start',
+                hp: playerData.maxHp,
+                money: Math.floor((playerData.money || 0) * 0.9),
+                inventory: []
+            });
+            
+            logToTerminal(`You respawn at the Nexus, battered but alive.`, 'system');
+            logToTerminal(`You've lost your inventory and 10% of your gold.`, 'game');
+            pendingDeathChoice = null;
+        } catch (error) {
+            logToTerminal(`Error during respawn: ${error.message}`, 'error');
+        }
+    }
+    
+    // Handle permadeath choice
+    async function handlePermadeath() {
+        if (!pendingDeathChoice) return;
+        
+        const { playerData, causeOfDeath } = pendingDeathChoice;
+        
+        try {
+            // Create gravestone
+            const gravestoneCreated = await createGravestone(playerData, causeOfDeath);
+            
+            if (gravestoneCreated) {
+                logToTerminal(``, 'system');
+                logToTerminal(`Your character has passed into legend...`, 'system');
+                logToTerminal(`A gravestone has been erected in the graveyard in your honor.`, 'game');
+                logToTerminal(`Visit the graveyard to pay your respects.`, 'game');
+                logToTerminal(``, 'system');
+            }
+            
+            // Delete character
+            const playerRef = doc(db, `/artifacts/${appId}/public/data/mud-players/${userId}`);
+            await deleteDoc(playerRef);
+            
+            logToTerminal(`Your character has been permanently deleted.`, 'error');
+            logToTerminal(`Refresh the page to create a new character.`, 'system');
+            
+            pendingDeathChoice = null;
+            
+            // Disable input
+            const inputField = document.getElementById('command-input');
+            if (inputField) {
+                inputField.disabled = true;
+                inputField.placeholder = 'Character deleted - Refresh to create new character';
+            }
+        } catch (error) {
+            logToTerminal(`Error during permadeath: ${error.message}`, 'error');
+        }
+    }
+    
+    // Create gravestone for fallen player (level 10+)
+    async function createGravestone(playerData, causeOfDeath = 'unknown') {
+        const MIN_LEVEL_FOR_GRAVESTONE = 10;
+        
+        if ((playerData.level || 1) < MIN_LEVEL_FOR_GRAVESTONE) {
+            // Level too low - goes to pauper's grave
+            return false;
+        }
+        
+        try {
+            const gravestoneId = `grave_${playerData.userId || playerData.id}_${Date.now()}`;
+            const epitaph = playerData.epitaph || `Here lies ${playerData.name}, who fell to ${causeOfDeath}`;
+            const deathDate = new Date().toLocaleDateString();
+            
+            // Create gravestone data
+            const gravestoneData = {
+                playerName: playerData.name,
+                playerLevel: playerData.level || 1,
+                playerClass: playerData.class || 'Adventurer',
+                epitaph: epitaph,
+                causeOfDeath: causeOfDeath,
+                deathDate: deathDate,
+                timestamp: serverTimestamp()
+            };
+            
+            // Add to gravestones collection
+            await setDoc(doc(db, `/artifacts/${appId}/public/data/mud-gravestones/${gravestoneId}`), gravestoneData);
+            
+            // Add to graveyard room details (if graveyard exists)
+            const graveyardRoomId = 'graveyard'; // You'll need to create this room
+            const graveyardRef = doc(db, `/artifacts/${appId}/public/data/mud-rooms/${graveyardRoomId}`);
+            const graveyardDoc = await getDoc(graveyardRef);
+            
+            if (graveyardDoc.exists()) {
+                const graveyardData = graveyardDoc.data();
+                const details = graveyardData.details || {};
+                
+                // Add gravestone as an examinable detail
+                const graveName = `${playerData.name.toLowerCase().replace(/\s+/g, '_')}_gravestone`;
+                details[graveName] = `╔════════════════════════════════════╗\n` +
+                                    `║     HERE LIES ${playerData.name.toUpperCase()}     ║\n` +
+                                    `╠════════════════════════════════════╣\n` +
+                                    `║  Level ${playerData.level} ${playerData.class || 'Adventurer'}  ║\n` +
+                                    `║  ${deathDate}  ║\n` +
+                                    `╠════════════════════════════════════╣\n` +
+                                    `║  "${epitaph}"  ║\n` +
+                                    `╚════════════════════════════════════╝`;
+                
+                await updateDoc(graveyardRef, { details: details });
+            }
+            
+            console.log(`[Graveyard] Created gravestone for ${playerData.name}`);
+            return true;
+        } catch (error) {
+            console.error('[Graveyard] Error creating gravestone:', error);
+            return false;
+        }
     }
     
     // Load custom actions from Firebase
@@ -601,8 +765,17 @@ export function initializeGameLogic(dependencies) {
         logToTerminal(`\n<span class="text-white text-xl font-bold">${room.name}</span>`, 'game');
         logToTerminal(room.description, 'game');
         
+        // Show weather information for outdoor rooms
+        if (typeof weatherSystem !== 'undefined' && !room.isIndoor) {
+            const weather = weatherSystem.getCurrentWeather();
+            logToTerminal(`<span class="text-yellow-400">⛅ ${weather.description}</span>`, 'game');
+        }
+        
         if (room.items && room.items.length > 0) {
-            const itemNames = room.items.map(itemId => gameItems[itemId]?.name || 'an unknown object').join(', ');
+            const itemNames = room.items.map(itemId => {
+                const item = gameItems[itemId];
+                return item ? addArticle(item.name) : 'an unknown object';
+            }).join(', ');
             logToTerminal(`You see here: <span class="text-yellow-300">${itemNames}</span>.`, 'game');
         }
         
@@ -625,6 +798,8 @@ export function initializeGameLogic(dependencies) {
         const playersInRoom = Object.values(gamePlayers).filter(p => {
             // Filter out yourself
             if (p.name === playerName) return false;
+            // Filter out offline players (kicked or logged out)
+            if (p.online === false) return false;
             // Filter out invisible admins (unless you're an admin)
             if (p.invisible && !gamePlayers[userId]?.isAdmin) return false;
             // Must be in the same room
@@ -2637,6 +2812,56 @@ Examples:
                 }
                 break;
             
+            case 'weather':
+                // Display current weather and player status
+                if (typeof weatherSystem !== 'undefined') {
+                    const weather = weatherSystem.getCurrentWeather();
+                    const room = gameWorld[currentPlayerRoomId];
+                    
+                    logToTerminal("--- Weather Report ---", "system");
+                    logToTerminal(`Current weather: <span class="text-yellow-400">${weather.type}</span>`, "system");
+                    logToTerminal(`${weather.description}`, "game");
+                    
+                    if (room && room.isIndoor) {
+                        logToTerminal(`<span class="text-green-400">You are safely indoors.</span>`, "system");
+                    } else {
+                        logToTerminal(`<span class="text-cyan-400">You are exposed to the elements.</span>`, "system");
+                        
+                        // Show protection level
+                        const pDoc = await getDoc(playerRef);
+                        const pData = pDoc.data();
+                        if (pData.inventory && pData.inventory.length > 0) {
+                            const hasProtection = pData.inventory.some(itemId => {
+                                const item = gameItems[itemId];
+                                return item && item.weatherProtection;
+                            });
+                            
+                            if (hasProtection) {
+                                logToTerminal(`<span class="text-green-400">You have some weather protection.</span>`, "system");
+                            } else {
+                                logToTerminal(`<span class="text-red-400">You have no weather protection!</span>`, "system");
+                            }
+                        }
+                        
+                        // Show active status effects
+                        if (pData.statusEffects) {
+                            const effects = Object.keys(pData.statusEffects);
+                            if (effects.length > 0) {
+                                logToTerminal(`<span class="text-red-400">Active conditions:</span>`, "system");
+                                for (const effect of effects) {
+                                    const effectData = weatherSystem.STATUS_EFFECTS[effect];
+                                    if (effectData) {
+                                        logToTerminal(`  ${effectData.icon} ${effectData.description}`, "system");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    logToTerminal("Weather system is not initialized.", "error");
+                }
+                break;
+            
             case 'look': await showRoom(currentPlayerRoomId); break;
             case 'go':
                  console.log(`[Movement] Attempting to go ${target}`);
@@ -2663,6 +2888,13 @@ Examples:
                             logToTerminal(`The entrance to ${guildHallGuild.name}'s guild hall is restricted to members only.`, 'error');
                             break;
                         }
+                    }
+                    
+                    // Check weather movement restrictions
+                    if (typeof weatherSystem !== 'undefined' && !weatherSystem.canMove(userId)) {
+                        const weather = weatherSystem.getCurrentWeather();
+                        logToTerminal(`<span class="text-yellow-400">The ${weather.type} weather makes it difficult to move. You struggle against the elements but can't make progress.</span>`, 'game');
+                        break;
                     }
                     
                     const updates = { roomId: destinationRoomId };
@@ -2760,7 +2992,7 @@ Examples:
                     const fullItemObject = { id: itemIdToGet, ...item };
                     await updateDoc(playerRef, { inventory: arrayUnion(fullItemObject) });
                     await updateDoc(roomRef, { items: arrayRemove(itemIdToGet) });
-                    logToTerminal(`You take the ${item.name}.`, 'game');
+                    logToTerminal(`You take ${addArticle(item.name)}.`, 'game');
                     
                     // Check quest progress for item collection
                     const completedQuests = await updateQuestProgress(userId, 'collect', itemIdToGet, 1);
@@ -2788,7 +3020,7 @@ Examples:
                 if (itemToDrop) {
                     await updateDoc(playerRef, { inventory: arrayRemove(itemToDrop) });
                     await updateDoc(roomRef, { items: arrayUnion(itemToDrop.id) });
-                    logToTerminal(`You drop the ${itemToDrop.name}.`, 'game');
+                    logToTerminal(`You drop ${addArticle(itemToDrop.name)}.`, 'game');
                 } else { logToTerminal("You aren't carrying that.", 'error'); }
                 break;
             case 'say':
@@ -2926,6 +3158,67 @@ Examples:
                 break;
             }
             
+            case 'epitaph':
+                // Set gravestone epitaph (for players level 10+)
+                const pDocEpitaph = await getDoc(playerRef);
+                const pDataEpitaph = pDocEpitaph.data();
+                const currentLevel = pDataEpitaph.level || 1;
+                
+                if (currentLevel < 10) {
+                    logToTerminal("You must be at least level 10 to set an epitaph.", 'error');
+                    break;
+                }
+                
+                if (!target) {
+                    // Show current epitaph
+                    const currentEpitaph = pDataEpitaph.epitaph || null;
+                    if (currentEpitaph) {
+                        logToTerminal("Your current epitaph:", 'system');
+                        logToTerminal(`"${currentEpitaph}"`, 'game');
+                    } else {
+                        logToTerminal("You haven't set an epitaph yet.", 'system');
+                        logToTerminal("Usage: epitaph <your epitaph text>", 'system');
+                        logToTerminal("Example: epitaph Here lies a brave warrior who faced death with honor", 'system');
+                    }
+                    break;
+                }
+                
+                // Set new epitaph
+                const newEpitaph = cmdText.substring(cmdText.indexOf(' ')).trim();
+                if (newEpitaph.length > 200) {
+                    logToTerminal("Epitaph too long! Maximum 200 characters.", 'error');
+                    break;
+                }
+                
+                await updateDoc(playerRef, { epitaph: newEpitaph });
+                logToTerminal("Your epitaph has been set:", 'success');
+                logToTerminal(`"${newEpitaph}"`, 'game');
+                logToTerminal("This will appear on your gravestone if you die.", 'system');
+                break;
+            
+            case 'respawn':
+                if (!pendingDeathChoice) {
+                    logToTerminal("You're not dead yet!", 'error');
+                    break;
+                }
+                await handleRespawn();
+                break;
+            
+            case 'permadeath':
+                if (!pendingDeathChoice) {
+                    logToTerminal("You're not dead yet!", 'error');
+                    break;
+                }
+                
+                // Confirm the choice
+                logToTerminal("Are you sure? This will PERMANENTLY DELETE your character!", 'error');
+                logToTerminal("Type 'permadeath confirm' to proceed, or 'respawn' to choose respawn instead.", 'system');
+                
+                if (cmdText.toLowerCase().includes('confirm')) {
+                    await handlePermadeath();
+                }
+                break;
+            
             case 'inventory':
                 const pDocInv = await getDoc(playerRef);
                 const inv = pDocInv.data().inventory || [];
@@ -2996,10 +3289,47 @@ Examples:
                             }
                         });
                     }
-                } else if (currentRoom.details && currentRoom.details[target]) {
-                    logToTerminal(currentRoom.details[target], 'game');
-                } else { 
-                    logToTerminal("You see nothing special about that.", 'game'); 
+                } else {
+                    // Check if examining an item in the room or inventory
+                    const itemInRoom = currentRoom.items?.find(itemId => {
+                        const item = gameItems[itemId];
+                        return item && (item.name.toLowerCase() === target.toLowerCase() || 
+                                      item.aliases?.some(alias => alias.toLowerCase() === target.toLowerCase()));
+                    });
+                    
+                    if (itemInRoom) {
+                        const item = gameItems[itemInRoom];
+                        if (item.description) {
+                            logToTerminal(item.description, 'game');
+                        } else {
+                            logToTerminal(`It's ${item.name}.`, 'game');
+                        }
+                        break;
+                    }
+                    
+                    // Check inventory
+                    const pDocExamine = await getDoc(playerRef);
+                    const playerInv = pDocExamine.data().inventory || [];
+                    const itemInInventory = playerInv.find(invItem => 
+                        invItem.name.toLowerCase() === target.toLowerCase() || 
+                        invItem.aliases?.some(alias => alias.toLowerCase() === target.toLowerCase())
+                    );
+                    
+                    if (itemInInventory) {
+                        if (itemInInventory.description) {
+                            logToTerminal(itemInInventory.description, 'game');
+                        } else {
+                            logToTerminal(`It's ${itemInInventory.name}.`, 'game');
+                        }
+                        break;
+                    }
+                    
+                    // Check room details
+                    if (currentRoom.details && currentRoom.details[target]) {
+                        logToTerminal(currentRoom.details[target], 'game');
+                    } else { 
+                        logToTerminal("You see nothing special about that.", 'game'); 
+                    }
                 }
                 break;
             case 'buy':
@@ -3038,6 +3368,237 @@ Examples:
                 const { sellToNPC } = await import('./trading.js');
                 const playerDocSell = await getDoc(playerRef);
                 await sellToNPC(auth.currentUser.uid, buyer, itemToSell, playerDocSell.data());
+                break;
+            
+            case 'give':
+                // Give items or money to NPCs or players
+                if (!target) {
+                    logToTerminal("Usage: give <amount> gold to <name> OR give <item> to <name>", "error");
+                    break;
+                }
+                
+                // Check if giving money (e.g., "give 10 gold to barman" or "give 10 gold to Player")
+                const moneyMatch = cmdText.match(/give\s+(\d+)\s+(?:gold|coins?)\s+to\s+(.+)/i);
+                if (moneyMatch) {
+                    const amount = parseInt(moneyMatch[1]);
+                    const recipientName = moneyMatch[2].trim();
+                    
+                    // Try to find player first
+                    const recipientPlayer = Object.entries(gamePlayers).find(([id, p]) => 
+                        p.name.toLowerCase() === recipientName.toLowerCase() && 
+                        p.roomId === currentPlayerRoomId &&
+                        id !== userId
+                    );
+                    
+                    if (recipientPlayer) {
+                        const [recipientId, recipientData] = recipientPlayer;
+                        
+                        // Check if giver has enough money
+                        const playerDocGive = await getDoc(playerRef);
+                        const playerDataGive = playerDocGive.data();
+                        
+                        if ((playerDataGive.money || 0) < amount) {
+                            logToTerminal(`You don't have ${amount} gold.`, "error");
+                            break;
+                        }
+                        
+                        // Transfer money
+                        await updateDoc(playerRef, {
+                            money: (playerDataGive.money || 0) - amount
+                        });
+                        
+                        const recipientRef = doc(db, `/artifacts/${appId}/public/data/mud-players/${recipientId}`);
+                        await updateDoc(recipientRef, {
+                            money: (recipientData.money || 0) + amount
+                        });
+                        
+                        logToTerminal(`You give ${amount} gold to ${recipientData.name}.`, "success");
+                        
+                        // Notify recipient
+                        await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                            senderId: userId,
+                            senderName: playerName,
+                            roomId: currentPlayerRoomId,
+                            text: `${playerName} gives you ${amount} gold!`,
+                            recipientId: recipientId,
+                            isSystem: true,
+                            timestamp: serverTimestamp()
+                        });
+                        
+                        // Broadcast to room
+                        await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                            senderId: userId,
+                            senderName: playerName,
+                            roomId: currentPlayerRoomId,
+                            text: `${playerName} gives ${amount} gold to ${recipientData.name}.`,
+                            isEmote: true,
+                            timestamp: serverTimestamp()
+                        });
+                        
+                        break;
+                    }
+                    
+                    // If not a player, try to find NPC in room
+                    const recipientNpc = findNpcInRoom(recipientName);
+                    if (!recipientNpc) {
+                        logToTerminal(`${recipientName} is not here.`, "error");
+                        break;
+                    }
+                    
+                    // Check if player has enough money
+                    const playerDocGive = await getDoc(playerRef);
+                    const playerDataGive = playerDocGive.data();
+                    
+                    if ((playerDataGive.money || 0) < amount) {
+                        logToTerminal(`You don't have ${amount} gold.`, "error");
+                        break;
+                    }
+                    
+                    // Deduct money from player
+                    await updateDoc(playerRef, {
+                        money: (playerDataGive.money || 0) - amount
+                    });
+                    
+                    logToTerminal(`You give ${amount} gold to ${recipientNpc.name}.`, "game");
+                    
+                    // Check if NPC has a special response for receiving money
+                    if (recipientNpc.moneyResponse) {
+                        logToTerminal(`${recipientNpc.name} says, "${recipientNpc.moneyResponse}"`, "game");
+                    } else {
+                        const responses = [
+                            `${recipientNpc.name} accepts your gold with a nod.`,
+                            `${recipientNpc.name} pockets the coins gratefully.`,
+                            `${recipientNpc.name} thanks you for the gold.`,
+                            `${recipientNpc.name} smiles and takes the money.`
+                        ];
+                        logToTerminal(responses[Math.floor(Math.random() * responses.length)], "game");
+                    }
+                    
+                    // Broadcast to room
+                    await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                        senderId: userId,
+                        senderName: playerName,
+                        roomId: currentPlayerRoomId,
+                        text: `${playerName} gives ${amount} gold to ${recipientNpc.name}.`,
+                        isEmote: true,
+                        timestamp: serverTimestamp()
+                    });
+                    
+                    break;
+                }
+                
+                // Otherwise, assume giving an item
+                if (!npc_target) {
+                    logToTerminal("Give to whom? Usage: give <item> to <name>", "error");
+                    break;
+                }
+                
+                // Try to find player first
+                const itemRecipientPlayer = Object.entries(gamePlayers).find(([id, p]) => 
+                    p.name.toLowerCase() === npc_target.toLowerCase() && 
+                    p.roomId === currentPlayerRoomId &&
+                    id !== userId
+                );
+                
+                if (itemRecipientPlayer) {
+                    const [recipientId, recipientData] = itemRecipientPlayer;
+                    
+                    const itemToGivePlayer = findItemByName(target);
+                    if (!itemToGivePlayer) {
+                        logToTerminal(`You don't have ${target}.`, "error");
+                        break;
+                    }
+                    
+                    // Remove item from giver's inventory
+                    const playerDocGiveItem = await getDoc(playerRef);
+                    const playerInv = playerDocGiveItem.data().inventory || [];
+                    const itemIndex = playerInv.indexOf(itemToGivePlayer.id);
+                    
+                    if (itemIndex === -1) {
+                        logToTerminal(`You don't have ${itemToGivePlayer.name}.`, "error");
+                        break;
+                    }
+                    
+                    playerInv.splice(itemIndex, 1);
+                    await updateDoc(playerRef, { inventory: playerInv });
+                    
+                    // Add item to recipient's inventory
+                    const recipientRef = doc(db, `/artifacts/${appId}/public/data/mud-players/${recipientId}`);
+                    await updateDoc(recipientRef, {
+                        inventory: arrayUnion(itemToGivePlayer.id)
+                    });
+                    
+                    logToTerminal(`You give ${itemToGivePlayer.name} to ${recipientData.name}.`, "success");
+                    
+                    // Notify recipient
+                    await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                        senderId: userId,
+                        senderName: playerName,
+                        roomId: currentPlayerRoomId,
+                        text: `${playerName} gives you ${itemToGivePlayer.name}!`,
+                        recipientId: recipientId,
+                        isSystem: true,
+                        timestamp: serverTimestamp()
+                    });
+                    
+                    // Broadcast to room
+                    await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                        senderId: userId,
+                        senderName: playerName,
+                        roomId: currentPlayerRoomId,
+                        text: `${playerName} gives ${itemToGivePlayer.name} to ${recipientData.name}.`,
+                        isEmote: true,
+                        timestamp: serverTimestamp()
+                    });
+                    
+                    break;
+                }
+                
+                // If not a player, try NPC
+                const recipientForItem = findNpcInRoom(npc_target);
+                if (!recipientForItem) {
+                    logToTerminal(`${npc_target} is not here.`, "error");
+                    break;
+                }
+                
+                const itemToGive = findItemByName(target);
+                if (!itemToGive) {
+                    logToTerminal(`You don't have ${target}.`, "error");
+                    break;
+                }
+                
+                // Remove item from player inventory
+                const playerDocGiveItem = await getDoc(playerRef);
+                const playerInv = playerDocGiveItem.data().inventory || [];
+                const itemIndex = playerInv.indexOf(itemToGive.id);
+                
+                if (itemIndex === -1) {
+                    logToTerminal(`You don't have ${itemToGive.name}.`, "error");
+                    break;
+                }
+                
+                playerInv.splice(itemIndex, 1);
+                await updateDoc(playerRef, { inventory: playerInv });
+                
+                logToTerminal(`You give ${itemToGive.name} to ${recipientForItem.name}.`, "game");
+                
+                // Check if NPC has a special response for this item
+                if (recipientForItem.itemResponses && recipientForItem.itemResponses[itemToGive.id]) {
+                    logToTerminal(`${recipientForItem.name} says, "${recipientForItem.itemResponses[itemToGive.id]}"`, "game");
+                } else {
+                    logToTerminal(`${recipientForItem.name} accepts the ${itemToGive.name}.`, "game");
+                }
+                
+                // Broadcast to room
+                await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                    senderId: userId,
+                    senderName: playerName,
+                    roomId: currentPlayerRoomId,
+                    text: `${playerName} gives ${itemToGive.name} to ${recipientForItem.name}.`,
+                    isEmote: true,
+                    timestamp: serverTimestamp()
+                });
+                
                 break;
             
             case 'haggle':
@@ -3492,21 +4053,21 @@ Examples:
                                 
                                 combatMessages.push({ msg: `You gain ${xpGain} XP and ${goldGain} gold!`, type: 'loot-log' });
                                 
-                                // Defender respawns at start with penalties
+                                // Defender dies - mark as dead in transaction
                                 transaction.update(targetPlayerRef, {
-                                    roomId: 'start',
-                                    hp: defenderData.maxHp,
-                                    money: Math.floor((defenderData.money || 0) * 0.9),
-                                    inventory: [] // Clear inventory on death
+                                    isDead: true,
+                                    deathCause: `${playerName} in combat`,
+                                    deathTimestamp: Date.now()
                                 });
                                 
-                                // Notify defender
+                                // Notify defender of death (they'll see death choice on their screen)
                                 await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
                                     senderId: 'system',
                                     senderName: 'System',
-                                    roomId: 'start',
-                                    text: `You were defeated by ${playerName}! You lost all your items and 10% of your gold.`,
-                                    timestamp: serverTimestamp()
+                                    roomId: defenderData.roomId,
+                                    text: `DEATH_NOTICE:${playerName} in combat`,
+                                    timestamp: serverTimestamp(),
+                                    targetUserId: defenderData.userId
                                 });
                                 
                             } else if (!didDodge) {
@@ -3549,12 +4110,11 @@ Examples:
                                 }
                                 
                                 if (!attackerDodged && newAttackerHp <= 0) {
-                                    combatMessages.push({ msg: `You have been defeated! You respawn at the Nexus and lose all your items.`, type: 'error' });
+                                    combatMessages.push({ msg: `You have been defeated by ${defenderData.name}!`, type: 'error' });
                                     transaction.update(attackerRef, {
-                                        roomId: 'start',
-                                        hp: attackerData.maxHp,
-                                        money: Math.floor((attackerData.money || 0) * 0.9),
-                                        inventory: [] // Clear inventory on death
+                                        isDead: true,
+                                        deathCause: `${defenderData.name} in combat`,
+                                        deathTimestamp: Date.now()
                                     });
                                 } else {
                                     transaction.update(attackerRef, { hp: newAttackerHp });
@@ -3857,12 +4417,11 @@ Examples:
                         }
 
                         if (!playerDodged && newPlayerHp <= 0) {
-                            combatMessages.push({ msg: `You have been defeated! You respawn at the Nexus and lose all your items.`, type: 'error' });
+                            combatMessages.push({ msg: `You have been defeated by the ${monsterData.name}!`, type: 'error' });
                             transaction.update(playerRef, {
-                                roomId: 'start',
-                                hp: playerData.maxHp,
-                                money: Math.floor((playerData.money || 0) * 0.9),
-                                inventory: [] // Clear inventory on death
+                                isDead: true,
+                                deathCause: monsterData.name,
+                                deathTimestamp: Date.now()
                             });
                         } else if (!playerDodged) {
                             transaction.update(playerRef, { hp: newPlayerHp });
@@ -5810,12 +6369,14 @@ Examples:
                 logToTerminal("Magic: 'spells' to view your spells, 'cast [spell name] [target]' to cast spells.", "system");
                 logToTerminal("Communication: 'say [message]' for local chat, 'whisper/tell [player] [message]' for private chat, 'shout [message]' to nearby rooms, 'gc [message]' for guild chat, 'pc [message]' for party chat.", "system");
                 logToTerminal("Trading: 'list' to see merchant inventory, 'buy [item]' to purchase, 'haggle [amount] for [item]' to negotiate, 'sell [item]' to sell, 'trade [player]' for player trading.", "system");
+                logToTerminal("Giving: 'give [amount] gold to [npc]' to give money, 'give [item] to [npc]' to give items.", "system");
                 logToTerminal("Guilds: 'guild' to view your guild, 'guild create [name]' to make one, 'guild list' to see all guilds.", "system");
                 logToTerminal("Quests: 'quests' to see active and available quests, 'quest accept [name]' to accept, 'quest progress' to view details, 'quest abandon [name]' to drop.", "system");
                 logToTerminal("Parties: 'party create' to form a party, 'party invite [name]' to invite, 'party join [name]' to join, 'party leave' to leave.", "system");
                 logToTerminal("Emotes: wave, dance, laugh, smile, nod, bow, clap, cheer, cry, sigh, shrug, grin, frown, wink, yawn, stretch, jump, sit, stand, kneel, salute, think, ponder, scratch.", "system");
                 logToTerminal("Or use 'emote [action]' for custom actions!", "system");
                 logToTerminal("Special: 'examine frame' to view the leaderboard!", "system");
+                logToTerminal("Weather: 'weather' to check current conditions and your status.", "system");
                 logToTerminal("Accessibility: Type 'screenreader' to enable/disable screen reader mode for visually impaired players.", "system");
                 logToTerminal("Test AI: Type 'test ai' to check if AI is working.", "system");
                 if (gamePlayers[userId]?.isAdmin) {
@@ -5838,6 +6399,8 @@ Examples:
                     logToTerminal("invis - Toggle invisibility (hidden from 'who' list)", "system");
                     logToTerminal("--- Communication Commands ---", "system");
                     logToTerminal("announce/broadcast [message] - Send message to all rooms", "system");
+                    logToTerminal("--- Weather Commands ---", "system");
+                    logToTerminal("setweather [type] - Change weather (sunny/rainy/snowy/stormy/foggy/hot/cold/cloudy)", "system");
                 }
                 break;
             case 'npcchats':
@@ -6067,10 +6630,12 @@ Examples:
                         timestamp: serverTimestamp()
                     });
                     
-                    // Set player as offline
+                    // Set player as offline and kicked (client will detect this and force logout)
                     const kickPlayerRef = doc(db, `/artifacts/${appId}/public/data/mud-players`, kickTargetId);
                     await updateDoc(kickPlayerRef, {
                         online: false,
+                        kicked: true,
+                        kickedAt: serverTimestamp(),
                         lastSeen: serverTimestamp()
                     });
                     
@@ -6440,6 +7005,54 @@ Examples:
                 }
                 break;
             
+            case 'setweather':
+                // Admin command to change weather
+                if (!gamePlayers[userId]?.isAdmin) {
+                    logToTerminal("Only admins can change the weather.", "error");
+                    break;
+                }
+                
+                if (!target) {
+                    logToTerminal("Usage: setweather [sunny/rainy/snowy/stormy/foggy/hot/cold/cloudy]", "error");
+                    break;
+                }
+                
+                const weatherType = target.toLowerCase();
+                if (typeof weatherSystem !== 'undefined') {
+                    const validWeathers = Object.keys(weatherSystem.WEATHER_TYPES);
+                    if (!validWeathers.includes(weatherType)) {
+                        logToTerminal(`Invalid weather type. Valid options: ${validWeathers.join(', ')}`, "error");
+                        break;
+                    }
+                    
+                    try {
+                        await weatherSystem.setWeatherState(weatherType);
+                        logToTerminal(`✅ Weather changed to: ${weatherType}`, "success");
+                        
+                        // Announce to all outdoor rooms
+                        const weatherDesc = weatherSystem.WEATHER_TYPES[weatherType].description;
+                        const outdoorRoomIds = Object.entries(gameWorld)
+                            .filter(([id, room]) => !room.isIndoor)
+                            .map(([id]) => id);
+                        
+                        const announcements = outdoorRoomIds.map(roomId =>
+                            addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                                roomId: roomId,
+                                text: `⛅ ${weatherDesc}`,
+                                isSystem: true,
+                                timestamp: serverTimestamp()
+                            })
+                        );
+                        
+                        await Promise.all(announcements);
+                    } catch (error) {
+                        logToTerminal(`Failed to change weather: ${error.message}`, "error");
+                    }
+                } else {
+                    logToTerminal("Weather system is not initialized.", "error");
+                }
+                break;
+            
             case 'shout':
                 // Player command to send a message to all nearby rooms (limited range)
                 const shoutText = cmdText.substring(cmdText.indexOf(' ') + 1).trim();
@@ -6579,7 +7192,11 @@ Examples:
         // Wandering NPC System
         initializeWanderingNpcs,
         stopNpcWandering,
-        getNpcCurrentRoom: (npcId) => npcCurrentRooms[npcId]
+        getNpcCurrentRoom: (npcId) => npcCurrentRooms[npcId],
+        // Death System
+        offerDeathChoice,
+        handleRespawn,
+        handlePermadeath
     };
 }
 

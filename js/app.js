@@ -21,7 +21,7 @@
  * ** in all copies or substantial portions of this software.
  */
 
-import { APP_ID, GEMINI_API_KEY } from './config.js';
+import { APP_ID, GEMINI_API_KEY, MYSQL_CONFIG } from './config.js';
 import { initializeFirebase } from './firebase-init.js';
 import { initializeUI } from './ui.js';
 import { initializeAuth } from './auth.js';
@@ -29,6 +29,7 @@ import { initializeDataLoader } from './data-loader.js';
 import { initializeGameLogic } from './game.js';
 import { initializeAdminPanel, setGameLogicForSettings } from './admin.js';
 import { initializeBotSystem } from './bots.js';
+import { initializeWeatherSystem } from './weather.js';
 import { 
     callGeminiForText, 
     parseCommandWithGemini,
@@ -102,7 +103,7 @@ export async function initializeApp() {
     // Initialize Firebase
     const firebase = await initializeFirebase();
     const { db, auth, authFunctions, firestoreFunctions } = firebase;
-    const { onSnapshot, collection, addDoc, serverTimestamp } = firestoreFunctions;
+    const { onSnapshot, collection, addDoc, serverTimestamp, doc } = firestoreFunctions;
     
     // Initialize UI
     const ui = initializeUI();
@@ -379,6 +380,8 @@ export async function initializeApp() {
             score: 0,
             attributes: finalStats,
             isAdmin: isFirstPlayer, // First player becomes admin
+            online: true,
+            lastSeen: serverTimestamp(),
             createdAt: serverTimestamp()
         };
         
@@ -402,7 +405,7 @@ export async function initializeApp() {
         focusInput();
         
         console.log('[Init] Starting game data load...');
-        const worldReady = await dataLoader.loadGameData();
+        const worldReady = await dataLoader.loadGameData(userId);
         if (!worldReady) {
             logToTerminal("Failed to initialize the game world. Please reload.", "error");
             return;
@@ -436,6 +439,7 @@ export async function initializeApp() {
         }
         
         console.log('[Init] Initializing admin panel...');
+        console.log('[Init] MYSQL_CONFIG =', MYSQL_CONFIG);
         // Initialize admin panel
         adminPanelFunctions = initializeAdminPanel({
             db,
@@ -450,7 +454,8 @@ export async function initializeApp() {
             gameGuilds,
             gameQuests,
             logToTerminal,
-            firestoreFunctions
+            firestoreFunctions,
+            mysqlConfig: MYSQL_CONFIG
         });
         console.log('[Init] Admin panel initialized');
         
@@ -467,6 +472,7 @@ export async function initializeApp() {
             gamePlayers,
             activeMonsters,
             gameSpells,
+            gameClasses,
             gameGuilds,
             gameQuests,
             gameParties,
@@ -478,6 +484,21 @@ export async function initializeApp() {
             firestoreFunctions
         });
         console.log('[Init] Game logic initialized');
+        
+        console.log('[Init] Initializing weather system...');
+        // Initialize weather system
+        window.weatherSystem = initializeWeatherSystem({
+            db,
+            appId: APP_ID,
+            gameWorld,
+            gameItems,
+            gamePlayers,
+            logToTerminal,
+            firestoreFunctions
+        });
+        const weatherUnsub = await weatherSystem.initialize(userId);
+        unsubscribers.push(weatherUnsub);
+        console.log('[Init] Weather system initialized');
         
         console.log('[Init] Loading level config...');
         await gameLogic.loadLevelConfig(db, APP_ID);
@@ -493,6 +514,11 @@ export async function initializeApp() {
         
         // Expose gamePlayers globally for admin panel
         window.gamePlayers = gamePlayers;
+        
+        // Expose death choice functions globally for death system
+        window.offerDeathChoice = gameLogic.offerDeathChoice;
+        window.handleRespawn = gameLogic.handleRespawn;
+        window.handlePermadeath = gameLogic.handlePermadeath;
         
         console.log('[Init] Initializing bot system...');
         // Initialize bot system
@@ -511,6 +537,62 @@ export async function initializeApp() {
         console.log('[Init] Setting up message listener...');
         setupMessageListener();
         resetInactivityTimer();
+        
+        // Monitor player document for kick flag
+        console.log('[Init] Setting up kick detection...');
+        const playerDocRef = doc(db, `/artifacts/${APP_ID}/public/data/mud-players/${userId}`);
+        const kickUnsub = onSnapshot(playerDocRef, (snapshot) => {
+            if (snapshot.exists()) {
+                const data = snapshot.data();
+                if (data.kicked === true) {
+                    logToTerminal("⚠️ You have been kicked from the game by an administrator.", "error");
+                    setTimeout(async () => {
+                        await authFunctions.signOut(auth);
+                        window.location.reload();
+                    }, 2000);
+                }
+            }
+        });
+        unsubscribers.push(kickUnsub);
+        console.log('[Init] Kick detection enabled');
+        
+        // Set player as online and start heartbeat
+        console.log('[Init] Setting up player heartbeat...');
+        const playerRef = doc(db, `/artifacts/${APP_ID}/public/data/mud-players/${userId}`);
+        
+        // Set player as online immediately
+        await firestoreFunctions.updateDoc(playerRef, {
+            online: true,
+            lastSeen: serverTimestamp()
+        });
+        
+        // Heartbeat - update lastSeen every 30 seconds
+        const heartbeatInterval = setInterval(async () => {
+            try {
+                await firestoreFunctions.updateDoc(playerRef, {
+                    lastSeen: serverTimestamp()
+                });
+                console.log('[Heartbeat] Player presence updated');
+            } catch (error) {
+                console.error('[Heartbeat] Error updating presence:', error);
+            }
+        }, 30000); // 30 seconds
+        
+        // Set player as offline when page unloads
+        window.addEventListener('beforeunload', async () => {
+            try {
+                await firestoreFunctions.updateDoc(playerRef, {
+                    online: false,
+                    lastSeen: serverTimestamp()
+                });
+            } catch (error) {
+                console.error('[Cleanup] Error setting offline status:', error);
+            }
+        });
+        
+        // Cleanup heartbeat on logout
+        unsubscribers.push(() => clearInterval(heartbeatInterval));
+        console.log('[Init] Heartbeat enabled - updating presence every 30 seconds');
         
         // Initialize screen reader mode if previously enabled
         const screenReaderMode = localStorage.getItem('screenReaderMode') === 'true';

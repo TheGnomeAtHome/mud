@@ -1,6 +1,8 @@
 // admin.js - Admin Panel functionality for MUD game
 // Handles all admin panel UI, editors, and game entity management
 
+import { initializeMySQLAPI } from './mysql-api.js';
+
 import { callGeminiForRoom, callGeminiForMonster, callGeminiForItem, callGeminiForNpc, callGeminiForText } from './ai.js';
 
 /**
@@ -34,6 +36,7 @@ export function initializeAdminPanel({
     gameQuests,
     logToTerminal,
     firestoreFunctions,
+    mysqlConfig = null,
     gameLogic = null // Optional, set later
 }) {
     console.log('=== INITIALIZING ADMIN PANEL ===');
@@ -50,6 +53,29 @@ export function initializeAdminPanel({
     });
     
     const { doc, setDoc, updateDoc, deleteDoc, arrayUnion } = firestoreFunctions;
+    
+    // Initialize MySQL API if configured
+    let mysqlAPI = null;
+    console.log('[Admin Panel] Received mysqlConfig:', mysqlConfig);
+    if (mysqlConfig && mysqlConfig.USE_MYSQL_BACKEND) {
+        console.log('[Admin Panel] MySQL backend enabled, initializing API...');
+        mysqlAPI = initializeMySQLAPI(mysqlConfig);
+        console.log('[Admin Panel] MySQL API initialized:', mysqlAPI);
+    } else {
+        console.log('[Admin Panel] MySQL backend disabled, using Firebase only');
+        console.log('[Admin Panel] Reason: mysqlConfig =', mysqlConfig, 'USE_MYSQL_BACKEND =', mysqlConfig?.USE_MYSQL_BACKEND);
+    }
+
+    // Store references for module-level access
+    gameWorldReference = gameWorld;
+    gamePlayersReference = gamePlayers;
+    gameItemsReference = gameItems;
+    gameNpcsReference = gameNpcs;
+    gameMonstersReference = gameMonsters;
+    gameSpellsReference = gameSpells;
+    gameClassesReference = gameClasses;
+    gameQuestsReference = gameQuests;
+    gameGuildsReference = gameGuilds;
 
     // Tab switching
     const adminTabs = document.querySelectorAll('.admin-tab');
@@ -64,10 +90,12 @@ export function initializeAdminPanel({
         'class-tab-btn': document.getElementById('class-editor-panel'),
         'guild-tab-btn': document.getElementById('guild-editor-panel'),
         'quest-tab-btn': document.getElementById('quest-editor-panel'),
+        'online-tab-btn': document.getElementById('online-players-panel'),
         'levels-tab-btn': document.getElementById('levels-editor-panel'),
         'actions-tab-btn': document.getElementById('actions-editor-panel'),
         'map-tab-btn': document.getElementById('map-editor-panel'),
         'settings-tab-btn': document.getElementById('settings-panel'),
+        'export-tab-btn': document.getElementById('export-panel'),
     };
     
     adminTabs.forEach(tab => {
@@ -95,9 +123,19 @@ export function initializeAdminPanel({
                 setTimeout(() => initializeActionsEditor(db, appId), 100);
             }
             
+            // If switching to online players tab, refresh the list
+            if (tab.id === 'online-tab-btn') {
+                setTimeout(() => refreshOnlinePlayersList(), 100);
+            }
+            
             // If switching to settings tab, initialize the editor
             if (tab.id === 'settings-tab-btn') {
                 setTimeout(() => initializeSettingsPanel(), 100);
+            }
+            
+            // If switching to export tab, initialize the panel
+            if (tab.id === 'export-tab-btn') {
+                setTimeout(() => initializeExportPanel(), 100);
             }
         });
     });
@@ -437,8 +475,19 @@ export function initializeAdminPanel({
             const roomData = { name, description, exits, details, items: checkedItems, npcs: checkedNpcs, monsterSpawns };
             console.log('Full room data being saved:', JSON.stringify(roomData, null, 2));
             
+            // Save to Firebase
             await setDoc(doc(db, `/artifacts/${appId}/public/data/mud-rooms/${roomId}`), roomData);
             console.log('Room saved successfully to Firebase');
+            
+            // Save to MySQL if enabled
+            if (mysqlAPI && mysqlAPI.isEnabled()) {
+                try {
+                    await mysqlAPI.saveToMySQL('rooms', roomId, roomData);
+                    console.log('Room saved successfully to MySQL');
+                } catch (mysqlError) {
+                    console.error('MySQL save failed (Firebase save succeeded):', mysqlError);
+                }
+            }
             
             adminRoomStatus.textContent = `✓ Room "${roomId}" saved successfully!`;
             adminRoomStatus.className = 'ml-2 text-green-400';
@@ -466,6 +515,17 @@ export function initializeAdminPanel({
         if (!confirm(`Delete room "${roomId}"?`)) return;
 
         await deleteDoc(doc(db, `/artifacts/${appId}/public/data/mud-rooms/${roomId}`));
+        
+        // Delete from MySQL if enabled
+        if (mysqlAPI && mysqlAPI.isEnabled()) {
+            try {
+                await mysqlAPI.deleteFromMySQL('rooms', roomId);
+                console.log('Room deleted from MySQL');
+            } catch (mysqlError) {
+                console.error('MySQL delete failed (Firebase delete succeeded):', mysqlError);
+            }
+        }
+        
         adminRoomStatus.textContent = `Room "${roomId}" deleted.`;
         clearAdminRoomForm();
     });
@@ -474,8 +534,13 @@ export function initializeAdminPanel({
     const itemSelect = document.getElementById('item-select');
     const itemIdInput = document.getElementById('item-id');
     const itemNameInput = document.getElementById('item-name');
+    const itemDescriptionInput = document.getElementById('item-description');
     const itemAliasesInput = document.getElementById('item-aliases');
     const itemCostInput = document.getElementById('item-cost');
+    
+    if (!itemDescriptionInput) {
+        console.error('[Admin] item-description field not found! HTML needs to be updated.');
+    }
     const itemMovableCheckbox = document.getElementById('item-movable');
     const itemConsumableCheckbox = document.getElementById('item-consumable');
     const itemNewsworthyCheckbox = document.getElementById('item-newsworthy');
@@ -523,7 +588,7 @@ export function initializeAdminPanel({
     }
 
     function clearAdminItemForm() {
-        itemIdInput.value = ''; itemNameInput.value = ''; itemAliasesInput.value = ''; itemCostInput.value = '';
+        itemIdInput.value = ''; itemNameInput.value = ''; itemDescriptionInput.value = ''; itemAliasesInput.value = ''; itemCostInput.value = '';
         itemMovableCheckbox.checked = true;
         itemConsumableCheckbox.checked = false;
         itemNewsworthyCheckbox.checked = false;
@@ -550,6 +615,7 @@ export function initializeAdminPanel({
             const item = gameItems[itemId];
             itemIdInput.value = itemId; itemIdInput.disabled = true;
             itemNameInput.value = item.name || '';
+            itemDescriptionInput.value = item.description || '';
             itemAliasesInput.value = Array.isArray(item.aliases) ? item.aliases.join(', ') : (item.aliases || '');
             itemCostInput.value = item.cost || 0;
             itemMovableCheckbox.checked = item.movable !== false;
@@ -601,6 +667,7 @@ export function initializeAdminPanel({
 
             itemIdInput.value = newItemData.itemId;
             itemNameInput.value = newItemData.name;
+            itemDescriptionInput.value = newItemData.description || '';
             itemCostInput.value = newItemData.cost;
             itemMovableCheckbox.checked = newItemData.movable !== false;
             itemConsumableCheckbox.checked = newItemData.consumable === true;
@@ -628,9 +695,12 @@ export function initializeAdminPanel({
     // callGeminiForItem is now imported from js/ai.js
 
     document.getElementById('save-item-btn').addEventListener('click', async () => {
+        console.log('Save item button clicked');
         try {
             const itemId = itemIdInput.value.trim();
             const name = itemNameInput.value.trim();
+            const description = itemDescriptionInput.value.trim();
+            console.log('Saving item:', {itemId, name, description});
             const aliasesRaw = itemAliasesInput.value.trim();
             const aliases = aliasesRaw ? aliasesRaw.split(',').map(a => a.trim()).filter(a => a.length > 0) : [];
             const cost = parseInt(itemCostInput.value) || 0;
@@ -658,6 +728,11 @@ export function initializeAdminPanel({
 
             const itemData = { name, cost, movable, consumable, newsworthy, hpRestore, effect, itemType };
             
+            // Add description if provided
+            if (description) {
+                itemData.description = description;
+            }
+            
             // Add aliases if provided
             if (aliases.length > 0) {
                 itemData.aliases = aliases;
@@ -681,7 +756,21 @@ export function initializeAdminPanel({
             }
             
             if (specialData) itemData.specialData = specialData;
+            
+            // Save to Firebase
             await setDoc(doc(db, `/artifacts/${appId}/public/data/mud-items/${itemId}`), itemData);
+            console.log('Item saved successfully to Firebase');
+            
+            // Save to MySQL if enabled
+            if (mysqlAPI && mysqlAPI.isEnabled()) {
+                try {
+                    await mysqlAPI.saveToMySQL('items', itemId, itemData);
+                    console.log('Item saved successfully to MySQL');
+                } catch (mysqlError) {
+                    console.error('MySQL save failed (Firebase save succeeded):', mysqlError);
+                }
+            }
+            
             adminItemStatus.textContent = `Item "${itemId}" saved!`;
             populateItemSelector();
         } catch (error) {
@@ -698,7 +787,19 @@ export function initializeAdminPanel({
         }
         if (!confirm(`Delete item "${itemId}"?`)) return;
 
+        // Delete from Firebase
         await deleteDoc(doc(db, `/artifacts/${appId}/public/data/mud-items/${itemId}`));
+        
+        // Delete from MySQL if enabled
+        if (mysqlAPI && mysqlAPI.isEnabled()) {
+            try {
+                await mysqlAPI.deleteFromMySQL('items', itemId);
+                console.log('Item deleted successfully from MySQL');
+            } catch (mysqlError) {
+                console.error('MySQL delete failed (Firebase delete succeeded):', mysqlError);
+            }
+        }
+        
         adminItemStatus.textContent = `Item "${itemId}" deleted.`;
         clearAdminItemForm();
     });
@@ -1040,7 +1141,18 @@ export function initializeAdminPanel({
             
             console.log('Saving NPC to Firebase:', npcData);
             await setDoc(doc(db, `/artifacts/${appId}/public/data/mud-npcs/${npcId}`), npcData);
-            console.log('NPC saved successfully');
+            console.log('NPC saved successfully to Firebase');
+            
+            // Save to MySQL if enabled
+            if (mysqlAPI && mysqlAPI.isEnabled()) {
+                try {
+                    await mysqlAPI.saveToMySQL('npcs', npcId, npcData);
+                    console.log('NPC saved successfully to MySQL');
+                } catch (mysqlError) {
+                    console.error('MySQL save failed (Firebase save succeeded):', mysqlError);
+                }
+            }
+            
             adminNpcStatus.textContent = `NPC "${npcId}" saved!`;
             populateNpcSelector();
         } catch (error) {
@@ -1058,6 +1170,17 @@ export function initializeAdminPanel({
         if (!confirm(`Delete NPC "${npcId}"?`)) return;
 
         await deleteDoc(doc(db, `/artifacts/${appId}/public/data/mud-npcs/${npcId}`));
+        
+        // Delete from MySQL if enabled
+        if (mysqlAPI && mysqlAPI.isEnabled()) {
+            try {
+                await mysqlAPI.deleteFromMySQL('npcs', npcId);
+                console.log('NPC deleted from MySQL');
+            } catch (mysqlError) {
+                console.error('MySQL delete failed (Firebase delete succeeded):', mysqlError);
+            }
+        }
+        
         adminNpcStatus.textContent = `NPC "${npcId}" deleted.`;
         clearAdminNpcForm();
     });
@@ -1195,7 +1318,21 @@ export function initializeAdminPanel({
             }
 
             const monsterData = { name, description, hp, minAtk, maxAtk, xp, gold, itemDrop, newsworthy };
+            
+            // Save to Firebase
             await setDoc(doc(db, `/artifacts/${appId}/public/data/mud-monsters/${monsterId}`), monsterData);
+            console.log('Monster saved successfully to Firebase');
+            
+            // Save to MySQL if enabled
+            if (mysqlAPI && mysqlAPI.isEnabled()) {
+                try {
+                    await mysqlAPI.saveToMySQL('monsters', monsterId, monsterData);
+                    console.log('Monster saved successfully to MySQL');
+                } catch (mysqlError) {
+                    console.error('MySQL save failed (Firebase save succeeded):', mysqlError);
+                }
+            }
+            
             adminMonsterStatus.textContent = `Monster "${monsterId}" saved!`;
             populateMonsterSelector();
         } catch (error) {
@@ -1212,7 +1349,19 @@ export function initializeAdminPanel({
         }
         if (!confirm(`Delete monster "${monsterId}"?`)) return;
 
+        // Delete from Firebase
         await deleteDoc(doc(db, `/artifacts/${appId}/public/data/mud-monsters/${monsterId}`));
+        
+        // Delete from MySQL if enabled
+        if (mysqlAPI && mysqlAPI.isEnabled()) {
+            try {
+                await mysqlAPI.deleteFromMySQL('monsters', monsterId);
+                console.log('Monster deleted successfully from MySQL');
+            } catch (mysqlError) {
+                console.error('MySQL delete failed (Firebase delete succeeded):', mysqlError);
+            }
+        }
+        
         adminMonsterStatus.textContent = `Monster "${monsterId}" deleted.`;
         clearAdminMonsterForm();
     });
@@ -3116,9 +3265,131 @@ async function initializeActionsEditor(db, appId) {
     populateActionUI();
 }
 
+// ========== EXPORT PANEL ==========
+
+/**
+ * Initialize Export Panel
+ */
+function initializeExportPanel() {
+    console.log('[Export] Initializing export panel...');
+    
+    // Helper function to download JSON file
+    function downloadJSON(data, filename) {
+        const json = JSON.stringify(data, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        showExportStatus();
+    }
+    
+    // Show success message
+    function showExportStatus() {
+        const status = document.getElementById('export-status');
+        if (status) {
+            status.classList.remove('hidden');
+            setTimeout(() => {
+                status.classList.add('hidden');
+            }, 3000);
+        }
+    }
+    
+    // Export Rooms
+    document.getElementById('export-rooms-btn')?.addEventListener('click', () => {
+        console.log('[Export] Exporting rooms...');
+        downloadJSON(gameWorldReference, 'rooms.json');
+    });
+    
+    // Export Items
+    document.getElementById('export-items-btn')?.addEventListener('click', () => {
+        console.log('[Export] Exporting items...');
+        downloadJSON(gameItemsReference, 'items.json');
+    });
+    
+    // Export NPCs
+    document.getElementById('export-npcs-btn')?.addEventListener('click', () => {
+        console.log('[Export] Exporting NPCs...');
+        downloadJSON(gameNpcsReference, 'npcs.json');
+    });
+    
+    // Export Monsters
+    document.getElementById('export-monsters-btn')?.addEventListener('click', () => {
+        console.log('[Export] Exporting monsters...');
+        downloadJSON(gameMonstersReference, 'monsters.json');
+    });
+    
+    // Export Spells
+    document.getElementById('export-spells-btn')?.addEventListener('click', () => {
+        console.log('[Export] Exporting spells...');
+        downloadJSON(gameSpellsReference, 'spells.json');
+    });
+    
+    // Export Classes
+    document.getElementById('export-classes-btn')?.addEventListener('click', () => {
+        console.log('[Export] Exporting classes...');
+        downloadJSON(gameClassesReference, 'classes.json');
+    });
+    
+    // Export Quests
+    document.getElementById('export-quests-btn')?.addEventListener('click', () => {
+        console.log('[Export] Exporting quests...');
+        downloadJSON(gameQuestsReference, 'quests.json');
+    });
+    
+    // Export Guilds
+    document.getElementById('export-guilds-btn')?.addEventListener('click', () => {
+        console.log('[Export] Exporting guilds...');
+        downloadJSON(gameGuildsReference, 'guilds.json');
+    });
+    
+    // Export All (creates individual downloads)
+    document.getElementById('export-all-btn')?.addEventListener('click', () => {
+        console.log('[Export] Exporting all data...');
+        
+        // Download each file with a small delay between downloads
+        setTimeout(() => downloadJSON(gameWorldReference, 'rooms.json'), 100);
+        setTimeout(() => downloadJSON(gameItemsReference, 'items.json'), 300);
+        setTimeout(() => downloadJSON(gameNpcsReference, 'npcs.json'), 500);
+        setTimeout(() => downloadJSON(gameMonstersReference, 'monsters.json'), 700);
+        setTimeout(() => downloadJSON(gameSpellsReference, 'spells.json'), 900);
+        setTimeout(() => downloadJSON(gameClassesReference, 'classes.json'), 1100);
+        setTimeout(() => downloadJSON(gameQuestsReference, 'quests.json'), 1300);
+        setTimeout(() => downloadJSON(gameGuildsReference, 'guilds.json'), 1500);
+        
+        // Show status after all downloads complete
+        setTimeout(() => {
+            const status = document.getElementById('export-status');
+            if (status) {
+                status.classList.remove('hidden');
+                status.querySelector('p').textContent = '✅ All files exported!';
+                setTimeout(() => {
+                    status.classList.add('hidden');
+                }, 4000);
+            }
+        }, 2000);
+    });
+    
+    console.log('[Export] Export panel initialized');
+}
+
 // ========== SETTINGS PANEL ==========
 
 let gameLogicReference = null; // Store reference to game logic
+let gameWorldReference = null; // Store reference to game world
+let gamePlayersReference = null; // Store reference to game players
+let gameItemsReference = null; // Store reference to game items
+let gameNpcsReference = null; // Store reference to game NPCs
+let gameMonstersReference = null; // Store reference to game monsters
+let gameSpellsReference = null; // Store reference to game spells
+let gameClassesReference = null; // Store reference to game classes
+let gameQuestsReference = null; // Store reference to game quests
+let gameGuildsReference = null; // Store reference to game guilds
 
 /**
  * Initialize Settings Panel
@@ -3249,6 +3520,150 @@ function initializeSettingsPanel() {
     if (settingsPanel) {
         observer.observe(settingsPanel, { attributes: true, attributeFilter: ['class'] });
     }
+}
+
+/**
+ * Initialize Online Players Panel
+ */
+function refreshOnlinePlayersList() {
+    console.log('[Online Players] Refreshing list...');
+    
+    const onlineList = document.getElementById('online-players-list');
+    const onlineCount = document.getElementById('online-player-count');
+    
+    if (!onlineList || !onlineCount) {
+        console.error('[Online Players] Panel elements not found');
+        return;
+    }
+    
+    // Check if references are available
+    if (!gamePlayersReference || !gameWorldReference) {
+        console.error('[Online Players] Game data references not available yet');
+        onlineList.innerHTML = '<div class="text-gray-400 text-center py-8">Loading player data...</div>';
+        return;
+    }
+    
+    // Get all online players only (filter out kicked/offline players)
+    const players = Object.entries(gamePlayersReference)
+        .filter(([id, data]) => data.online !== false)
+        .map(([id, data]) => ({
+            id,
+            ...data
+        }));
+    
+    // Update count
+    onlineCount.textContent = players.length;
+    
+    // Clear existing list
+    onlineList.innerHTML = '';
+    
+    if (players.length === 0) {
+        onlineList.innerHTML = '<div class="text-gray-400 text-center py-8">No players currently online</div>';
+        return;
+    }
+    
+    // Sort by name
+    players.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    
+    // Create player cards
+    players.forEach(player => {
+        const room = gameWorldReference[player.roomId] || gameWorldReference[player.currentRoom];
+        const roomName = room ? room.name : 'Unknown Location';
+        const roomId = player.roomId || player.currentRoom || 'unknown';
+        
+        const playerCard = document.createElement('div');
+        playerCard.className = 'border border-gray-600 rounded p-3 bg-gray-900 hover:border-yellow-400 transition-colors';
+        
+        const hpPercent = player.maxHp > 0 ? Math.round((player.hp / player.maxHp) * 100) : 100;
+        const hpColor = hpPercent > 70 ? 'text-green-400' : hpPercent > 30 ? 'text-yellow-400' : 'text-red-400';
+        
+        const levelName = player.level || 1;
+        const className = player.class || 'Adventurer';
+        const isAdmin = player.isAdmin ? '👑 ' : '';
+        const isInvisible = player.invisible ? '👻 ' : '';
+        
+        playerCard.innerHTML = `
+            <div class="flex justify-between items-start mb-2">
+                <div class="flex-1">
+                    <h3 class="text-lg font-bold text-cyan-400">
+                        ${isAdmin}${isInvisible}${player.name || 'Unknown'}
+                    </h3>
+                    <div class="text-sm text-gray-300">
+                        Level ${levelName} ${className}
+                    </div>
+                </div>
+                <div class="text-right text-sm">
+                    <div class="${hpColor}">HP: ${player.hp}/${player.maxHp}</div>
+                    <div class="text-blue-400">MP: ${player.mp || 0}/${player.maxMp || 0}</div>
+                </div>
+            </div>
+            
+            <div class="mb-3 text-sm">
+                <div class="text-gray-400">📍 Location:</div>
+                <div class="text-yellow-300 ml-4">${roomName}</div>
+                <div class="text-gray-500 text-xs ml-4">${roomId}</div>
+            </div>
+            
+            <div class="flex gap-2 flex-wrap">
+                <button class="goto-player-btn bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600" data-room-id="${roomId}">
+                    🚀 Go To Room
+                </button>
+                <button class="summon-player-btn bg-purple-500 text-white px-3 py-1 rounded text-sm hover:bg-purple-600" data-player-name="${player.name}">
+                    📌 Summon
+                </button>
+                <button class="kick-player-btn bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600" data-player-name="${player.name}">
+                    ❌ Kick
+                </button>
+            </div>
+        `;
+        
+        onlineList.appendChild(playerCard);
+    });
+    
+    // Add event listeners for action buttons
+    document.querySelectorAll('.goto-player-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const roomId = e.target.dataset.roomId;
+            if (gameLogicReference) {
+                console.log(`[Admin] Teleporting to room: ${roomId}`);
+                gameLogicReference.executeParsedCommand({ action: 'goto', target: roomId }, `goto ${roomId}`);
+            }
+        });
+    });
+    
+    document.querySelectorAll('.summon-player-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const playerName = e.target.dataset.playerName;
+            if (gameLogicReference) {
+                console.log(`[Admin] Summoning player: ${playerName}`);
+                gameLogicReference.executeParsedCommand({ action: 'summon', target: playerName }, `summon ${playerName}`);
+                setTimeout(() => refreshOnlinePlayersList(), 1000); // Refresh after summon
+            }
+        });
+    });
+    
+    document.querySelectorAll('.kick-player-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const playerName = e.target.dataset.playerName;
+            if (confirm(`Are you sure you want to kick ${playerName}?`)) {
+                if (gameLogicReference) {
+                    console.log(`[Admin] Kicking player: ${playerName}`);
+                    gameLogicReference.executeParsedCommand({ action: 'kick', target: playerName }, `kick ${playerName}`);
+                    setTimeout(() => refreshOnlinePlayersList(), 1000); // Refresh after kick
+                }
+            }
+        });
+    });
+    
+    console.log(`[Online Players] Displayed ${players.length} players`);
+}
+
+// Add refresh button handler
+const refreshOnlineBtn = document.getElementById('refresh-online-btn');
+if (refreshOnlineBtn) {
+    refreshOnlineBtn.addEventListener('click', () => {
+        refreshOnlinePlayersList();
+    });
 }
 
 /**

@@ -127,7 +127,8 @@
     },
     "exits": {
       "west": "tavern"
-    }
+    },
+    "isIndoor": true
   },
   "tavern": {
     "name": "The Coach and Horses Tavern",
@@ -142,7 +143,8 @@
     "details": {},
     "items": [],
     "monsterSpawns": [],
-    "description": "The tavern is warm and filled with the smell of old wood and spilled ale. A few patrons are scattered around, and a busy barman is cleaning glasses. There is a small gray door to the east. A middle age man named Colin is sat at the bar, nursing a pint of Thickstons Old Peculiar"
+    "description": "The tavern is warm and filled with the smell of old wood and spilled ale. A few patrons are scattered around, and a busy barman is cleaning glasses. There is a small gray door to the east. A middle age man named Colin is sat at the bar, nursing a pint of Thickstons Old Peculiar",
+    "isIndoor": true
   },
   "woods1": {
     "exits": {

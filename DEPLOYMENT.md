@@ -165,3 +165,102 @@ These files MUST be uploaded together:
 8. `js/game.js` - Movement debug logs
 
 Upload ALL files even if you think some haven't changed - avoids version mismatches.
+
+---
+
+# MySQL Backend Deployment to jphsoftware.com
+
+## Prerequisites
+- FTP/SFTP access to jphsoftware.com
+- SSH access (required for Node.js)
+- phpMyAdmin access
+- MySQL database credentials
+
+## Quick Start
+
+### 1. Setup Database (phpMyAdmin)
+
+1. Login to **phpMyAdmin** (usually at jphsoftware.com/phpmyadmin)
+2. Select or create database: `mud_game`
+3. Go to **SQL** tab
+4. Import `server/schema.sql` (creates 8 tables)
+
+### 2. Configure Environment
+
+Create `server/.env` with your MySQL credentials:
+
+```env
+MYSQL_HOST=localhost
+MYSQL_PORT=3306
+MYSQL_USER=your_mysql_username
+MYSQL_PASSWORD=your_mysql_password
+MYSQL_DATABASE=mud_game
+
+PORT=3000
+ADMIN_API_KEY=your-random-32-char-key
+ALLOWED_ORIGINS=http://jphsoftware.com,https://jphsoftware.com
+```
+
+### 3. Upload Files via FTP
+
+Upload to server:
+- `/server/` directory (all files)
+- `/package.json`
+- Updated `/js/data-loader.js` (with jphsoftware.com URL)
+
+### 4. Install & Run (SSH)
+
+```bash
+ssh your-username@jphsoftware.com
+cd /path/to/mud-game
+npm install
+npm run migrate    # Copy Firebase data to MySQL
+npm run server     # Start API server
+```
+
+### 5. Keep Server Running
+
+```bash
+npm install -g pm2
+pm2 start server/server.js --name mud-api
+pm2 save
+pm2 startup
+```
+
+### 6. Configure Game Client
+
+Edit `js/data-loader.js`:
+```javascript
+const USE_MYSQL_BACKEND = true;
+const MYSQL_API_URL = 'https://jphsoftware.com:3000/api';
+```
+
+**Or use reverse proxy** (recommended):
+```apache
+# .htaccess
+RewriteRule ^api/(.*)$ http://localhost:3000/api/$1 [P,L]
+```
+
+Then use:
+```javascript
+const MYSQL_API_URL = 'https://jphsoftware.com/api';
+```
+
+## Testing
+
+1. **API Health**: Visit `https://jphsoftware.com:3000/health`
+2. **Game Console**: Should show "Loaded X rooms from MySQL"
+3. **Admin Test**: Edit content, verify changes appear immediately
+
+## Troubleshooting
+
+**No SSH Access?**
+- Contact hosting support about Node.js support
+- Or deploy API to external service (Heroku, Railway, Render)
+- Keep using Firebase + static files hybrid mode
+
+**Port 3000 Blocked?**
+- Use reverse proxy (Apache/Nginx)
+- Or ask hosting to open port 3000
+
+**See full guide:** `MYSQL_BACKEND_GUIDE.md`

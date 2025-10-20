@@ -91,10 +91,12 @@
             <button id="class-tab-btn" class="admin-tab px-2 sm:px-4 py-1 sm:py-2 text-sm sm:text-base md:text-lg whitespace-nowrap">⚔️ Classes</button>
             <button id="guild-tab-btn" class="admin-tab px-2 sm:px-4 py-1 sm:py-2 text-sm sm:text-base md:text-lg whitespace-nowrap">🏰 Guilds</button>
             <button id="quest-tab-btn" class="admin-tab px-2 sm:px-4 py-1 sm:py-2 text-sm sm:text-base md:text-lg whitespace-nowrap">📜 Quests</button>
+            <button id="online-tab-btn" class="admin-tab px-2 sm:px-4 py-1 sm:py-2 text-sm sm:text-base md:text-lg whitespace-nowrap">👥 Online</button>
             <button id="levels-tab-btn" class="admin-tab px-2 sm:px-4 py-1 sm:py-2 text-sm sm:text-base md:text-lg whitespace-nowrap">⬆️ Levels</button>
             <button id="actions-tab-btn" class="admin-tab px-2 sm:px-4 py-1 sm:py-2 text-sm sm:text-base md:text-lg whitespace-nowrap">🎭 Actions</button>
             <button id="map-tab-btn" class="admin-tab px-2 sm:px-4 py-1 sm:py-2 text-sm sm:text-base md:text-lg whitespace-nowrap">🗺️ Map</button>
             <button id="settings-tab-btn" class="admin-tab px-2 sm:px-4 py-1 sm:py-2 text-sm sm:text-base md:text-lg whitespace-nowrap">⚙️ Settings</button>
+            <button id="export-tab-btn" class="admin-tab px-2 sm:px-4 py-1 sm:py-2 text-sm sm:text-base md:text-lg whitespace-nowrap">💾 Export</button>
         </div>
 
         <div id="admin-content" class="overflow-y-auto flex-grow">
@@ -250,6 +252,11 @@
                         <label for="item-cost" class="block mb-1 mt-2">Cost (in gold)</label>
                         <input type="number" id="item-cost" class="admin-input" value="0">
                     </div>
+                </div>
+                <div class="mt-2">
+                    <label for="item-description" class="block mb-1">Description (shown when examined)</label>
+                    <textarea id="item-description" class="admin-input" rows="2" placeholder="A detailed description of the item..."></textarea>
+                    <p class="text-xs text-gray-400 mt-1">This is shown when players examine the item</p>
                 </div>
                 <div class="mt-2">
                     <label for="item-aliases" class="block mb-1">Aliases (comma-separated, e.g., ring, band, jewelry)</label>
@@ -1186,6 +1193,25 @@
                 </div>
             </div>
             
+            <!-- Online Players Panel -->
+            <div id="online-players-panel" class="hidden">
+                <h2 class="text-2xl text-yellow-400 text-center text-shadow mb-4">👥 Players Online</h2>
+                
+                <div class="mb-4 flex justify-between items-center">
+                    <div class="text-lg">
+                        <span class="text-gray-400">Total Online:</span>
+                        <span id="online-player-count" class="text-green-400 font-bold">0</span>
+                    </div>
+                    <button id="refresh-online-btn" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                        🔄 Refresh
+                    </button>
+                </div>
+                
+                <div id="online-players-list" class="space-y-2">
+                    <!-- Dynamically populated -->
+                </div>
+            </div>
+            
             <!-- Map Visualization Panel -->
             <div id="map-editor-panel" class="hidden">
                 <h2 class="text-2xl text-yellow-400 text-center text-shadow mb-4">🗺️ World Map</h2>
@@ -1274,6 +1300,61 @@
 
                 <div class="text-center text-sm text-gray-500 mt-6">
                     <p>More settings will be added in future updates</p>
+                </div>
+            </div>
+
+            <!-- Export Panel -->
+            <div id="export-panel" class="hidden">
+                <h2 class="text-2xl text-yellow-400 text-center text-shadow mb-4">💾 Export Game Data</h2>
+                
+                <div class="text-center text-gray-300 mb-6">
+                    <p class="mb-2">Download your game data as JSON files for backup or static file loading.</p>
+                    <p class="text-sm text-gray-400">These files can be placed in the /data/ folder for faster loading.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    <button id="export-rooms-btn" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-4 rounded-lg font-bold text-lg transition-colors">
+                        🏠 Export Rooms
+                    </button>
+                    <button id="export-items-btn" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-4 rounded-lg font-bold text-lg transition-colors">
+                        📦 Export Items
+                    </button>
+                    <button id="export-npcs-btn" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-4 rounded-lg font-bold text-lg transition-colors">
+                        👤 Export NPCs
+                    </button>
+                    <button id="export-monsters-btn" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-4 rounded-lg font-bold text-lg transition-colors">
+                        👹 Export Monsters
+                    </button>
+                    <button id="export-spells-btn" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-4 rounded-lg font-bold text-lg transition-colors">
+                        ✨ Export Spells
+                    </button>
+                    <button id="export-classes-btn" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-4 rounded-lg font-bold text-lg transition-colors">
+                        ⚔️ Export Classes
+                    </button>
+                    <button id="export-quests-btn" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-4 rounded-lg font-bold text-lg transition-colors">
+                        📜 Export Quests
+                    </button>
+                    <button id="export-guilds-btn" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-4 rounded-lg font-bold text-lg transition-colors">
+                        🏰 Export Guilds
+                    </button>
+                </div>
+
+                <div class="border border-cyan-500 rounded p-6 bg-black bg-opacity-50 mb-4">
+                    <h3 class="text-xl text-cyan-400 mb-4">📦 Export All</h3>
+                    <p class="text-gray-400 mb-4">Download all game data at once as separate JSON files in a zip archive.</p>
+                    <button id="export-all-btn" class="bg-cyan-500 hover:bg-cyan-600 text-white px-8 py-4 rounded-lg font-bold text-xl w-full transition-colors">
+                        💾 Export All Game Data
+                    </button>
+                </div>
+
+                <div id="export-status" class="hidden border border-green-500 rounded p-4 bg-black bg-opacity-50 text-center">
+                    <p class="text-green-400 font-bold">✅ Export Complete!</p>
+                    <p class="text-gray-400 text-sm mt-2">Your file has been downloaded.</p>
+                </div>
+
+                <div class="text-center text-sm text-gray-500 mt-6 space-y-2">
+                    <p>💡 <strong>Tip:</strong> After making changes in Firebase, export the updated files and replace them in your /data/ folder.</p>
+                    <p>⚡ This keeps your static files in sync and ensures optimal performance.</p>
                 </div>
             </div>
         </div>
@@ -1424,6 +1505,6 @@
 
 
 
-    <script type="module" src="./js/app.js?v=20251019-154224"></script>
+    <script type="module" src="./js/app.js?v=20251020-014"></script>
 </body>
 </html>

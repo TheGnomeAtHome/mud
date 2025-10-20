@@ -1,0 +1,25 @@
+{
+  "name": "mud-game",
+  "version": "1.0.0",
+  "description": "Browser-based Multi-User Dungeon game with Firebase and MySQL backend",
+  "type": "module",
+  "scripts": {
+    "export": "node export-from-firebase.js",
+    "server": "node server/server.js",
+    "migrate": "node server/migrate-firebase-to-mysql.js",
+    "dev": "nodemon server/server.js"
+  },
+  "keywords": ["mud", "game", "firebase", "mysql"],
+  "author": "",
+  "license": "GPL-3.0",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.3",
+    "express": "^4.18.2",
+    "firebase": "^10.7.1",
+    "mysql2": "^3.6.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
