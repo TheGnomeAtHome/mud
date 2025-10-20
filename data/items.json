@@ -1,0 +1,65 @@
+{
+  "beer": {
+    "consumable": true,
+    "itemType": "normal",
+    "effect": "You feel suitably refreshed...",
+    "hpRestore": 1,
+    "movable": true,
+    "cost": 10,
+    "newsworthy": false,
+    "name": "a pint of beer",
+    "isReadable": false,
+    "isWeapon": false
+  },
+  "boulder": {
+    "movable": false,
+    "cost": 0,
+    "name": "a mossy boulder"
+  },
+  "colin_notice": {
+    "cost": 0,
+    "isReadable": true,
+    "name": "notice",
+    "readableText": "I am boring!!",
+    "effect": "",
+    "hpRestore": 0,
+    "itemType": "normal",
+    "isWeapon": false,
+    "movable": false,
+    "consumable": false
+  },
+  "glyphs": {
+    "name": "strange glyphs",
+    "movable": false,
+    "cost": 0
+  },
+  "torch": {
+    "weaponDamage": 1,
+    "consumable": false,
+    "itemType": "normal",
+    "isWeapon": true,
+    "weaponType": "melee",
+    "name": "a discarded torch",
+    "cost": 5,
+    "effect": "Lights the way",
+    "hpRestore": 0,
+    "movable": true
+  },
+  "welsh-ring": {
+    "itemType": "normal",
+    "isReadable": false,
+    "newsworthy": false,
+    "name": "a silver ring made of welsh gold",
+    "isWeapon": false,
+    "cost": 350,
+    "movable": true,
+    "aliases": [
+      "ring",
+      "silver ring",
+      "band"
+    ],
+    "hpRestore": 0,
+    "effect": "",
+    "consumable": false
+  }
+}

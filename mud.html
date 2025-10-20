@@ -52,10 +52,10 @@
 <body class="p-2 sm:p-4 md:p-8 flex flex-col items-center justify-center min-h-screen">
 
     <!-- FILE: game.html (Main Game View) -->
-    <div id="app-container" class="w-full max-w-4xl h-[85vh] border-2 border-[#00ff41] bg-black bg-opacity-75 rounded-lg p-2 sm:p-4 flex-col glow mb-2 sm:mb-4 hidden">
+    <div id="app-container" class="w-full max-w-4xl h-[85vh] border-2 border-[#00ff41] bg-black bg-opacity-75 rounded-lg p-2 sm:p-4 flex-col glow mb-2 sm:mb-4 hidden" role="main">
         <div id="header" class="mb-1 sm:mb-2">
             <h1 class="text-2xl sm:text-3xl font-bold text-center text-shadow">M.U.D. - The Digital Realm</h1>
-            <div id="user-info" class="text-center text-xs sm:text-sm">Loading...</div>
+            <div id="user-info" class="text-center text-xs sm:text-sm" role="status" aria-live="polite">Loading...</div>
             <div class="text-center mt-1">
                 <a href="docs/index.html" target="_blank" class="text-[#00ff41] text-sm hover:text-white transition-colors underline">📖 Help & Documentation</a>
             </div>
@@ -65,15 +65,15 @@
             <!-- Game output will appear here -->
         </div>
 
-        <div class="flex items-center border-t-2 border-[#00ff41] pt-2">
-            <span class="text-lg sm:text-xl mr-2">&gt;</span>
-            <input type="text" id="command-input" class="text-base sm:text-xl" placeholder="Type a command..." autocomplete="off">
-        </div>
+        <form class="flex items-center border-t-2 border-[#00ff41] pt-2" onsubmit="return false;">
+            <label for="command-input" class="text-lg sm:text-xl mr-2" aria-hidden="true">&gt;</label>
+            <input type="text" id="command-input" class="text-base sm:text-xl" placeholder="Type a command..." autocomplete="off" aria-label="Type game commands here">
+        </form>
     </div>
     
-    <div class="w-full max-w-4xl flex gap-2 justify-center px-2">
-        <button id="admin-toggle-btn" class="hidden bg-[#00ff41] text-black px-3 sm:px-4 py-2 rounded text-sm sm:text-base">Admin Panel</button>
-        <button id="logout-btn" class="hidden bg-red-500 text-white px-3 sm:px-4 py-2 rounded text-sm sm:text-base">Logout</button>
+    <div class="w-full max-w-4xl flex gap-2 justify-center px-2" role="navigation">
+        <button id="admin-toggle-btn" class="hidden bg-[#00ff41] text-black px-3 sm:px-4 py-2 rounded text-sm sm:text-base" aria-label="Toggle admin panel">Admin Panel</button>
+        <button id="logout-btn" class="hidden bg-red-500 text-white px-3 sm:px-4 py-2 rounded text-sm sm:text-base" aria-label="Logout from game">Logout</button>
     </div>
     <!-- END OF FILE: game.html -->
 

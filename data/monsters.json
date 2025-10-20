@@ -1,0 +1,32 @@
+{
+  "arachnid": {
+    "itemDrop": "welsh-ring",
+    "hp": 17,
+    "name": "large spider",
+    "xp": 20,
+    "minAtk": 1,
+    "description": "A huge spider with fangs dripping with potent venom. Its multiple eyes gleam menacingly in the dark.",
+    "maxAtk": 4,
+    "gold": 3
+  },
+  "goblin": {
+    "maxAtk": 5,
+    "xp": 20,
+    "description": "A small, green-skinned creature with pointy ears and a foul temper. It wields a rusty dagger.",
+    "minAtk": 2,
+    "name": "a grumpy goblin",
+    "gold": 10,
+    "itemDrop": "",
+    "hp": 15
+  },
+  "howler": {
+    "itemDrop": "boulder",
+    "description": "A massive, yeti-like creature standing six feet tall, its mournful howl echoes through the mountains. Its eyes gleam with savage hunger.",
+    "gold": 35,
+    "hp": 75,
+    "minAtk": 7,
+    "maxAtk": 14,
+    "xp": 70,
+    "name": "a hulking howler"
+  }
+}

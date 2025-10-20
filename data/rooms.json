@@ -1,0 +1,166 @@
+{
+  "dark_cave": {
+    "monsterSpawns": [
+      {
+        "monsterId": "goblin",
+        "lastDefeated": 1760651854697,
+        "respawnTime": 60
+      }
+    ],
+    "npcs": [],
+    "items": [
+      "glyphs"
+    ],
+    "exits": {
+      "west": "forest_clearing"
+    },
+    "description": "The air grows cold and damp as you step into the darkness... A faint glow emanates from strange glyphs...",
+    "details": {
+      "glyphs": "The ancient symbols pulse with a soft, ethereal light..."
+    },
+    "name": "Echoing Caverns"
+  },
+  "forest_clearing": {
+    "monsterSpawns": [],
+    "description": "The path opens into a small, circular clearing, thick with the scent of damp earth and decaying leaves underfoot. To the east, the dark maw of a cave exhales a chilling draft, promising secrets best left undisturbed, while to the south a barely discernible path beckons deeper into the suffocating embrace of the woods. The air hangs heavy with an unnerving stillness, broken only by the rustling of unseen things in the undergrowth.",
+    "name": "Sun-dappled Clearing",
+    "items": [
+      "boulder"
+    ],
+    "exits": {
+      "south": "forest_path",
+      "east": "dark_cave"
+    },
+    "details": {},
+    "npcs": []
+  },
+  "forest_path": {
+    "description": "Sunlight struggles to pierce the canopy of impossibly tall, ancient trees, dappling the moss-covered floor in an ethereal, shifting mosaic. The air hangs heavy with the scent of damp earth and decaying leaves, the silence broken only by the whisper of wind through the colossal branches overhead; a narrow, winding path disappears North into deeper shadow, while to the South it hints at the distant bustle of a small village",
+    "details": {},
+    "name": "Whispering Woods Path",
+    "items": [],
+    "monsterSpawns": [],
+    "npcs": [],
+    "exits": {
+      "north": "forest_clearing",
+      "east": "woods1",
+      "south": "start"
+    }
+  },
+  "shadows": {
+    "exits": {
+      "east": "woods1"
+    },
+    "description": "The dark woods here are thick and oppressive, the air heavy with the scent of damp earth and decaying leaves. Twisted branches claw at the sky, allowing little light to penetrate the canopy.",
+    "npcs": [],
+    "items": [],
+    "name": "Dark woods",
+    "details": {},
+    "monsterSpawns": [
+      {
+        "respawnTime": 60,
+        "monsterId": "arachnid"
+      }
+    ]
+  },
+  "shop": {
+    "monsterSpawns": [],
+    "items": [
+      "glyphs",
+      "welsh-ring"
+    ],
+    "description": "Dust motes dance in the sunbeams slanting through the grime-coated windows of this ancient shop. Curios and oddities are crammed into every nook and cranny, promising forgotten treasures and strange enchantments. The window display is a chaotic jumble of tarnished silver, cracked porcelain dolls, and arcane-looking scrolls.",
+    "name": "Olde Emporium",
+    "npcs": [
+      "frank"
+    ],
+    "exits": {
+      "north": "smithy"
+    },
+    "details": {}
+  },
+  "smithy": {
+    "name": "The Smithy",
+    "exits": {
+      "south": "shop",
+      "west": "start"
+    },
+    "npcs": [
+      "apprentice",
+      "blacksmith"
+    ],
+    "monsterSpawns": [],
+    "details": {},
+    "description": "A small but beautifully kept blacksmith's shop. Gleaming armour and swords hang on the walls, ready for purchase. The air smells of hot metal and coal. On the other side of the road to the South is a large old fashioned shop.",
+    "items": []
+  },
+  "start": {
+    "monsterSpawns": [],
+    "npcs": [
+      "old_man"
+    ],
+    "items": [],
+    "exits": {
+      "south": "tavern",
+      "north": "forest_path",
+      "east": "smithy"
+    },
+    "name": "The Beginning",
+    "description": "A shimmering portal hangs in the center of this timeless space... This is the Beginning. A safe space where adventurers may get their bearings and try out commands. No fighting is allowed here and you will not be attacked by anything. A path leads north into a forest, and another south towards a cozy-looking old white building with a sign outside. Following a narrow path east, there is a blacksmiths building. There is a large wooden frame with writing on it here.",
+    "details": {}
+  },
+  "storage": {
+    "description": "A dimly lit storehouse filled with barrels, crates, and the faint smell of stale beer. Cobwebs hang thick in the corners. A door to the west leads back into the tavern",
+    "items": [],
+    "name": "Storehouse",
+    "monsterSpawns": [
+      {
+        "lastDefeated": 1760864114357,
+        "monsterId": "arachnid",
+        "respawnTime": 60
+      }
+    ],
+    "npcs": [],
+    "details": {
+      "large spider corpse": "The lifeless body of a large spider lies here.",
+      "corpse": "The lifeless body of a large spider lies here."
+    },
+    "exits": {
+      "west": "tavern"
+    }
+  },
+  "tavern": {
+    "name": "The Coach and Horses Tavern",
+    "exits": {
+      "east": "storage",
+      "north": "start"
+    },
+    "npcs": [
+      "barman",
+      "colin"
+    ],
+    "details": {},
+    "items": [],
+    "monsterSpawns": [],
+    "description": "The tavern is warm and filled with the smell of old wood and spilled ale. A few patrons are scattered around, and a busy barman is cleaning glasses. There is a small gray door to the east. A middle age man named Colin is sat at the bar, nursing a pint of Thickstons Old Peculiar"
+  },
+  "woods1": {
+    "exits": {
+      "east": "shadows",
+      "west": "forest_path"
+    },
+    "npcs": [],
+    "name": "Shadowwood",
+    "items": [
+      "boulder"
+    ],
+    "description": "The air hangs heavy with dread in this oppressive wood. Twisted branches claw at the sky, and the silence is broken only by the rustling of unseen things.",
+    "details": {},
+    "monsterSpawns": [
+      {
+        "respawnTime": 60,
+        "monsterId": "arachnid"
+      }
+    ]
+  }
+}

@@ -1,0 +1,127 @@
+{
+  "paladin": {
+    "description": "Holy warriors combining combat prowess with divine magic. Balanced bonuses.",
+    "abilities": [
+      "Smite Evil",
+      "Lay on Hands",
+      "Divine Sense"
+    ],
+    "hpBonus": 15,
+    "name": "Paladin",
+    "mpBonus": 10,
+    "statBonuses": {
+      "dex": 0,
+      "con": 1,
+      "cha": 2,
+      "int": 0,
+      "str": 2,
+      "wis": 2
+    }
+  },
+  "priest": {
+    "abilities": [
+      "Heal",
+      "Divine Protection",
+      "Turn Undead"
+    ],
+    "hpBonus": 5,
+    "mpBonus": 20,
+    "name": "Priest",
+    "levelTitles": {
+      "name": "Priest",
+      "levelTitles": {
+        "1": "Acolyte",
+        "5": "Priest",
+        "10": "High Priest",
+        "15": "Bishop",
+        "20": "Cardinal",
+        "30": "Pope"
+      }
+    },
+    "description": "Holy healers with divine powers. Bonus to Wisdom and Charisma.",
+    "statBonuses": {
+      "wis": 3,
+      "cha": 2,
+      "str": 0,
+      "dex": 0,
+      "int": 0,
+      "con": 1
+    }
+  },
+  "ranger": {
+    "mpBonus": 5,
+    "abilities": [
+      "Track",
+      "Hunter's Mark",
+      "Animal Companion"
+    ],
+    "statBonuses": {
+      "dex": 3,
+      "int": 0,
+      "cha": 0,
+      "con": 1,
+      "str": 1,
+      "wis": 2
+    },
+    "hpBonus": 10,
+    "description": "Wilderness experts skilled with bow and blade. Bonus to Dexterity and Wisdom.",
+    "name": "Ranger"
+  },
+  "rogue": {
+    "name": "Rogue",
+    "hpBonus": 0,
+    "mpBonus": 5,
+    "abilities": [
+      "Backstab",
+      "Sneak",
+      "Pick Lock"
+    ],
+    "description": "Stealthy thieves with quick reflexes. Bonus to Dexterity and Charisma.",
+    "statBonuses": {
+      "con": 0,
+      "int": 1,
+      "dex": 4,
+      "cha": 2,
+      "str": 0,
+      "wis": 0
+    }
+  },
+  "warrior": {
+    "description": "Strong melee fighters with high HP. Bonus to Strength and Constitution.",
+    "name": "Warrior",
+    "statBonuses": {
+      "wis": 0,
+      "dex": 0,
+      "str": 3,
+      "cha": 0,
+      "con": 2,
+      "int": -1
+    },
+    "hpBonus": 20,
+    "abilities": [
+      "Power Strike",
+      "Second Wind",
+      "Weapon Mastery"
+    ],
+    "mpBonus": 0
+  },
+  "wizard": {
+    "abilities": [
+      "Fireball",
+      "Magic Missile",
+      "Arcane Shield"
+    ],
+    "statBonuses": {
+      "dex": 1,
+      "str": -1,
+      "wis": 1,
+      "cha": 0,
+      "con": 0,
+      "int": 4
+    },
+    "name": "Wizard",
+    "description": "Masters of arcane magic. Bonus to Intelligence.",
+    "hpBonus": -10,
+    "mpBonus": 30
+  }
+}

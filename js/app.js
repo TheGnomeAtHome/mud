@@ -147,12 +147,22 @@ export async function initializeApp() {
         }, 30 * 60 * 1000);
     }
     
+    // Track displayed messages to prevent duplicates from serverTimestamp updates
+    const displayedMessages = new Set();
+    
     // Setup message listener for real-time chat
     function setupMessageListener() {
         const unsub = onSnapshot(collection(db, `/artifacts/${APP_ID}/public/data/mud-messages`), (snapshot) => {
             snapshot.docChanges().forEach((change) => {
                 if (change.type === "added") {
                     const msg = change.doc.data();
+                    const docId = change.doc.id;
+                    
+                    // Skip if we've already displayed this message
+                    if (displayedMessages.has(docId)) {
+                        return;
+                    }
+                    displayedMessages.add(docId);
                     
                     let messageTime = 0;
                     if (msg.timestamp) {
@@ -178,6 +188,27 @@ export async function initializeApp() {
                     if (msg.isNpcGreeting && msg.roomId === myCurrentRoom) {
                         logToTerminal(`<span class="text-lime-300">${msg.text}</span>`, 'game');
                         return; // Skip the normal message processing
+                    }
+                    
+                    // Special handling for NPC responses to room chat - always show if in same room
+                    if (msg.isNpcResponse && msg.roomId === myCurrentRoom) {
+                        logToTerminal(`<span class="text-lime-300">${msg.username}</span> says, "${msg.text}"`, 'game');
+                        return; // Skip the normal message processing
+                    }
+                    
+                    // Special handling for whisper messages - only show to sender and recipient
+                    if (msg.isWhisper) {
+                        if (msg.senderId === userId) {
+                            // Already shown when sent, skip here
+                            return;
+                        } else if (msg.recipientId === userId) {
+                            // Show whisper to recipient
+                            logToTerminal(`<span class="text-cyan-300">${msg.senderName}</span> whispers to you: "${msg.text}"`, 'chat');
+                            return;
+                        } else {
+                            // Not for this player, skip
+                            return;
+                        }
                     }
                     
                     if (messageTime >= sessionStartTime && msg.roomId === myCurrentRoom) {
@@ -481,6 +512,22 @@ export async function initializeApp() {
         setupMessageListener();
         resetInactivityTimer();
         
+        // Initialize screen reader mode if previously enabled
+        const screenReaderMode = localStorage.getItem('screenReaderMode') === 'true';
+        if (screenReaderMode) {
+            const terminalOutput = document.getElementById('terminal-output');
+            terminalOutput.setAttribute('role', 'log');
+            terminalOutput.setAttribute('aria-live', 'polite');
+            terminalOutput.setAttribute('aria-atomic', 'false');
+            terminalOutput.setAttribute('aria-relevant', 'additions');
+            
+            const commandInput = document.getElementById('command-input');
+            commandInput.setAttribute('aria-label', 'Game command input');
+            commandInput.setAttribute('aria-describedby', 'terminal-output');
+            
+            console.log('[Accessibility] Screen reader mode auto-enabled');
+        }
+        
         console.log('[Init] Showing initial room...');
         await gameLogic.showRoom();
         console.log('[Init] Initialization complete!');
@@ -495,34 +542,42 @@ export async function initializeApp() {
             if (cmdText) {
                 input.value = '';
                 setInputEnabled(false);
+                
+                // Expand command shortcuts when they're standalone
+                let expandedCmdText = cmdText;
+                const lowerCmd = cmdText.toLowerCase();
+                if (lowerCmd === 'i' || lowerCmd === 'inv') {
+                    expandedCmdText = 'inventory';
+                }
+                
                 logToTerminal(`> ${cmdText}`, 'chat');
                 
-                const simpleCommands = ['help', 'inventory', 'score', 'stats', 'news', 'who', 'logout', 'forceadmin', 'look', 'testai', 'test ai', 'listmodels', 'list models', 'listbots', 'killbots', 'spawnbot', 'stopbots', 'rooms', 'invis', 'invisible', 'shout'];
+                const simpleCommands = ['help', 'inventory', 'i', 'inv', 'score', 'stats', 'news', 'who', 'logout', 'forceadmin', 'look', 'testai', 'test ai', 'listmodels', 'list models', 'listbots', 'killbots', 'spawnbot', 'stopbots', 'rooms', 'invis', 'invisible', 'shout', 'screenreader'];
                 const directions = ['north', 'south', 'east', 'west', 'up', 'down', 'n', 's', 'e', 'w', 'u', 'd'];
-                const lowerCmdText = cmdText.toLowerCase();
+                const lowerCmdText = expandedCmdText.toLowerCase();
                 let parsedCommand;
                 
                 // Handle multi-word admin commands
                 if (lowerCmdText.startsWith('announce ') || lowerCmdText.startsWith('broadcast ')) {
-                    const parts = cmdText.split(' ');
+                    const parts = expandedCmdText.split(' ');
                     const target = parts.slice(1).join(' ');
                     parsedCommand = { action: 'announce', target: target };
                 } else if (lowerCmdText.startsWith('goto ') || lowerCmdText.startsWith('tp ') || lowerCmdText.startsWith('teleport ')) {
-                    const parts = cmdText.split(' ');
+                    const parts = expandedCmdText.split(' ');
                     const action = parts[0].toLowerCase();
                     const target = parts.slice(1).join(' ');
                     parsedCommand = { action: action === 'tp' ? 'goto' : action, target: target };
                 } else if (lowerCmdText.startsWith('summon ')) {
-                    const target = cmdText.substring('summon '.length).trim();
+                    const target = expandedCmdText.substring('summon '.length).trim();
                     parsedCommand = { action: 'summon', target: target };
                 } else if (lowerCmdText.startsWith('kick ')) {
-                    const target = cmdText.substring('kick '.length).trim();
+                    const target = expandedCmdText.substring('kick '.length).trim();
                     parsedCommand = { action: 'kick', target: target };
                 } else if (lowerCmdText.startsWith('mute ')) {
-                    const parts = cmdText.split(' ');
+                    const parts = expandedCmdText.split(' ');
                     parsedCommand = { action: 'mute', target: parts[1] };
                 } else if (lowerCmdText.startsWith('unmute ')) {
-                    const target = cmdText.substring('unmute '.length).trim();
+                    const target = expandedCmdText.substring('unmute '.length).trim();
                     parsedCommand = { action: 'unmute', target: target };
                 } else if (lowerCmdText.startsWith('startbots')) {
                     const parts = lowerCmdText.split(' ');
@@ -536,7 +591,7 @@ export async function initializeApp() {
                 } else if (lowerCmdText.split(' ').length === 1) {
                     parsedCommand = { action: lowerCmdText };
                 } else {
-                    parsedCommand = await parseCommandWithGemini(cmdText);
+                    parsedCommand = await parseCommandWithGemini(expandedCmdText);
                     console.log("Parsed command:", parsedCommand);
                 }
                 
@@ -547,7 +602,7 @@ export async function initializeApp() {
                         return;
                     }
                     console.log('[Command] Executing parsed command:', parsedCommand);
-                    await gameLogic.executeParsedCommand(parsedCommand, cmdText);
+                    await gameLogic.executeParsedCommand(parsedCommand, expandedCmdText);
                     console.log('[Command] Command execution complete');
                 } catch (error) {
                     console.error("Error executing command:", error);

@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Export Firebase to JSON</title>
+    <style>
+        body {
+            font-family: monospace;
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #00ff41;
+        }
+        button {
+            background: #00ff41;
+            color: black;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        button:hover {
+            background: #00cc33;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        #output {
+            background: #000;
+            border: 2px solid #00ff41;
+            padding: 20px;
+            margin-top: 20px;
+            white-space: pre-wrap;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .success { color: #00ff41; }
+        .error { color: #ff4444; }
+        .info { color: #ffaa00; }
+        h1 { text-align: center; }
+        .export-section {
+            background: #222;
+            padding: 15px;
+            margin: 10px 0;
+            border: 1px solid #00ff41;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔥 Firebase to JSON Export Tool</h1>
+    
+    <div class="export-section">
+        <h3>Individual Exports:</h3>
+        <button onclick="exportCollection('mud-rooms', 'rooms')">Export Rooms</button>
+        <button onclick="exportCollection('mud-items', 'items')">Export Items</button>
+        <button onclick="exportCollection('mud-npcs', 'npcs')">Export NPCs</button>
+        <button onclick="exportCollection('mud-monsters', 'monsters')">Export Monsters</button>
+        <button onclick="exportCollection('mud-spells', 'spells')">Export Spells</button>
+        <button onclick="exportCollection('mud-classes', 'classes')">Export Classes</button>
+        <button onclick="exportCollection('mud-quests', 'quests')">Export Quests</button>
+    </div>
+    
+    <div class="export-section">
+        <h3>Bulk Operations:</h3>
+        <button onclick="exportAllCollections()" id="exportAllBtn">Export All Collections</button>
+        <button onclick="clearOutput()">Clear Output</button>
+    </div>
+
+    <div id="output"></div>
+
+    <script type="module">
+        import { FIREBASE_CONFIG, APP_ID } from './js/config.js';
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const app = initializeApp(FIREBASE_CONFIG);
+        const db = getFirestore(app);
+
+        function log(message, type = 'info') {
+            const output = document.getElementById('output');
+            const span = document.createElement('div');
+            span.className = type;
+            span.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            output.appendChild(span);
+            output.scrollTop = output.scrollHeight;
+        }
+
+        async function exportCollection(collectionName, fileName) {
+            log(`Starting export of ${collectionName}...`, 'info');
+            
+            try {
+                const snapshot = await getDocs(collection(db, `/artifacts/${APP_ID}/public/data/${collectionName}`));
+                
+                const data = {};
+                snapshot.forEach(doc => {
+                    data[doc.id] = doc.data();
+                });
+
+                const count = Object.keys(data).length;
+                log(`✓ Loaded ${count} documents from ${collectionName}`, 'success');
+
+                // Convert to JSON
+                const jsonStr = JSON.stringify(data, null, 2);
+                
+                // Create download
+                const blob = new Blob([jsonStr], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${fileName}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                log(`✓ Downloaded ${fileName}.json (${(blob.size / 1024).toFixed(2)} KB)`, 'success');
+                log(`→ Save this file to /data/${fileName}.json in your project`, 'info');
+                log('', 'info');
+
+            } catch (error) {
+                log(`✗ Error exporting ${collectionName}: ${error.message}`, 'error');
+                console.error(error);
+            }
+        }
+
+        async function exportAllCollections() {
+            const btn = document.getElementById('exportAllBtn');
+            btn.disabled = true;
+            btn.textContent = 'Exporting...';
+
+            log('=== Starting bulk export ===', 'info');
+            log('', 'info');
+
+            const collections = [
+                ['mud-rooms', 'rooms'],
+                ['mud-items', 'items'],
+                ['mud-npcs', 'npcs'],
+                ['mud-monsters', 'monsters'],
+                ['mud-spells', 'spells'],
+                ['mud-classes', 'classes'],
+                ['mud-quests', 'quests']
+            ];
+
+            for (const [collectionName, fileName] of collections) {
+                await exportCollection(collectionName, fileName);
+                await new Promise(resolve => setTimeout(resolve, 500)); // Small delay between exports
+            }
+
+            log('=== Bulk export complete! ===', 'success');
+            log('Save all downloaded files to the /data/ folder in your project', 'info');
+            
+            btn.disabled = false;
+            btn.textContent = 'Export All Collections';
+        }
+
+        function clearOutput() {
+            document.getElementById('output').innerHTML = '';
+        }
+
+        // Make functions available globally
+        window.exportCollection = exportCollection;
+        window.exportAllCollections = exportAllCollections;
+        window.clearOutput = clearOutput;
+
+        log('Export tool ready! Click a button to start.', 'success');
+    </script>
+</body>
+</html>

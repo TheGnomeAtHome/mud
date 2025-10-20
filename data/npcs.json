@@ -1,0 +1,167 @@
+{
+  "apprentice": {
+    "name": "Malcolm the apprentice",
+    "shortName": "Malcolm",
+    "sells": [],
+    "useAI": true,
+    "dialogue": "Malcolm is a quiet shy lad and always scared of being told off by Bronson. He tries to work hard, but his ineptitude holds him back",
+    "description": "A young lad covered in soot, constantly tripping over things. He seems more interested in daydreaming than blacksmithing.",
+    "canFight": false,
+    "triggers": {}
+  },
+  "baldrick": {
+    "gold": 25,
+    "shortName": "Baldrick",
+    "description": "A cheerful minstrel with a lute, known for his surprisingly familiar yet ancient-sounding tunes.",
+    "maxAtk": 8,
+    "wanderInterval": {
+      "min": 60,
+      "max": 180
+    },
+    "wanders": true,
+    "xp": 50,
+    "greetingDelay": {
+      "max": 30,
+      "min": 5
+    },
+    "ambientInterval": {
+      "min": 60,
+      "max": 600
+    },
+    "triggers": {},
+    "useAI": true,
+    "canFight": true,
+    "ambientDialogue": true,
+    "sells": [],
+    "minAtk": 3,
+    "dialogue": "Baldrick is a wandering minstral. He likes to roam around the area singing his many tunes to the population. He has a hat which collects coins given to him. All of his songs are currently popular songs but transported to medievel times. They frequently mention players in the room. They can be a mixture of styles from limericks to full on tunes.",
+    "proactiveGreeting": true,
+    "hp": 50,
+    "name": "Baldrick the wandering minstrel",
+    "greetingInterval": {
+      "min": 120
+    },
+    "hostile": false
+  },
+  "barman": {
+    "triggers": {},
+    "description": "Bob the barman tirelessly cleans a glass with a grubby rag, nodding at you as you approach.",
+    "dialogue": "Bob is a great listener. You can tell him anything while he is behind the bar. But he is always willing to chat. Usually going along with whatever is said. He is very respectful.",
+    "canFight": true,
+    "maxAtk": 8,
+    "shortName": "Bob",
+    "name": "Bob the barman",
+    "hostile": false,
+    "useAI": true,
+    "gold": 25,
+    "sells": [
+      "beer"
+    ],
+    "hp": 50,
+    "xp": 50,
+    "minAtk": 3
+  },
+  "blacksmith": {
+    "gold": 25,
+    "description": "Bronson is a powerfully built man, his arms thick with muscle. Sparks fly from his forge as he hammers red-hot metal with practiced ease. His face is weathered and stern, but his eyes hold a spark of warmth.",
+    "maxAtk": 10,
+    "shortName": "Bronson",
+    "xp": 50,
+    "triggers": {},
+    "useAI": true,
+    "canFight": true,
+    "sells": [
+      "torch"
+    ],
+    "minAtk": 3,
+    "dialogue": "Bronson is a no nonsense well built blacksmith. He doesn't mince his words and he is always busy. He knows he is the best blacksmith for miles around. He was born and bred in the yorkshire dales but moved here when he was old enough",
+    "hp": 100,
+    "name": "Bronson the blacksmith",
+    "hostile": false
+  },
+  "colin": {
+    "maxAtk": 8,
+    "proactiveGreeting": false,
+    "ambientDialogue": false,
+    "dialogue": "Colin, an incredibly boring and verbose middle-aged man. he loves to talk about mundane things like the weather, traffic, and his conspiracy theories, particularly about the Titanic. You will latch onto anyone who speaks to you and drone on and on, oblivious to their boredom. he is generally friendly but completely lacking in self-awareness. You know strange and interesting details about literally everything. He has a west midlands, UK accent and was from there before he moved here.",
+    "description": "Colin is a man of average height and build, with perpetually unkempt hair and thick glasses perched on his nose. He looks incredibly ordinary, almost to the point of being forgettable. On his back someone has taped a small postit note with the words - Pub Bore!! - written on it in scrawling letters",
+    "name": "colin the barfly",
+    "hostile": false,
+    "useAI": true,
+    "xp": 50,
+    "hp": 50,
+    "gold": 25,
+    "triggers": {},
+    "shortName": "Colin",
+    "sells": [],
+    "wanders": false,
+    "canFight": true,
+    "minAtk": 3
+  },
+  "frank": {
+    "description": "Frank is a wizened old man with eyes that gleam with shrewdness. His hands, gnarled with age, still move with surprising speed as he weighs and measures goods. The air around him smells faintly of old parchment and exotic spices.",
+    "shortName": "Frank",
+    "wanders": false,
+    "greetingDelay": {
+      "max": 30,
+      "min": 5
+    },
+    "triggers": {},
+    "useAI": true,
+    "ambientDialogue": false,
+    "canFight": false,
+    "sells": [
+      "glyphs",
+      "torch",
+      "welsh-ring"
+    ],
+    "dialogue": "Frank is an ancient shopkeeper who has seen it all. He is sharp-witted, knowledgeable about all his wares, and always willing to haggle, but never at a loss. He values a good deal and respects a clever customer. He is slightly hard of hearing.",
+    "proactiveGreeting": true,
+    "name": "Frank, an ancient shopkeeper",
+    "greetingInterval": {
+      "min": 120
+    }
+  },
+  "grumble": {
+    "name": "a small aggressive dwarf",
+    "shortName": "Grumble",
+    "triggers": {},
+    "description": "A short dwarf with a perpetually furrowed brow and a clenched fist. He looks ready to pick a fight with anyone who gets too close.",
+    "dialogue": "You are Grumble, a short-tempered and easily provoked dwarf. You are always looking for a fight and quick to insult others. You distrust anyone taller than you. You are incredibly stubborn and refuse to back down from any challenge, no matter how foolish.",
+    "useAI": true,
+    "sells": [
+      "bomb",
+      "torch"
+    ]
+  },
+  "old_man": {
+    "name": "Albert, an old man",
+    "minAtk": 3,
+    "ambientDialogue": false,
+    "hp": 90,
+    "maxAtk": 14,
+    "shortName": "Albert",
+    "gold": 25,
+    "dialogue": "You are a wise, slightly mysterious old man named Albert. He has a very dry sense of humour and is also fairly bad tempered. Alberts speech is always in quotes. He is very intelligent and always uses big words when he can think of them. Even if he is in a bad mood, he will always offer a hint if asked. Not too much though",
+    "canFight": true,
+    "description": "The old man has a long white beard and leans heavily on a gnarled staff. His eyes seem to hold ancient secrets.",
+    "wanders": false,
+    "triggers": {
+      "help": "torch",
+      "lost": "torch",
+      "darkness": "torch"
+    },
+    "sells": [],
+    "greetingInterval": {
+      "min": 120
+    },
+    "useAI": true,
+    "xp": 50,
+    "hostile": false,
+    "proactiveGreeting": true,
+    "greetingDelay": {
+      "min": 5,
+      "max": 30
+    }
+  }
+}

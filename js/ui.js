@@ -9,6 +9,19 @@ export function initializeUI() {
         const line = document.createElement('div');
         line.className = cssClass;
         line.innerHTML = message;
+        
+        // Add ARIA live region attribute for combat and urgent messages in screen reader mode
+        const screenReaderMode = localStorage.getItem('screenReaderMode') === 'true';
+        if (screenReaderMode) {
+            // Combat, error, and urgent messages should be assertive (interrupt immediately)
+            if (cssClass === 'combat' || cssClass === 'combat-log' || cssClass === 'error' || cssClass === 'success') {
+                line.setAttribute('aria-live', 'assertive');
+            } else {
+                // Other messages are polite (wait for pause)
+                line.setAttribute('aria-live', 'polite');
+            }
+        }
+        
         output.appendChild(line);
         output.scrollTop = output.scrollHeight;
     }

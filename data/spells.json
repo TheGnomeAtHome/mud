@@ -1,0 +1,36 @@
+{
+  "death": {
+    "specialEffects": "Kills the bloody lot of them",
+    "classRequired": "any",
+    "description": "A laser like beam creating a blinding white light before blackness",
+    "levelRequired": 99,
+    "school": "evocation",
+    "cooldown": 0,
+    "targetType": "all-enemies",
+    "damage": 500,
+    "id": "death",
+    "statEffects": {},
+    "name": "Captain Barnabus death ray",
+    "range": "close",
+    "duration": 0,
+    "mpCost": 10,
+    "healing": 0
+  },
+  "heal": {
+    "range": "close",
+    "name": "St Vitus Healing spell",
+    "targetType": "single-ally",
+    "statEffects": {},
+    "description": "A powerful healing spell",
+    "cooldown": 0,
+    "healing": 30,
+    "classRequired": "any",
+    "specialEffects": "",
+    "mpCost": 20,
+    "id": "heal",
+    "damage": 0,
+    "levelRequired": 1,
+    "school": "evocation",
+    "duration": 0
+  }
+}

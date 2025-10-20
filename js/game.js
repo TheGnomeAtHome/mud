@@ -1025,6 +1025,13 @@ export function initializeGameLogic(dependencies) {
             return;
         }
         
+        // Check if there are any players in the room
+        const playersInRoom = Object.values(gamePlayers).filter(p => p.currentRoom === roomId);
+        if (playersInRoom.length === 0) {
+            console.log('[NPC Conversations] No players in room - skipping conversation');
+            return;
+        }
+        
         // Pick two random NPCs
         const shuffled = [...aiNpcs].sort(() => Math.random() - 0.5);
         const npc1 = shuffled[0];
@@ -1167,6 +1174,51 @@ IMPORTANT:
                     stopNpcConversationsInRoom(roomId);
                 });
                 return null;
+            }
+            return null;
+        }
+    }
+    
+    /**
+     * Generate NPC response to player's room chat
+     */
+    async function generateNpcRoomChatResponse(npc, playerName, playerSpeech) {
+        if (quotaExhausted) {
+            return null;
+        }
+        
+        try {
+            const personality = Array.isArray(npc.dialogue) ? npc.dialogue[0] : npc.dialogue;
+            
+            const prompt = `You are ${npc.shortName || npc.name}, an NPC in a fantasy game.
+Your personality: ${personality}
+
+${playerName} just said in the room: "${playerSpeech}"
+
+Generate a SHORT, natural response (1-2 sentences max) as this character would react.
+Only respond if what they said seems directed at you or is relevant to your character.
+If it's not relevant to you, respond with something brief and in-character, or just acknowledge them.
+
+Your response:`;
+
+            const response = await callGeminiForText(prompt);
+            
+            if (!response || response === "The AI is silent for now." || response.includes("Error")) {
+                return null;
+            }
+            
+            // Clean up the response
+            let cleaned = response
+                .replace(/^["']|["']$/g, '')
+                .replace(/^[^:]+:\s*/, '')
+                .trim();
+            
+            return cleaned;
+        } catch (error) {
+            console.error('Error generating NPC room chat response:', error);
+            if (error.message && (error.message.includes('429') || error.message.includes('quota'))) {
+                console.log('[NPC Room Chat] API limit reached');
+                quotaExhausted = true;
             }
             return null;
         }
@@ -2547,6 +2599,44 @@ Examples:
             case 'logout':
                 await signOut(auth);
                 break;
+            
+            case 'screenreader':
+                // Toggle screen reader mode
+                const currentMode = localStorage.getItem('screenReaderMode') === 'true';
+                const newMode = !currentMode;
+                localStorage.setItem('screenReaderMode', newMode.toString());
+                
+                if (newMode) {
+                    // Enable screen reader mode
+                    const terminalOutput = document.getElementById('terminal-output');
+                    terminalOutput.setAttribute('role', 'log');
+                    terminalOutput.setAttribute('aria-live', 'polite');
+                    terminalOutput.setAttribute('aria-atomic', 'false');
+                    terminalOutput.setAttribute('aria-relevant', 'additions');
+                    
+                    const commandInput = document.getElementById('command-input');
+                    commandInput.setAttribute('aria-label', 'Game command input');
+                    commandInput.setAttribute('aria-describedby', 'terminal-output');
+                    
+                    logToTerminal("✓ Screen reader mode ENABLED. New game messages will be announced automatically.", "success");
+                    logToTerminal("Combat and urgent messages will interrupt for immediate reading.", "system");
+                    logToTerminal("Type 'screenreader' again to disable.", "system");
+                } else {
+                    // Disable screen reader mode
+                    const terminalOutput = document.getElementById('terminal-output');
+                    terminalOutput.removeAttribute('role');
+                    terminalOutput.removeAttribute('aria-live');
+                    terminalOutput.removeAttribute('aria-atomic');
+                    terminalOutput.removeAttribute('aria-relevant');
+                    
+                    const commandInput = document.getElementById('command-input');
+                    commandInput.removeAttribute('aria-label');
+                    commandInput.removeAttribute('aria-describedby');
+                    
+                    logToTerminal("✓ Screen reader mode DISABLED.", "system");
+                }
+                break;
+            
             case 'look': await showRoom(currentPlayerRoomId); break;
             case 'go':
                  console.log(`[Movement] Attempting to go ${target}`);
@@ -2733,11 +2823,109 @@ Examples:
                      if (speech) {
                          logToTerminal(`You say, "${speech}"`, 'chat');
                          await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), { senderId: userId, senderName: playerName, roomId: currentPlayerRoomId, text: speech, timestamp: serverTimestamp() });
+                         
+                         // Check if there are any AI NPCs in the room that might respond
+                         const room = gameWorld[currentPlayerRoomId];
+                         if (room && room.npcs && room.npcs.length > 0) {
+                             // Find AI NPCs in the room
+                             const aiNpcsInRoom = room.npcs
+                                 .map(npcId => ({ id: npcId, ...gameNpcs[npcId] }))
+                                 .filter(npc => {
+                                     if (!npc.dialogue) return false;
+                                     // AI NPCs have a personality prompt (string or single-element array)
+                                     if (typeof npc.dialogue === 'string' && npc.dialogue.length > 20) return true;
+                                     if (Array.isArray(npc.dialogue) && npc.dialogue.length === 1 && npc.dialogue[0].length > 20) return true;
+                                     return false;
+                                 });
+                             
+                             // Have a random AI NPC respond (30% chance if there are AI NPCs)
+                             if (aiNpcsInRoom.length > 0 && Math.random() < 0.3) {
+                                 const respondingNpc = aiNpcsInRoom[Math.floor(Math.random() * aiNpcsInRoom.length)];
+                                 
+                                 // Generate a response from the NPC
+                                 setTimeout(async () => {
+                                     const npcResponse = await generateNpcRoomChatResponse(respondingNpc, playerName, speech);
+                                     if (npcResponse) {
+                                         await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                                             roomId: currentPlayerRoomId,
+                                             userId: `npc-${respondingNpc.id}`,
+                                             username: respondingNpc.shortName || respondingNpc.name,
+                                             text: npcResponse,
+                                             timestamp: serverTimestamp(),
+                                             isNpcResponse: true
+                                         });
+                                     }
+                                 }, 1000 + Math.random() * 2000); // Wait 1-3 seconds before responding
+                             }
+                         }
                      } else {
                          logToTerminal("Say what?", "error");
                      }
                 } else { logToTerminal("Say what?", "error"); }
                 break;
+            
+            case 'whisper':
+            case 'tell': {
+                // Parse: whisper PlayerName message
+                const whisperMatch = cmdText.match(/^(?:whisper|tell)\s+(\w+)\s+(.+)$/i);
+                if (!whisperMatch) {
+                    logToTerminal("Usage: whisper <player> <message>", "error");
+                    break;
+                }
+                
+                const targetPlayerName = whisperMatch[1];
+                const message = whisperMatch[2];
+                
+                // Check if sender is muted
+                const senderData = gamePlayers[userId];
+                if (senderData?.muted) {
+                    const mutedUntil = senderData.mutedUntil || 0;
+                    if (mutedUntil > Date.now()) {
+                        const minutesLeft = Math.ceil((mutedUntil - Date.now()) / 60000);
+                        logToTerminal(`You are muted for ${minutesLeft} more minute${minutesLeft !== 1 ? 's' : ''}.`, "error");
+                        break;
+                    } else {
+                        // Mute expired, remove it
+                        await updateDoc(playerRef, { muted: false, mutedUntil: null });
+                    }
+                }
+                
+                // Find the target player in the same room
+                const targetPlayer = Object.entries(gamePlayers).find(([id, p]) => 
+                    p.name.toLowerCase() === targetPlayerName.toLowerCase() && 
+                    p.roomId === currentPlayerRoomId
+                );
+                
+                if (!targetPlayer) {
+                    logToTerminal(`${targetPlayerName} is not here.`, "error");
+                    break;
+                }
+                
+                const [targetPlayerId, targetPlayerData] = targetPlayer;
+                
+                // Can't whisper to yourself
+                if (targetPlayerId === userId) {
+                    logToTerminal("You can't whisper to yourself.", "error");
+                    break;
+                }
+                
+                // Send the whisper message
+                await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                    senderId: userId,
+                    senderName: playerName,
+                    recipientId: targetPlayerId,
+                    recipientName: targetPlayerData.name,
+                    roomId: currentPlayerRoomId,
+                    text: message,
+                    timestamp: serverTimestamp(),
+                    isWhisper: true
+                });
+                
+                // Show confirmation to sender
+                logToTerminal(`You whisper to <span class="text-cyan-300">${targetPlayerData.name}</span>: "${message}"`, 'chat');
+                break;
+            }
+            
             case 'inventory':
                 const pDocInv = await getDoc(playerRef);
                 const inv = pDocInv.data().inventory || [];
@@ -5617,16 +5805,18 @@ Examples:
                 logToTerminal("--- Help ---", "system");
                 logToTerminal("You can now type commands in natural language!", "system");
                 logToTerminal("After talking to an AI character, you can reply just by typing.", "system");
-                logToTerminal("Core commands: look, go, get, drop, inventory, examine, talk to, ask...about, buy...from, attack, who, say, score, stats, logout, forceadmin.", "system");
+                logToTerminal("Core commands: look, go, get, drop, inventory (i/inv), examine, talk to, ask...about, buy...from, attack, who, say, score, stats, logout.", "system");
                 logToTerminal("Combat: 'attack [monster]' or 'attack [player]' - Fight monsters or other players! PvP combat is active.", "system");
                 logToTerminal("Magic: 'spells' to view your spells, 'cast [spell name] [target]' to cast spells.", "system");
-                logToTerminal("Communication: 'say [message]' for local chat, 'shout [message]' to nearby rooms, 'gc [message]' for guild chat, 'pc [message]' for party chat.", "system");
+                logToTerminal("Communication: 'say [message]' for local chat, 'whisper/tell [player] [message]' for private chat, 'shout [message]' to nearby rooms, 'gc [message]' for guild chat, 'pc [message]' for party chat.", "system");
+                logToTerminal("Trading: 'list' to see merchant inventory, 'buy [item]' to purchase, 'haggle [amount] for [item]' to negotiate, 'sell [item]' to sell, 'trade [player]' for player trading.", "system");
                 logToTerminal("Guilds: 'guild' to view your guild, 'guild create [name]' to make one, 'guild list' to see all guilds.", "system");
                 logToTerminal("Quests: 'quests' to see active and available quests, 'quest accept [name]' to accept, 'quest progress' to view details, 'quest abandon [name]' to drop.", "system");
                 logToTerminal("Parties: 'party create' to form a party, 'party invite [name]' to invite, 'party join [name]' to join, 'party leave' to leave.", "system");
                 logToTerminal("Emotes: wave, dance, laugh, smile, nod, bow, clap, cheer, cry, sigh, shrug, grin, frown, wink, yawn, stretch, jump, sit, stand, kneel, salute, think, ponder, scratch.", "system");
                 logToTerminal("Or use 'emote [action]' for custom actions!", "system");
                 logToTerminal("Special: 'examine frame' to view the leaderboard!", "system");
+                logToTerminal("Accessibility: Type 'screenreader' to enable/disable screen reader mode for visually impaired players.", "system");
                 logToTerminal("Test AI: Type 'test ai' to check if AI is working.", "system");
                 if (gamePlayers[userId]?.isAdmin) {
                     logToTerminal("--- Admin Commands ---", "system");
