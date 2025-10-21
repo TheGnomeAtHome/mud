@@ -1368,7 +1368,13 @@
             <span class="font-bold">🐛 Debug Console - Mobile Auth Monitor</span>
             <button id="debug-clear" class="bg-red-500 text-white px-2 py-1 rounded text-xs hover:bg-red-600">Clear</button>
         </div>
-        <div id="debug-output" class="p-2 space-y-1 overflow-y-auto flex-grow"></div>
+        <div id="debug-output" class="p-2 space-y-1 overflow-y-auto flex-grow">
+            <div class="text-red-400">⏳ Waiting for JavaScript to load...</div>
+            <div class="text-gray-400 mt-2">If this message persists:</div>
+            <div class="text-gray-400">1. Check if js/app.js and js/auth.js are uploaded</div>
+            <div class="text-gray-400">2. Check browser console (F12) for errors</div>
+            <div class="text-gray-400">3. Hard refresh (Ctrl+F5)</div>
+        </div>
     </div>
 
     <!-- FILE: auth.html (Login/Registration View) -->
@@ -1514,10 +1520,21 @@
 
     <!-- Debug Console Script (must load before app.js) -->
     <script>
+        // IMMEDIATE TEST - This should show even if everything else fails
+        alert('DEBUG SCRIPT LOADED - Check debug console on right side');
+        
         (function() {
             const debugOutput = document.getElementById('debug-output');
             const debugConsole = document.getElementById('debug-console');
             const debugClear = document.getElementById('debug-clear');
+            
+            // Visual test - make console bright red if it exists
+            if (debugConsole) {
+                debugConsole.style.backgroundColor = 'red';
+                setTimeout(() => {
+                    debugConsole.style.backgroundColor = 'black';
+                }, 2000);
+            }
             
             let logCount = 0;
             const MAX_LOGS = 200; // Increased for better monitoring
@@ -1609,6 +1626,6 @@
         })();
     </script>
 
-    <script type="module" src="./js/app.js?v=20251021-018"></script>
+    <script type="module" src="./js/app.js?v=20251021-019"></script>
 </body>
 </html>
