@@ -1951,6 +1951,88 @@ Examples:
             return null;
         };
 
+        // ========== RANGE CHECKING SYSTEM ==========
+        
+        // Get all rooms within specified range of a starting room
+        // Range 0 = same room only, 1 = adjacent rooms, 2 = two rooms away
+        const getRoomsInRange = (startRoomId, range) => {
+            if (range === 0) {
+                return [startRoomId];
+            }
+            
+            const visited = new Set([startRoomId]);
+            const rooms = [startRoomId];
+            let currentLevel = [startRoomId];
+            
+            for (let depth = 0; depth < range; depth++) {
+                const nextLevel = [];
+                for (const roomId of currentLevel) {
+                    const room = gameWorld[roomId];
+                    if (!room || !room.exits) continue;
+                    
+                    // Check all exits from this room
+                    for (const [direction, neighborRoomId] of Object.entries(room.exits)) {
+                        if (!visited.has(neighborRoomId)) {
+                            visited.add(neighborRoomId);
+                            rooms.push(neighborRoomId);
+                            nextLevel.push(neighborRoomId);
+                        }
+                    }
+                }
+                currentLevel = nextLevel;
+            }
+            
+            return rooms;
+        };
+        
+        // Find a target (player or monster) in range
+        const findTargetInRange = (targetName, currentRoomId, range) => {
+            const roomsInRange = getRoomsInRange(currentRoomId, range);
+            
+            // Look for player first
+            for (const roomId of roomsInRange) {
+                const targetPlayerEntry = Object.entries(gamePlayers).find(([playerId, player]) => 
+                    playerId !== userId && 
+                    player.roomId === roomId && 
+                    player.name.toLowerCase().includes(targetName.toLowerCase())
+                );
+                
+                if (targetPlayerEntry) {
+                    const [targetPlayerId, targetPlayerData] = targetPlayerEntry;
+                    return {
+                        type: 'player',
+                        id: targetPlayerId,
+                        data: targetPlayerData,
+                        roomId: roomId,
+                        distance: roomsInRange.indexOf(roomId)
+                    };
+                }
+            }
+            
+            // Look for monster
+            for (const roomId of roomsInRange) {
+                const monsterEntry = Object.entries(activeMonsters).find(([id, m]) => 
+                    m.roomId === roomId && 
+                    targetName && 
+                    (m.monsterId.toLowerCase().includes(targetName.toLowerCase()) || 
+                     m.name.toLowerCase().includes(targetName.toLowerCase()))
+                );
+                
+                if (monsterEntry) {
+                    const [monsterInstanceId, monsterInstanceData] = monsterEntry;
+                    return {
+                        type: 'monster',
+                        id: monsterInstanceId,
+                        data: monsterInstanceData,
+                        roomId: roomId,
+                        distance: roomsInRange.indexOf(roomId)
+                    };
+                }
+            }
+            
+            return null;
+        };
+
         // ========== VERBOSE COMBAT DESCRIPTION SYSTEM ==========
         
         // Get dodge description based on defender's DEX
@@ -4481,6 +4563,842 @@ Examples:
                     await checkLevelUp(playerRef, playerDataAfter.xp || 0, playerDataAfter.level || 1);
                 }
                 break;
+            
+            case 'shoot':
+                const shootTargetName = target;
+                
+                if (!shootTargetName) {
+                    logToTerminal("Shoot who? Try 'shoot [name]' or 'shoot [name] with [weapon]'", "error");
+                    break;
+                }
+                
+                // Get player data to check inventory
+                const shooterDoc = await getDoc(playerRef);
+                if (!shooterDoc.exists()) {
+                    logToTerminal("Error: Player data not found.", "error");
+                    break;
+                }
+                const shooterData = shooterDoc.data();
+                const inventory = shooterData.inventory || [];
+                
+                // Find ranged weapon in inventory
+                let rangedWeapon = null;
+                let ammunition = null;
+                
+                for (const invItem of inventory) {
+                    const item = gameItems[invItem.id];
+                    if (!item) continue;
+                    
+                    // Find a ranged weapon
+                    if (item.isRanged && !rangedWeapon) {
+                        rangedWeapon = { ...invItem, ...item };
+                    }
+                    
+                    // Find matching ammunition
+                    if (rangedWeapon && item.isAmmunition && item.ammoFor === rangedWeapon.id) {
+                        ammunition = { ...invItem, ...item };
+                        break; // Found both weapon and ammo
+                    }
+                }
+                
+                if (!rangedWeapon) {
+                    logToTerminal("You don't have a ranged weapon equipped. Try 'get bow' or similar.", "error");
+                    break;
+                }
+                
+                if (!ammunition) {
+                    logToTerminal(`You need ${rangedWeapon.ammoType || 'ammunition'} to use your ${rangedWeapon.name}.`, "error");
+                    break;
+                }
+                
+                // Check target is in range
+                const weaponRange = rangedWeapon.range || 0;
+                const shootTarget = findTargetInRange(shootTargetName, currentPlayerRoomId, weaponRange);
+                
+                if (!shootTarget) {
+                    logToTerminal(`You don't see "${shootTargetName}" within range of your ${rangedWeapon.name}.`, "error");
+                    break;
+                }
+                
+                const isSameRoom = shootTarget.roomId === currentPlayerRoomId;
+                const rangeDescription = isSameRoom ? 'at close range' : 'from a distance';
+                
+                // Handle player vs player ranged combat
+                if (shootTarget.type === 'player') {
+                    const targetPlayerRef = doc(db, `/artifacts/${appId}/public/data/mud-players/${shootTarget.id}`);
+                    const shootCombatMessages = [];
+                    
+                    try {
+                        await runTransaction(db, async (transaction) => {
+                            const attackerDoc = await transaction.get(playerRef);
+                            const defenderDoc = await transaction.get(targetPlayerRef);
+                            
+                            if (!attackerDoc.exists() || !defenderDoc.exists()) {
+                                throw new Error("Player vanished during combat!");
+                            }
+                            
+                            const attackerData = attackerDoc.data();
+                            const defenderData = defenderDoc.data();
+                            
+                            // Calculate damage with ranged weapon bonus
+                            const weaponBonus = rangedWeapon.weaponDamage || rangedWeapon.damage || 0;
+                            
+                            shootCombatMessages.length = 0;
+                            
+                            // Check if defender dodges
+                            const dodgeChance = calculateDodge(defenderData);
+                            const didDodge = Math.random() < dodgeChance;
+                            
+                            let attackerDamage = 0;
+                            let newDefenderHp = defenderData.hp || defenderData.maxHp;
+                            
+                            if (didDodge) {
+                                shootCombatMessages.push({ msg: `${defenderData.name} dodges your shot!`, type: 'combat-log' });
+                            } else {
+                                // Calculate ranged damage
+                                const attackResult = calculateDamage(attackerData, defenderData, weaponBonus, false);
+                                attackerDamage = attackResult.damage;
+                                newDefenderHp = (defenderData.hp || defenderData.maxHp) - attackerDamage;
+                                
+                                let shootMsg = `You shoot ${defenderData.name} ${rangeDescription} with your ${rangedWeapon.name} for ${attackerDamage} damage`;
+                                if (attackResult.isCritical) {
+                                    shootMsg += ` (Critical Hit!)`;
+                                }
+                                shootCombatMessages.push({ msg: shootMsg + '!', type: 'combat-log' });
+                            }
+                            
+                            // Consume 1 ammunition
+                            const updatedInventory = attackerData.inventory.filter(item => {
+                                if (item.id === ammunition.id) {
+                                    // Remove one ammunition
+                                    if (item.quantity && item.quantity > 1) {
+                                        item.quantity -= 1;
+                                        return true; // Keep in inventory with reduced quantity
+                                    }
+                                    return false; // Remove completely
+                                }
+                                return true;
+                            });
+                            transaction.update(playerRef, { inventory: updatedInventory });
+                            
+                            shootCombatMessages.push({ msg: `You used 1 ${ammunition.name}.`, type: 'game' });
+                            
+                            // Broadcast to current room
+                            await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                                senderId: userId,
+                                senderName: playerName,
+                                roomId: currentPlayerRoomId,
+                                text: `${playerName} shoots ${isSameRoom ? '' : 'towards ' + gameWorld[shootTarget.roomId]?.title || 'another room'}!`,
+                                isEmote: true,
+                                timestamp: serverTimestamp()
+                            });
+                            
+                            // Broadcast to target room if different
+                            if (!isSameRoom) {
+                                await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                                    senderId: userId,
+                                    senderName: playerName,
+                                    roomId: shootTarget.roomId,
+                                    text: `An arrow flies in and hits ${defenderData.name}!`,
+                                    isEmote: true,
+                                    timestamp: serverTimestamp()
+                                });
+                            }
+                            
+                            if (!didDodge && newDefenderHp <= 0) {
+                                // Defender defeated
+                                shootCombatMessages.push({ msg: `You have defeated ${defenderData.name}!`, type: 'system' });
+                                
+                                const xpGain = Math.floor(defenderData.level * 10);
+                                const goldGain = Math.floor(defenderData.money * 0.1) || 10;
+                                
+                                transaction.update(playerRef, {
+                                    xp: (attackerData.xp || 0) + xpGain,
+                                    score: (attackerData.score || 0) + xpGain,
+                                    money: (attackerData.money || 0) + goldGain
+                                });
+                                
+                                shootCombatMessages.push({ msg: `You gain ${xpGain} XP and ${goldGain} gold!`, type: 'loot-log' });
+                                
+                                transaction.update(targetPlayerRef, {
+                                    isDead: true,
+                                    deathCause: `${playerName} (ranged attack)`,
+                                    deathTimestamp: Date.now()
+                                });
+                                
+                                await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                                    senderId: 'system',
+                                    senderName: 'System',
+                                    roomId: defenderData.roomId,
+                                    text: `DEATH_NOTICE:${playerName} (ranged attack)`,
+                                    timestamp: serverTimestamp(),
+                                    targetUserId: defenderData.userId
+                                });
+                            } else if (!didDodge) {
+                                transaction.update(targetPlayerRef, { hp: newDefenderHp });
+                                
+                                // Notify defender
+                                await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                                    senderId: userId,
+                                    senderName: playerName,
+                                    roomId: shootTarget.roomId,
+                                    text: `${playerName} shot you with a ${rangedWeapon.name} for ${attackerDamage} damage!`,
+                                    timestamp: serverTimestamp()
+                                });
+                            }
+                        });
+                        
+                        for (const { msg, type } of shootCombatMessages) {
+                            logToTerminal(msg, type);
+                        }
+                        
+                        // Check for level up
+                        const attackerDocAfter = await getDoc(playerRef);
+                        if (attackerDocAfter.exists()) {
+                            const attackerDataAfter = attackerDocAfter.data();
+                            await checkLevelUp(playerRef, attackerDataAfter.xp || 0, attackerDataAfter.level || 1);
+                        }
+                    } catch (error) {
+                        logToTerminal(`Ranged combat failed: ${error.message}`, 'error');
+                    }
+                    break;
+                }
+                
+                // Handle ranged combat with monsters
+                if (shootTarget.type === 'monster') {
+                    const monsterRef = doc(db, `/artifacts/${appId}/public/data/mud-active-monsters/${shootTarget.id}`);
+                    const monsterData = shootTarget.data;
+                    const monsterTemplate = gameMonsters[monsterData.monsterId];
+                    const shootMonsterMessages = [];
+                    
+                    try {
+                        await runTransaction(db, async (transaction) => {
+                            const playerDoc = await transaction.get(playerRef);
+                            const monsterDoc = await transaction.get(monsterRef);
+                            const roomDoc = await transaction.get(roomRef);
+                            
+                            if (!playerDoc.exists() || !monsterDoc.exists()) {
+                                throw "Player or Monster vanished during the transaction!";
+                            }
+                            
+                            const playerData = playerDoc.data();
+                            const currentMonsterData = monsterDoc.data();
+                            const roomData = roomDoc.data();
+                            
+                            const weaponBonus = rangedWeapon.weaponDamage || rangedWeapon.damage || 0;
+                            
+                            shootMonsterMessages.length = 0;
+                            
+                            // Monster dodge check
+                            const monsterDodgeChance = 0.05;
+                            const monsterDodged = Math.random() < monsterDodgeChance;
+                            
+                            let playerDamage = 0;
+                            let newMonsterHp = currentMonsterData.hp;
+                            
+                            if (monsterDodged) {
+                                const monsterDodgeMsg = getDodgeDescription(`the ${currentMonsterData.name}`, 10, false);
+                                shootMonsterMessages.push({ msg: monsterDodgeMsg, type: 'combat-log' });
+                            } else {
+                                // Create fake attributes for monster
+                                const monsterAsEntity = {
+                                    attributes: {
+                                        str: 10 + (monsterTemplate.maxAtk || 5),
+                                        dex: 10,
+                                        con: 10 + Math.floor((monsterTemplate.maxHp || 30) / 10),
+                                        int: 10,
+                                        wis: 10,
+                                        cha: 10
+                                    }
+                                };
+                                
+                                const attackResult = calculateDamage(playerData, monsterAsEntity, weaponBonus, false);
+                                playerDamage = attackResult.damage;
+                                newMonsterHp = currentMonsterData.hp - playerDamage;
+                                
+                                let shootMsg = `You shoot the ${currentMonsterData.name} ${rangeDescription} with your ${rangedWeapon.name} for ${playerDamage} damage`;
+                                if (attackResult.isCritical) {
+                                    shootMsg += ` (Critical Hit!)`;
+                                }
+                                shootMonsterMessages.push({ msg: shootMsg + '!', type: 'combat-log' });
+                            }
+                            
+                            // Consume ammunition
+                            const updatedInventory = playerData.inventory.filter(item => {
+                                if (item.id === ammunition.id) {
+                                    if (item.quantity && item.quantity > 1) {
+                                        item.quantity -= 1;
+                                        return true;
+                                    }
+                                    return false;
+                                }
+                                return true;
+                            });
+                            transaction.update(playerRef, { inventory: updatedInventory });
+                            
+                            shootMonsterMessages.push({ msg: `You used 1 ${ammunition.name}.`, type: 'game' });
+                            
+                            // Broadcast to rooms
+                            await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                                senderId: userId,
+                                senderName: playerName,
+                                roomId: currentPlayerRoomId,
+                                text: `${playerName} shoots ${isSameRoom ? 'at the ' + currentMonsterData.name : 'towards ' + (gameWorld[shootTarget.roomId]?.title || 'another room')}!`,
+                                isEmote: true,
+                                timestamp: serverTimestamp()
+                            });
+                            
+                            if (!isSameRoom) {
+                                await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                                    senderId: userId,
+                                    senderName: playerName,
+                                    roomId: shootTarget.roomId,
+                                    text: `An arrow flies in and strikes the ${currentMonsterData.name}!`,
+                                    isEmote: true,
+                                    timestamp: serverTimestamp()
+                                });
+                            }
+                            
+                            if (newMonsterHp <= 0) {
+                                // Monster defeated
+                                shootMonsterMessages.push({ msg: `You have defeated the ${currentMonsterData.name}!`, type: 'system' });
+                                transaction.delete(monsterRef);
+                                
+                                let xpGain = monsterTemplate.xp;
+                                
+                                // Quest progress
+                                shootMonsterMessages.push({
+                                    msg: 'QUEST_PROGRESS',
+                                    type: 'quest-check',
+                                    progressType: 'kill',
+                                    target: currentMonsterData.monsterId
+                                });
+                                
+                                // Guild bonus
+                                if (playerData.guildId && gameGuilds[playerData.guildId]) {
+                                    const guild = gameGuilds[playerData.guildId];
+                                    if (guild.perks && guild.perks.expBonus) {
+                                        const bonusPercent = guild.perks.expBonus;
+                                        const bonusXp = Math.floor(xpGain * (bonusPercent / 100));
+                                        xpGain += bonusXp;
+                                        shootMonsterMessages.push({ msg: `Guild bonus: +${bonusXp} XP (+${bonusPercent}%)`, type: 'system' });
+                                    }
+                                }
+                                
+                                const updates = {
+                                    xp: (playerData.xp || 0) + xpGain,
+                                    score: (playerData.score || 0) + xpGain,
+                                    money: (playerData.money || 0) + monsterTemplate.gold
+                                };
+                                
+                                shootMonsterMessages.push({ msg: `You gain ${xpGain} XP and ${monsterTemplate.gold} gold.`, type: 'loot-log' });
+                                
+                                // Guild experience
+                                if (playerData.guildId && gameGuilds[playerData.guildId]) {
+                                    const guildExpGain = Math.floor(xpGain * 0.1);
+                                    shootMonsterMessages.push({
+                                        msg: 'ADD_GUILD_EXP',
+                                        type: 'guild-exp',
+                                        guildId: playerData.guildId,
+                                        expGain: guildExpGain
+                                    });
+                                }
+                                
+                                // Item drop
+                                if (monsterTemplate.itemDrop && gameItems[monsterTemplate.itemDrop]) {
+                                    const item = gameItems[monsterTemplate.itemDrop];
+                                    const droppedItem = { id: monsterTemplate.itemDrop, ...item };
+                                    updates.inventory = arrayUnion(droppedItem);
+                                    shootMonsterMessages.push({ msg: `The ${currentMonsterData.name} dropped ${item.name}!`, type: 'loot-log' });
+                                }
+                                
+                                // Update spawn
+                                if (roomData.monsterSpawns) {
+                                    const spawnIndex = roomData.monsterSpawns.findIndex(s => s.monsterId === currentMonsterData.monsterId);
+                                    if (spawnIndex > -1) {
+                                        const newSpawns = [...roomData.monsterSpawns];
+                                        newSpawns[spawnIndex].lastDefeated = Date.now();
+                                        transaction.update(roomRef, { monsterSpawns: newSpawns });
+                                        
+                                        const corpseDescription = `The lifeless body of a ${currentMonsterData.name} lies here.`;
+                                        const currentDetails = roomData.details || {};
+                                        const newDetails = {
+                                            ...currentDetails,
+                                            [`${currentMonsterData.name.toLowerCase()} corpse`]: corpseDescription,
+                                            corpse: corpseDescription
+                                        };
+                                        transaction.update(roomRef, { details: newDetails });
+                                        
+                                        shootMonsterMessages.push({ msg: `The ${currentMonsterData.name}'s corpse lies at your feet.`, type: 'game' });
+                                    }
+                                }
+                                
+                                transaction.update(playerRef, updates);
+                            } else if (!monsterDodged) {
+                                // Monster survives - update HP only (no counter-attack from range)
+                                transaction.update(monsterRef, { hp: newMonsterHp });
+                                shootMonsterMessages.push({ msg: `The ${currentMonsterData.name} is wounded but still alive.`, type: 'combat-log' });
+                            }
+                        });
+                        
+                        // Log messages
+                        for (const { msg, type, guildId, expGain, progressType, target } of shootMonsterMessages) {
+                            if (type === 'guild-exp' && guildId && expGain) {
+                                const guildRef = doc(db, `/artifacts/${appId}/public/data/mud-guilds/${guildId}`);
+                                await updateDoc(guildRef, {
+                                    exp: increment(expGain)
+                                });
+                                
+                                const guildDoc = await getDoc(guildRef);
+                                if (guildDoc.exists()) {
+                                    const guildData = guildDoc.data();
+                                    const currentGuildLevel = guildData.level || 1;
+                                    const currentGuildExp = guildData.exp || 0;
+                                    const expNeeded = currentGuildLevel * 1000;
+                                    
+                                    if (currentGuildExp >= expNeeded && currentGuildLevel < 10) {
+                                        await updateDoc(guildRef, {
+                                            level: currentGuildLevel + 1,
+                                            exp: currentGuildExp - expNeeded
+                                        });
+                                        logToTerminal(`🎉 Your guild "${guildData.name}" has reached level ${currentGuildLevel + 1}!`, 'success');
+                                    }
+                                }
+                            } else if (type === 'quest-check' && progressType && target) {
+                                const completedQuests = await updateQuestProgress(userId, progressType, target, 1);
+                                for (const completed of completedQuests) {
+                                    const quest = gameQuests[completed.questId];
+                                    if (quest) {
+                                        logToTerminal(`🎉 Quest Objectives Complete: ${quest.title}!`, 'quest');
+                                        logToTerminal(`Return to ${quest.turninNpcId || quest.giverNpcId} to claim your reward.`, 'quest');
+                                    }
+                                }
+                            } else if (msg !== 'ADD_GUILD_EXP' && msg !== 'QUEST_PROGRESS') {
+                                logToTerminal(msg, type);
+                            }
+                        }
+                        
+                        // Check for level up
+                        const playerDocAfterCombat = await getDoc(playerRef);
+                        if (playerDocAfterCombat.exists()) {
+                            const playerDataAfter = playerDocAfterCombat.data();
+                            await checkLevelUp(playerRef, playerDataAfter.xp || 0, playerDataAfter.level || 1);
+                        }
+                    } catch (error) {
+                        logToTerminal(`Ranged combat failed: ${error.message}`, 'error');
+                    }
+                }
+                break;
+            
+            case 'throw':
+                // Parse: "throw <item> at <target>"
+                // The target should be in parsedCommand.target
+                // We need to extract the item name from the original command
+                const throwMatch = parsedCommand.verb?.match(/throw\s+(.+?)\s+(?:at|to)\s+(.+)/i);
+                let itemToThrowName = throwMatch ? throwMatch[1] : target; // Fallback to target if parsing fails
+                const throwTargetName = throwMatch ? throwMatch[2] : null;
+                
+                if (!itemToThrowName || !throwTargetName) {
+                    logToTerminal("Throw what at who? Try 'throw [item] at [target]'", "error");
+                    break;
+                }
+                
+                // Get player data
+                const throwerDoc = await getDoc(playerRef);
+                if (!throwerDoc.exists()) {
+                    logToTerminal("Error: Player data not found.", "error");
+                    break;
+                }
+                const throwerData = throwerDoc.data();
+                const throwerInventory = throwerData.inventory || [];
+                
+                // Find item in inventory
+                const itemToThrow = throwerInventory.find(invItem => {
+                    const item = gameItems[invItem.id];
+                    if (!item) return false;
+                    return item.name.toLowerCase().includes(itemToThrowName.toLowerCase()) ||
+                           invItem.id.toLowerCase().includes(itemToThrowName.toLowerCase());
+                });
+                
+                if (!itemToThrow) {
+                    logToTerminal(`You don't have "${itemToThrowName}" in your inventory.`, "error");
+                    break;
+                }
+                
+                const fullItemToThrow = { ...itemToThrow, ...gameItems[itemToThrow.id] };
+                
+                // Find target within throw range (range 1 = adjacent room)
+                const throwRange = 1; // Throwing has fixed range of adjacent rooms
+                const throwTarget = findTargetInRange(throwTargetName, currentPlayerRoomId, throwRange);
+                
+                if (!throwTarget) {
+                    logToTerminal(`You don't see "${throwTargetName}" within throwing distance.`, "error");
+                    break;
+                }
+                
+                const isTargetInSameRoom = throwTarget.roomId === currentPlayerRoomId;
+                
+                // Calculate throw damage based on item
+                // Base damage = weaponDamage if weapon, otherwise weight-based
+                const throwBaseDamage = fullItemToThrow.weaponDamage || 
+                                       (fullItemToThrow.isWeapon ? 5 : 2); // Non-weapons do minimal damage
+                
+                // Handle throwing at player
+                if (throwTarget.type === 'player') {
+                    const targetPlayerRef = doc(db, `/artifacts/${appId}/public/data/mud-players/${throwTarget.id}`);
+                    const throwMessages = [];
+                    
+                    try {
+                        await runTransaction(db, async (transaction) => {
+                            const attackerDoc = await transaction.get(playerRef);
+                            const defenderDoc = await transaction.get(targetPlayerRef);
+                            const targetRoomRef = doc(db, `/artifacts/${appId}/public/data/mud-rooms/${throwTarget.roomId}`);
+                            
+                            if (!attackerDoc.exists() || !defenderDoc.exists()) {
+                                throw new Error("Player vanished during throw!");
+                            }
+                            
+                            const attackerData = attackerDoc.data();
+                            const defenderData = defenderDoc.data();
+                            
+                            throwMessages.length = 0;
+                            
+                            // Check if defender dodges thrown item
+                            const dodgeChance = calculateDodge(defenderData);
+                            const didDodge = Math.random() < dodgeChance;
+                            
+                            let throwDamage = 0;
+                            let newDefenderHp = defenderData.hp || defenderData.maxHp;
+                            
+                            if (didDodge) {
+                                throwMessages.push({ msg: `${defenderData.name} dodges your thrown ${fullItemToThrow.name}!`, type: 'combat-log' });
+                            } else {
+                                // Calculate throw damage (DEX-based attack)
+                                const attackerAttrs = getEffectiveAttributes(attackerData);
+                                const defenderAttrs = getEffectiveAttributes(defenderData);
+                                
+                                // Throw attack uses DEX instead of STR
+                                const attackRoll = Math.floor(Math.random() * 20) + 1;
+                                const attackBonus = Math.floor((attackerAttrs.dex - 10) / 2);
+                                const totalAttack = attackRoll + attackBonus;
+                                
+                                const defenseBonus = Math.floor((defenderAttrs.dex - 10) / 2);
+                                
+                                if (totalAttack > (10 + defenseBonus)) {
+                                    // Hit!
+                                    const damageRoll = Math.floor(Math.random() * throwBaseDamage) + 1;
+                                    const dexBonus = Math.max(1, Math.floor((attackerAttrs.dex - 10) / 2));
+                                    throwDamage = damageRoll + dexBonus;
+                                    
+                                    // Critical hit on attack roll 20
+                                    if (attackRoll === 20) {
+                                        throwDamage *= 2;
+                                        throwMessages.push({ msg: `Critical Hit! You threw ${fullItemToThrow.name} for ${throwDamage} damage!`, type: 'combat-log' });
+                                    } else {
+                                        throwMessages.push({ msg: `You threw ${fullItemToThrow.name} at ${defenderData.name} for ${throwDamage} damage!`, type: 'combat-log' });
+                                    }
+                                    
+                                    newDefenderHp = (defenderData.hp || defenderData.maxHp) - throwDamage;
+                                } else {
+                                    throwMessages.push({ msg: `Your thrown ${fullItemToThrow.name} misses ${defenderData.name}!`, type: 'combat-log' });
+                                }
+                            }
+                            
+                            // Remove item from thrower's inventory
+                            const updatedInventory = attackerData.inventory.filter(item => {
+                                if (item.id === itemToThrow.id) {
+                                    // If stacked, reduce quantity
+                                    if (item.quantity && item.quantity > 1) {
+                                        item.quantity -= 1;
+                                        return true;
+                                    }
+                                    return false; // Remove completely
+                                }
+                                return true;
+                            });
+                            transaction.update(playerRef, { inventory: updatedInventory });
+                            
+                            // Add item to target room floor
+                            transaction.update(targetRoomRef, {
+                                items: arrayUnion(itemToThrow.id)
+                            });
+                            
+                            // Broadcast to current room
+                            await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                                senderId: userId,
+                                senderName: playerName,
+                                roomId: currentPlayerRoomId,
+                                text: `${playerName} throws ${addArticle(fullItemToThrow.name)} ${isTargetInSameRoom ? 'at ' + defenderData.name : 'towards ' + (gameWorld[throwTarget.roomId]?.title || 'another room')}!`,
+                                isEmote: true,
+                                timestamp: serverTimestamp()
+                            });
+                            
+                            // Broadcast to target room if different
+                            if (!isTargetInSameRoom) {
+                                await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                                    senderId: userId,
+                                    senderName: playerName,
+                                    roomId: throwTarget.roomId,
+                                    text: `${addArticle(fullItemToThrow.name, true)} flies in and ${didDodge || throwDamage === 0 ? 'misses' : 'hits'} ${defenderData.name}!`,
+                                    isEmote: true,
+                                    timestamp: serverTimestamp()
+                                });
+                            }
+                            
+                            if (!didDodge && throwDamage > 0 && newDefenderHp <= 0) {
+                                // Defender defeated
+                                throwMessages.push({ msg: `You have defeated ${defenderData.name}!`, type: 'system' });
+                                
+                                const xpGain = Math.floor(defenderData.level * 5); // Less XP than melee
+                                const goldGain = Math.floor(defenderData.money * 0.05) || 5;
+                                
+                                transaction.update(playerRef, {
+                                    xp: (attackerData.xp || 0) + xpGain,
+                                    score: (attackerData.score || 0) + xpGain,
+                                    money: (attackerData.money || 0) + goldGain
+                                });
+                                
+                                throwMessages.push({ msg: `You gain ${xpGain} XP and ${goldGain} gold!`, type: 'loot-log' });
+                                
+                                transaction.update(targetPlayerRef, {
+                                    isDead: true,
+                                    deathCause: `${playerName} (thrown ${fullItemToThrow.name})`,
+                                    deathTimestamp: Date.now()
+                                });
+                                
+                                await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                                    senderId: 'system',
+                                    senderName: 'System',
+                                    roomId: defenderData.roomId,
+                                    text: `DEATH_NOTICE:${playerName} (thrown weapon)`,
+                                    timestamp: serverTimestamp(),
+                                    targetUserId: defenderData.userId
+                                });
+                            } else if (!didDodge && throwDamage > 0) {
+                                transaction.update(targetPlayerRef, { hp: newDefenderHp });
+                                
+                                // Notify defender
+                                await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                                    senderId: userId,
+                                    senderName: playerName,
+                                    roomId: throwTarget.roomId,
+                                    text: `${playerName} threw ${addArticle(fullItemToThrow.name)} at you for ${throwDamage} damage!`,
+                                    timestamp: serverTimestamp()
+                                });
+                            }
+                        });
+                        
+                        for (const { msg, type } of throwMessages) {
+                            logToTerminal(msg, type);
+                        }
+                        
+                        logToTerminal(`${fullItemToThrow.name} lands in ${gameWorld[throwTarget.roomId]?.title || 'the target room'}.`, 'game');
+                    } catch (error) {
+                        logToTerminal(`Throw failed: ${error.message}`, 'error');
+                    }
+                    break;
+                }
+                
+                // Handle throwing at monster
+                if (throwTarget.type === 'monster') {
+                    const monsterRef = doc(db, `/artifacts/${appId}/public/data/mud-active-monsters/${throwTarget.id}`);
+                    const monsterData = throwTarget.data;
+                    const monsterTemplate = gameMonsters[monsterData.monsterId];
+                    const throwMonsterMessages = [];
+                    
+                    try {
+                        await runTransaction(db, async (transaction) => {
+                            const playerDoc = await transaction.get(playerRef);
+                            const monsterDoc = await transaction.get(monsterRef);
+                            const targetRoomRef = doc(db, `/artifacts/${appId}/public/data/mud-rooms/${throwTarget.roomId}`);
+                            
+                            if (!playerDoc.exists() || !monsterDoc.exists()) {
+                                throw "Player or Monster vanished during throw!";
+                            }
+                            
+                            const playerData = playerDoc.data();
+                            const currentMonsterData = monsterDoc.data();
+                            
+                            throwMonsterMessages.length = 0;
+                            
+                            // Monster dodge check
+                            const monsterDodgeChance = 0.05;
+                            const monsterDodged = Math.random() < monsterDodgeChance;
+                            
+                            let throwDamage = 0;
+                            let newMonsterHp = currentMonsterData.hp;
+                            
+                            if (monsterDodged) {
+                                const monsterDodgeMsg = getDodgeDescription(`the ${currentMonsterData.name}`, 10, false);
+                                throwMonsterMessages.push({ msg: monsterDodgeMsg, type: 'combat-log' });
+                            } else {
+                                // Calculate throw damage
+                                const playerAttrs = getEffectiveAttributes(playerData);
+                                const attackRoll = Math.floor(Math.random() * 20) + 1;
+                                const attackBonus = Math.floor((playerAttrs.dex - 10) / 2);
+                                
+                                if ((attackRoll + attackBonus) > 10) {
+                                    const damageRoll = Math.floor(Math.random() * throwBaseDamage) + 1;
+                                    const dexBonus = Math.max(1, Math.floor((playerAttrs.dex - 10) / 2));
+                                    throwDamage = damageRoll + dexBonus;
+                                    
+                                    if (attackRoll === 20) {
+                                        throwDamage *= 2;
+                                        throwMonsterMessages.push({ msg: `Critical Hit! You threw ${fullItemToThrow.name} at the ${currentMonsterData.name} for ${throwDamage} damage!`, type: 'combat-log' });
+                                    } else {
+                                        throwMonsterMessages.push({ msg: `You threw ${fullItemToThrow.name} at the ${currentMonsterData.name} for ${throwDamage} damage!`, type: 'combat-log' });
+                                    }
+                                    
+                                    newMonsterHp = currentMonsterData.hp - throwDamage;
+                                } else {
+                                    throwMonsterMessages.push({ msg: `Your thrown ${fullItemToThrow.name} misses the ${currentMonsterData.name}!`, type: 'combat-log' });
+                                }
+                            }
+                            
+                            // Remove item from inventory
+                            const updatedInventory = playerData.inventory.filter(item => {
+                                if (item.id === itemToThrow.id) {
+                                    if (item.quantity && item.quantity > 1) {
+                                        item.quantity -= 1;
+                                        return true;
+                                    }
+                                    return false;
+                                }
+                                return true;
+                            });
+                            transaction.update(playerRef, { inventory: updatedInventory });
+                            
+                            // Add item to target room floor
+                            transaction.update(targetRoomRef, {
+                                items: arrayUnion(itemToThrow.id)
+                            });
+                            
+                            // Broadcast to rooms
+                            await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                                senderId: userId,
+                                senderName: playerName,
+                                roomId: currentPlayerRoomId,
+                                text: `${playerName} throws ${addArticle(fullItemToThrow.name)} ${isTargetInSameRoom ? 'at the ' + currentMonsterData.name : 'towards ' + (gameWorld[throwTarget.roomId]?.title || 'another room')}!`,
+                                isEmote: true,
+                                timestamp: serverTimestamp()
+                            });
+                            
+                            if (!isTargetInSameRoom) {
+                                await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                                    senderId: userId,
+                                    senderName: playerName,
+                                    roomId: throwTarget.roomId,
+                                    text: `${addArticle(fullItemToThrow.name, true)} flies in and ${monsterDodged || throwDamage === 0 ? 'misses' : 'strikes'} the ${currentMonsterData.name}!`,
+                                    isEmote: true,
+                                    timestamp: serverTimestamp()
+                                });
+                            }
+                            
+                            if (!monsterDodged && throwDamage > 0 && newMonsterHp <= 0) {
+                                // Monster defeated
+                                throwMonsterMessages.push({ msg: `You have defeated the ${currentMonsterData.name}!`, type: 'system' });
+                                transaction.delete(monsterRef);
+                                
+                                let xpGain = Math.floor(monsterTemplate.xp * 0.8); // 80% XP for throwing
+                                
+                                // Quest progress
+                                throwMonsterMessages.push({
+                                    msg: 'QUEST_PROGRESS',
+                                    type: 'quest-check',
+                                    progressType: 'kill',
+                                    target: currentMonsterData.monsterId
+                                });
+                                
+                                // Guild bonus
+                                if (playerData.guildId && gameGuilds[playerData.guildId]) {
+                                    const guild = gameGuilds[playerData.guildId];
+                                    if (guild.perks && guild.perks.expBonus) {
+                                        const bonusPercent = guild.perks.expBonus;
+                                        const bonusXp = Math.floor(xpGain * (bonusPercent / 100));
+                                        xpGain += bonusXp;
+                                        throwMonsterMessages.push({ msg: `Guild bonus: +${bonusXp} XP (+${bonusPercent}%)`, type: 'system' });
+                                    }
+                                }
+                                
+                                const updates = {
+                                    xp: (playerData.xp || 0) + xpGain,
+                                    score: (playerData.score || 0) + xpGain,
+                                    money: (playerData.money || 0) + monsterTemplate.gold
+                                };
+                                
+                                throwMonsterMessages.push({ msg: `You gain ${xpGain} XP and ${monsterTemplate.gold} gold.`, type: 'loot-log' });
+                                
+                                // Guild experience
+                                if (playerData.guildId && gameGuilds[playerData.guildId]) {
+                                    const guildExpGain = Math.floor(xpGain * 0.1);
+                                    throwMonsterMessages.push({
+                                        msg: 'ADD_GUILD_EXP',
+                                        type: 'guild-exp',
+                                        guildId: playerData.guildId,
+                                        expGain: guildExpGain
+                                    });
+                                }
+                                
+                                // Item drop
+                                if (monsterTemplate.itemDrop && gameItems[monsterTemplate.itemDrop]) {
+                                    const item = gameItems[monsterTemplate.itemDrop];
+                                    const droppedItem = { id: monsterTemplate.itemDrop, ...item };
+                                    updates.inventory = arrayUnion(droppedItem);
+                                    throwMonsterMessages.push({ msg: `The ${currentMonsterData.name} dropped ${item.name}!`, type: 'loot-log' });
+                                }
+                                
+                                transaction.update(playerRef, updates);
+                            } else if (!monsterDodged && throwDamage > 0) {
+                                // Monster survives
+                                transaction.update(monsterRef, { hp: newMonsterHp });
+                                throwMonsterMessages.push({ msg: `The ${currentMonsterData.name} is wounded but still alive.`, type: 'combat-log' });
+                            }
+                        });
+                        
+                        // Log messages
+                        for (const { msg, type, guildId, expGain, progressType, target } of throwMonsterMessages) {
+                            if (type === 'guild-exp' && guildId && expGain) {
+                                const guildRef = doc(db, `/artifacts/${appId}/public/data/mud-guilds/${guildId}`);
+                                await updateDoc(guildRef, {
+                                    exp: increment(expGain)
+                                });
+                                
+                                const guildDoc = await getDoc(guildRef);
+                                if (guildDoc.exists()) {
+                                    const guildData = guildDoc.data();
+                                    const currentGuildLevel = guildData.level || 1;
+                                    const currentGuildExp = guildData.exp || 0;
+                                    const expNeeded = currentGuildLevel * 1000;
+                                    
+                                    if (currentGuildExp >= expNeeded && currentGuildLevel < 10) {
+                                        await updateDoc(guildRef, {
+                                            level: currentGuildLevel + 1,
+                                            exp: currentGuildExp - expNeeded
+                                        });
+                                        logToTerminal(`🎉 Your guild "${guildData.name}" has reached level ${currentGuildLevel + 1}!`, 'success');
+                                    }
+                                }
+                            } else if (type === 'quest-check' && progressType && target) {
+                                const completedQuests = await updateQuestProgress(userId, progressType, target, 1);
+                                for (const completed of completedQuests) {
+                                    const quest = gameQuests[completed.questId];
+                                    if (quest) {
+                                        logToTerminal(`🎉 Quest Objectives Complete: ${quest.title}!`, 'quest');
+                                        logToTerminal(`Return to ${quest.turninNpcId || quest.giverNpcId} to claim your reward.`, 'quest');
+                                    }
+                                }
+                            } else if (msg !== 'ADD_GUILD_EXP' && msg !== 'QUEST_PROGRESS') {
+                                logToTerminal(msg, type);
+                            }
+                        }
+                        
+                        logToTerminal(`${fullItemToThrow.name} lands in ${gameWorld[throwTarget.roomId]?.title || 'the target room'}.`, 'game');
+                    } catch (error) {
+                        logToTerminal(`Throw failed: ${error.message}`, 'error');
+                    }
+                }
+                break;
+            
             case 'talk':
                 const npcToTalkTo = findNpcInRoom(npc_target);
                 if(npcToTalkTo) {

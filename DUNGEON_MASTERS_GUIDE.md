@@ -461,6 +461,252 @@ For the weather system to work, add protection values:
 
 See `data/weather-items-example.json` for more examples.
 
+### Ranged Weapons & Throwing
+
+**NEW FEATURE**: The game now supports ranged combat with bows, crossbows, slings, and throwing weapons!
+
+#### Ranged Weapon Properties
+
+**Required Properties:**
+- `isRanged: true` - Marks this as a ranged weapon
+- `weaponDamage: X` - Damage dealt per shot
+- `ammoType: "arrow"` - Type of ammunition required ("arrow", "bolt", "stone")
+- `range: 1` - How far it can shoot (0=same room, 1=adjacent, 2=two rooms away)
+- `weaponType: "ranged"` - Weapon category
+
+**Example Bow:**
+```json
+{
+  "id": "bow",
+  "name": "a wooden longbow",
+  "description": "A reliable ranged weapon made from flexible yew wood",
+  "isWeapon": true,
+  "isRanged": true,
+  "weaponType": "ranged",
+  "weaponDamage": 8,
+  "ammoType": "arrow",
+  "range": 1,
+  "cost": 50,
+  "movable": true,
+  "itemType": "normal",
+  "aliases": ["longbow", "bow"]
+}
+```
+
+**Example Crossbow:**
+```json
+{
+  "id": "crossbow",
+  "name": "a heavy crossbow",
+  "description": "A powerful mechanical ranged weapon",
+  "isWeapon": true,
+  "isRanged": true,
+  "weaponType": "ranged",
+  "weaponDamage": 10,
+  "ammoType": "bolt",
+  "range": 1,
+  "cost": 75,
+  "movable": true,
+  "itemType": "normal"
+}
+```
+
+**Example Sling:**
+```json
+{
+  "id": "sling",
+  "name": "a leather sling",
+  "description": "A simple but effective ranged weapon",
+  "isWeapon": true,
+  "isRanged": true,
+  "weaponType": "ranged",
+  "weaponDamage": 4,
+  "ammoType": "stone",
+  "range": 1,
+  "cost": 10,
+  "movable": true,
+  "itemType": "normal"
+}
+```
+
+#### Ammunition Properties
+
+**Required Properties:**
+- `isAmmunition: true` - Marks this as ammunition
+- `ammoFor: "bow"` - Which weapon ID it's for
+- `quantity: 20` - How many shots (consumed one at a time)
+- `itemType: "ammunition"` - Category
+
+**Example Arrows:**
+```json
+{
+  "id": "arrows",
+  "name": "a bundle of arrows",
+  "description": "Twenty well-crafted arrows with steel tips",
+  "isAmmunition": true,
+  "ammoFor": "bow",
+  "quantity": 20,
+  "cost": 10,
+  "movable": true,
+  "itemType": "ammunition",
+  "aliases": ["arrow", "arrows", "bundle of arrows"]
+}
+```
+
+**Example Crossbow Bolts:**
+```json
+{
+  "id": "bolts",
+  "name": "a quiver of crossbow bolts",
+  "description": "Twenty heavy bolts for a crossbow",
+  "isAmmunition": true,
+  "ammoFor": "crossbow",
+  "quantity": 20,
+  "cost": 15,
+  "movable": true,
+  "itemType": "ammunition"
+}
+```
+
+#### Throwable Weapons
+
+Any item can be thrown! But weapons with `isThrowable: true` deal better damage.
+
+**Example Throwable Spear:**
+```json
+{
+  "id": "spear",
+  "name": "a sturdy spear",
+  "description": "A versatile weapon good for both melee and throwing",
+  "isWeapon": true,
+  "weaponType": "melee",
+  "weaponDamage": 6,
+  "isThrowable": true,
+  "throwDamage": 8,
+  "cost": 30,
+  "movable": true,
+  "itemType": "normal"
+}
+```
+
+**Example Throwing Dagger:**
+```json
+{
+  "id": "dagger",
+  "name": "a throwing dagger",
+  "description": "A balanced blade perfect for throwing",
+  "isWeapon": true,
+  "weaponType": "melee",
+  "weaponDamage": 4,
+  "isThrowable": true,
+  "throwDamage": 5,
+  "cost": 20,
+  "movable": true,
+  "itemType": "normal"
+}
+```
+
+#### How Players Use Ranged Weapons
+
+**Shooting:**
+```
+shoot [target]              - Shoot at target in same room or adjacent
+shoot goblin                - Shoots the goblin
+shoot guard with crossbow   - Specify weapon if you have multiple
+```
+
+**Throwing:**
+```
+throw [item] at [target]    - Throw any item at a target
+throw spear at dragon       - Throws your spear
+throw dagger at thief       - Throws a dagger
+```
+
+#### Ranged Combat Mechanics
+
+**Range System:**
+- `range: 0` - Same room only
+- `range: 1` - Same room + adjacent rooms (through exits)
+- `range: 2` - Up to 2 rooms away
+
+**Ammunition Consumption:**
+- Each shot consumes 1 ammunition
+- Ammunition with `quantity > 1` decreases by 1
+- When quantity reaches 0, item is removed from inventory
+- No ammunition = can't shoot
+
+**Throwing Mechanics:**
+- Thrown items are removed from inventory
+- Items land in the target's room on the floor
+- Throw damage uses DEX instead of STR
+- Thrown items can be picked up again
+- Throwing range is fixed at 1 (adjacent rooms)
+
+**Combat Differences:**
+- Ranged attacks don't trigger counter-attacks
+- Throwing deals slightly less XP than melee (80%)
+- Can attack monsters/players in adjacent rooms
+- Messages broadcast to both rooms if different
+
+#### Ranged Weapon Balance
+
+**Damage Guidelines:**
+- Sling: 3-5 damage (cheap, low damage)
+- Bow: 6-9 damage (moderate cost, good damage)
+- Crossbow: 9-12 damage (expensive, high damage)
+- Throwing weapons: Similar to melee but consumable
+
+**Ammunition Pricing:**
+- Stones: 5 gold for 30 (cheapest)
+- Arrows: 10 gold for 20 (moderate)
+- Bolts: 15 gold for 20 (expensive)
+
+**Range vs Damage Tradeoff:**
+- Higher range = Lower damage (for balance)
+- Range 1 is standard
+- Range 2 should have 20-30% less damage
+- Range 0 (no advantage) = higher damage OK
+
+**Advantages of Ranged:**
+- Attack from safety (adjacent rooms)
+- No counter-attacks from monsters
+- Can kite enemies between rooms
+
+**Disadvantages of Ranged:**
+- Requires ammunition (recurring cost)
+- Throwing consumes the weapon
+- Still can be dodged
+- Need inventory space for ammo
+
+#### Tips for Building Ranged Content
+
+1. **Always Pair Weapons with Ammo**: If you add a bow to a room, add arrows too!
+
+2. **Shop Setup**: Weapon merchants should sell both weapons AND ammunition
+
+3. **Monster Drops**: Consider having archers/rangers drop ammunition
+
+4. **Quest Rewards**: Giving unlimited arrows as a quest reward is powerful!
+
+5. **Room Design**: Long corridors or keeps with arrow slits make sense for ranged combat
+
+6. **NPC Archers**: Create archer NPCs who sell specialized ammunition
+
+7. **Special Ammunition**: Consider adding magic arrows, fire arrows, etc. (future feature)
+
+**Example Shop NPC:**
+```javascript
+{
+  id: "fletcher",
+  name: "Gareth the Fletcher",
+  shortName: "Gareth",
+  description: "A skilled bowyer and arrow-maker",
+  dialogue: ["I sell the finest bows and arrows!", "Quality craftsmanship guaranteed!"],
+  useAI: false,
+  shop: ["bow", "crossbow", "arrows", "bolts", "sling", "stones"]
+}
+```
+
 ---
 
 ## Creating NPCs
