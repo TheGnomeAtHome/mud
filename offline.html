@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MUD - Offline</title>
+    <style>
+        body {
+            font-family: 'VT323', monospace;
+            background-color: #0d0d0d;
+            color: #00ff41;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            text-align: center;
+        }
+        .offline-container {
+            max-width: 500px;
+            border: 2px solid #00ff41;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 255, 65, 0.3);
+        }
+        h1 {
+            font-size: 3rem;
+            margin: 0 0 1rem 0;
+            text-shadow: 0 0 10px #00ff41;
+        }
+        p {
+            font-size: 1.5rem;
+            line-height: 1.6;
+        }
+        button {
+            background: #00ff41;
+            color: #0d0d0d;
+            border: none;
+            padding: 1rem 2rem;
+            font-size: 1.5rem;
+            font-family: 'VT323', monospace;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 1rem;
+        }
+        button:hover {
+            box-shadow: 0 0 10px #00ff41;
+        }
+    </style>
+</head>
+<body>
+    <div class="offline-container">
+        <h1>⚠️ Offline</h1>
+        <p>You are currently offline.</p>
+        <p>MUD requires an internet connection to play multiplayer.</p>
+        <button onclick="window.location.reload()">Try Again</button>
+    </div>
+</body>
+</html>

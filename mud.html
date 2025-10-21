@@ -27,6 +27,12 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     
+    <!-- PWA Meta Tags -->
+    <meta name="description" content="A browser-based text adventure game with real-time multiplayer and AI-powered NPCs">
+    <meta name="theme-color" content="#00ff41">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon-192x192.png">
+    
     <!-- Cache control for development/deployment -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -1503,6 +1509,21 @@
     </div>
     <!-- END OF CHARACTER CREATION -->
 
-    <script type="module" src="./js/app.js?v=20251021-020"></script>
+    <!-- PWA Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/mud/service-worker.js')
+                    .then(registration => {
+                        console.log('✓ Service Worker registered:', registration.scope);
+                    })
+                    .catch(error => {
+                        console.log('✗ Service Worker registration failed:', error);
+                    });
+            });
+        }
+    </script>
+
+    <script type="module" src="./js/app.js?v=20251021-021"></script>
 </body>
 </html>
