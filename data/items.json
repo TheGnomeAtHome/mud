@@ -184,5 +184,131 @@
     "aliases": ["javelin"],
     "effect": "A light throwing spear",
     "consumable": false
+  },
+  "raincoat": {
+    "name": "a waterproof raincoat",
+    "itemType": "clothing",
+    "cost": 30,
+    "movable": true,
+    "isWearable": true,
+    "aliases": ["raincoat", "coat", "jacket"],
+    "effect": "Keeps you dry in wet weather",
+    "consumable": false,
+    "weatherProtection": {
+      "rainy": 0.9,
+      "stormy": 0.7,
+      "cold": 0.2
+    }
+  },
+  "warm_cloak": {
+    "name": "a warm woolen cloak",
+    "itemType": "clothing",
+    "cost": 40,
+    "movable": true,
+    "isWearable": true,
+    "aliases": ["cloak", "woolen cloak", "warm cloak"],
+    "effect": "Provides warmth in cold weather",
+    "consumable": false,
+    "weatherProtection": {
+      "cold": 0.8,
+      "snowy": 0.7,
+      "freezing": 0.85
+    }
+  },
+  "leather_jacket": {
+    "name": "a leather jacket",
+    "itemType": "clothing",
+    "cost": 50,
+    "movable": true,
+    "isWearable": true,
+    "aliases": ["jacket", "leather jacket"],
+    "effect": "Offers moderate protection from rain and cold",
+    "consumable": false,
+    "weatherProtection": {
+      "rainy": 0.6,
+      "cold": 0.5,
+      "windy": 0.4
+    }
+  },
+  "winter_coat": {
+    "name": "a heavy winter coat",
+    "itemType": "clothing",
+    "cost": 75,
+    "movable": true,
+    "isWearable": true,
+    "aliases": ["winter coat", "coat", "heavy coat"],
+    "effect": "Excellent protection from cold and snow",
+    "consumable": false,
+    "weatherProtection": {
+      "cold": 0.95,
+      "snowy": 0.9,
+      "freezing": 0.95,
+      "windy": 0.7
+    }
+  },
+  "desert_robes": {
+    "name": "light desert robes",
+    "itemType": "clothing",
+    "cost": 35,
+    "movable": true,
+    "isWearable": true,
+    "aliases": ["robes", "desert robes", "desert clothing"],
+    "effect": "Protects from heat and sun",
+    "consumable": false,
+    "weatherProtection": {
+      "hot": 0.85,
+      "sunny": 0.7,
+      "desert": 0.9
+    }
+  },
+  "rubber_boots": {
+    "name": "a pair of rubber boots",
+    "itemType": "clothing",
+    "cost": 20,
+    "movable": true,
+    "isWearable": true,
+    "aliases": ["boots", "rubber boots", "wellies"],
+    "effect": "Keeps your feet dry",
+    "consumable": false,
+    "weatherProtection": {
+      "rainy": 0.5,
+      "stormy": 0.3,
+      "muddy": 0.8
+    }
+  },
+  "sun_hat": {
+    "name": "a wide-brimmed sun hat",
+    "itemType": "clothing",
+    "cost": 15,
+    "movable": true,
+    "isWearable": true,
+    "aliases": ["hat", "sun hat", "wide-brimmed hat"],
+    "effect": "Shields you from the sun",
+    "consumable": false,
+    "weatherProtection": {
+      "hot": 0.4,
+      "sunny": 0.6
+    }
+  },
+  "all_weather_gear": {
+    "name": "a complete all-weather outfit",
+    "itemType": "clothing",
+    "cost": 150,
+    "movable": true,
+    "isWearable": true,
+    "newsworthy": true,
+    "aliases": ["all-weather gear", "weather gear", "outfit"],
+    "effect": "The ultimate protection against all weather conditions",
+    "consumable": false,
+    "weatherProtection": {
+      "rainy": 0.9,
+      "stormy": 0.85,
+      "cold": 0.9,
+      "snowy": 0.85,
+      "freezing": 0.9,
+      "hot": 0.8,
+      "sunny": 0.7,
+      "windy": 0.8
+    }
   }
 }
