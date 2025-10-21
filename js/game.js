@@ -4259,14 +4259,19 @@ Examples:
                 // Collect combat messages to log after transaction
                 const combatMessages = [];
                 
-                await runTransaction(db, async (transaction) => {
-                    const playerDoc = await transaction.get(playerRef);
-                    const roomDoc = await transaction.get(roomRef);
-                    const monsterDoc = await transaction.get(monsterRef);
+                try {
+                    await runTransaction(db, async (transaction) => {
+                        const playerDoc = await transaction.get(playerRef);
+                        const roomDoc = await transaction.get(roomRef);
+                        const monsterDoc = await transaction.get(monsterRef);
 
-                    if (!playerDoc.exists() || !monsterDoc.exists()) {
-                        throw "Player or Monster vanished during the transaction!";
-                    }
+                        if (!playerDoc.exists()) {
+                            throw new Error("Your character data could not be found!");
+                        }
+                        
+                        if (!monsterDoc.exists()) {
+                            throw new Error("The monster has already been defeated or fled!");
+                        }
 
                     const playerData = playerDoc.data();
                     const monsterData = monsterDoc.data();
@@ -4511,8 +4516,8 @@ Examples:
                     }
                 });
                 
-                // Log all messages after transaction completes
-                for (const { msg, type, newsData, guildId, expGain, progressType, target } of combatMessages) {
+                    // Log all messages after transaction completes
+                    for (const { msg, type, newsData, guildId, expGain, progressType, target } of combatMessages) {
                     if (type === 'news' && newsData) {
                         // Log news entry
                         await logNews(newsData.type, newsData.playerName, newsData.event);
@@ -4556,11 +4561,15 @@ Examples:
                     }
                 }
                 
-                // Check for level up after combat
-                const playerDocAfterCombat = await getDoc(playerRef);
-                if (playerDocAfterCombat.exists()) {
-                    const playerDataAfter = playerDocAfterCombat.data();
-                    await checkLevelUp(playerRef, playerDataAfter.xp || 0, playerDataAfter.level || 1);
+                    // Check for level up after combat
+                    const playerDocAfterCombat = await getDoc(playerRef);
+                    if (playerDocAfterCombat.exists()) {
+                        const playerDataAfter = playerDocAfterCombat.data();
+                        await checkLevelUp(playerRef, playerDataAfter.xp || 0, playerDataAfter.level || 1);
+                    }
+                } catch (error) {
+                    logToTerminal(error.message || 'Combat failed due to an unexpected error.', 'error');
+                    console.error('[Combat Error]', error);
                 }
                 break;
             
