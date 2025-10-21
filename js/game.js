@@ -788,9 +788,16 @@ export function initializeGameLogic(dependencies) {
         if (monstersInRoom.length > 0) {
             monstersInRoom.forEach(monster => {
                 const monsterTemplate = gameMonsters[monster.monsterId];
-                const description = monsterTemplate?.description || 'A fearsome creature stands before you.';
-                logToTerminal(`<span class="combat-log">${monster.name}</span> is here. ${description}`, 'game');
-                logToTerminal(`HP: ${monster.hp}/${monster.maxHp}`, 'system');
+                
+                // Check if monster is dead
+                if (monster.isDead) {
+                    logToTerminal(`<span class="text-gray-400">The corpse of ${monster.name} lies here.</span>`, 'game');
+                } else {
+                    // Living monster
+                    const description = monsterTemplate?.description || 'A fearsome creature stands before you.';
+                    logToTerminal(`<span class="combat-log">${monster.name}</span> is here. ${description}`, 'game');
+                    logToTerminal(`HP: ${monster.hp}/${monster.maxHp}`, 'system');
+                }
             });
         }
         
@@ -872,6 +879,54 @@ export function initializeGameLogic(dependencies) {
         }
         
         logToTerminal(`A ${monsterTemplate.name} appears!`, 'combat-log');
+    }
+    
+    // Clean up old corpses (dead monsters older than 5000 seconds)
+    async function cleanupOldCorpses() {
+        const CORPSE_LIFETIME = 5000 * 1000; // 5000 seconds in milliseconds
+        const now = Date.now();
+        
+        try {
+            const corpses = Object.entries(activeMonsters).filter(([id, monster]) => {
+                if (!monster.isDead || !monster.deathTimestamp) return false;
+                
+                // Check if corpse is older than CORPSE_LIFETIME
+                const age = now - monster.deathTimestamp;
+                return age > CORPSE_LIFETIME;
+            });
+            
+            if (corpses.length > 0) {
+                console.log(`[Corpse Cleanup] Removing ${corpses.length} old corpse(s)`);
+                
+                for (const [corpseId, corpseData] of corpses) {
+                    const corpseRef = doc(db, `/artifacts/${appId}/public/data/mud-active-monsters/${corpseId}`);
+                    await deleteDoc(corpseRef);
+                    console.log(`[Corpse Cleanup] Removed ${corpseData.name} from ${corpseData.roomId}`);
+                }
+            }
+        } catch (error) {
+            console.error('[Corpse Cleanup] Error:', error);
+        }
+    }
+    
+    // Start periodic corpse cleanup (every 60 seconds)
+    let corpseCleanupInterval = null;
+    function startCorpseCleanup() {
+        if (corpseCleanupInterval) return; // Already running
+        
+        console.log('[Corpse Cleanup] Starting periodic cleanup (every 60 seconds)');
+        corpseCleanupInterval = setInterval(cleanupOldCorpses, 60000); // Run every minute
+        
+        // Run immediately on start
+        cleanupOldCorpses();
+    }
+    
+    function stopCorpseCleanup() {
+        if (corpseCleanupInterval) {
+            clearInterval(corpseCleanupInterval);
+            corpseCleanupInterval = null;
+            console.log('[Corpse Cleanup] Stopped');
+        }
     }
     
     async function handleAiNpcInteraction(npc, interactionType, currentRoom, topicOrSpeech = null) {
@@ -4243,11 +4298,25 @@ Examples:
                 // Check for monsters
                 const monsterToAttack = Object.entries(activeMonsters).find(([id, m]) => 
                     m.roomId === currentPlayerRoomId && 
+                    !m.isDead &&  // Don't allow attacking corpses
                     targetName && 
                     (m.monsterId.toLowerCase().includes(targetName.toLowerCase()) || m.name.toLowerCase().includes(targetName.toLowerCase()))
                 );
 
                 if (!monsterToAttack) {
+                    // Check if they're trying to attack a corpse
+                    const deadMonster = Object.entries(activeMonsters).find(([id, m]) => 
+                        m.roomId === currentPlayerRoomId && 
+                        m.isDead &&
+                        targetName && 
+                        (m.monsterId.toLowerCase().includes(targetName.toLowerCase()) || m.name.toLowerCase().includes(targetName.toLowerCase()))
+                    );
+                    
+                    if (deadMonster) {
+                        logToTerminal(`The ${deadMonster[1].name} is already dead. Its corpse lies here.`, "error");
+                        break;
+                    }
+                    
                     logToTerminal(`There's nothing here by the name "${targetName}" to attack.`, "error");
                     logToTerminal(`Available targets: Use 'who' to see players, 'look' to see monsters.`, "game");
                     break;
@@ -4344,7 +4413,13 @@ Examples:
                     
                     if (newMonsterHp <= 0) {
                         combatMessages.push({ msg: `You have defeated the ${monsterData.name}!`, type: 'system' });
-                        transaction.delete(monsterRef);
+                        
+                        // Don't delete - mark as dead corpse for 5000 seconds
+                        transaction.update(monsterRef, {
+                            isDead: true,
+                            deathTimestamp: Date.now(),
+                            hp: 0
+                        });
 
                         const updates = {};
                         let xpGain = monsterTemplate.xp;
@@ -4412,16 +4487,6 @@ Examples:
                                 const newSpawns = [...roomData.monsterSpawns];
                                 newSpawns[spawnIndex].lastDefeated = Date.now();
                                 transaction.update(roomRef, { monsterSpawns: newSpawns });
-                                
-                                // Add corpse detail to room (temporary, will be cleaned up on respawn)
-                                const corpseDescription = `The lifeless body of a ${monsterData.name} lies here.`;
-                                const currentDetails = roomData.details || {};
-                                const newDetails = {
-                                    ...currentDetails,
-                                    [`${monsterData.name.toLowerCase()} corpse`]: corpseDescription,
-                                    corpse: corpseDescription
-                                };
-                                transaction.update(roomRef, { details: newDetails });
                                 
                                 combatMessages.push({ msg: `The ${monsterData.name}'s corpse lies at your feet.`, type: 'game' });
                             }
@@ -8123,7 +8188,10 @@ Examples:
         // Death System
         offerDeathChoice,
         handleRespawn,
-        handlePermadeath
+        handlePermadeath,
+        // Corpse Cleanup System
+        startCorpseCleanup,
+        stopCorpseCleanup
     };
 }
 

@@ -505,6 +505,11 @@ export async function initializeApp() {
         });
         console.log('[Init] Game logic initialized');
         
+        console.log('[Init] Starting corpse cleanup system...');
+        // Start periodic cleanup of old monster corpses
+        gameLogic.startCorpseCleanup();
+        console.log('[Init] Corpse cleanup system started');
+        
         console.log('[Init] Initializing weather system...');
         // Initialize weather system
         window.weatherSystem = initializeWeatherSystem({
