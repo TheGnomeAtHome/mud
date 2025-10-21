@@ -34,7 +34,7 @@ export const REP_LEVELS = {
 export const activeTrades = new Map();
 
 // Haggle session data (player haggling with NPC)
-export const haggleSessions = new Map();
+const haggleSessions = new Map();
 
 // ===== UTILITY FUNCTIONS =====
 
