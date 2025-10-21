@@ -1362,22 +1362,14 @@
     <!-- END OF FILE: admin.html -->
 
 
-    <!-- Debug Console (for mobile debugging) -->
-    <div id="debug-console" class="fixed bottom-0 left-0 right-0 bg-black bg-opacity-95 border-t-2 border-yellow-400 text-yellow-400 font-mono text-xs overflow-y-auto z-50 hidden" style="max-height: 30vh;">
-        <div class="flex justify-between items-center p-2 border-b border-yellow-400 bg-gray-900">
-            <span class="font-bold">🐛 Debug Console</span>
-            <div class="space-x-2">
-                <button id="debug-clear" class="bg-red-500 text-white px-2 py-1 rounded text-xs">Clear</button>
-                <button id="debug-toggle" class="bg-yellow-400 text-black px-2 py-1 rounded text-xs">Hide</button>
-            </div>
+    <!-- Debug Console (always visible split-screen for desktop monitoring) -->
+    <div id="debug-console" class="fixed top-0 right-0 w-full md:w-96 h-64 md:h-screen bg-black border-l-2 border-t-2 md:border-t-0 border-yellow-400 text-yellow-400 font-mono text-xs overflow-hidden z-50 flex flex-col">
+        <div class="flex justify-between items-center p-2 border-b border-yellow-400 bg-gray-900 flex-shrink-0">
+            <span class="font-bold">🐛 Debug Console - Mobile Auth Monitor</span>
+            <button id="debug-clear" class="bg-red-500 text-white px-2 py-1 rounded text-xs hover:bg-red-600">Clear</button>
         </div>
-        <div id="debug-output" class="p-2 space-y-1"></div>
+        <div id="debug-output" class="p-2 space-y-1 overflow-y-auto flex-grow"></div>
     </div>
-    
-    <!-- Debug Toggle Button -->
-    <button id="debug-show" class="fixed bottom-4 right-4 bg-yellow-400 text-black px-3 py-2 rounded-full shadow-lg z-40 text-xs font-bold">
-        🐛 Debug
-    </button>
 
     <!-- FILE: auth.html (Login/Registration View) -->
     <div id="auth-modal" class="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
@@ -1525,12 +1517,10 @@
         (function() {
             const debugOutput = document.getElementById('debug-output');
             const debugConsole = document.getElementById('debug-console');
-            const debugShow = document.getElementById('debug-show');
-            const debugToggle = document.getElementById('debug-toggle');
             const debugClear = document.getElementById('debug-clear');
             
             let logCount = 0;
-            const MAX_LOGS = 100;
+            const MAX_LOGS = 200; // Increased for better monitoring
             
             // Function to add log to debug panel
             function addDebugLog(type, args) {
@@ -1538,13 +1528,13 @@
                 
                 const timestamp = new Date().toLocaleTimeString();
                 const logEntry = document.createElement('div');
-                logEntry.className = 'border-l-2 pl-2 py-1';
+                logEntry.className = 'border-l-2 pl-2 py-1 text-xs';
                 
                 // Color code by type
                 if (type === 'error') {
-                    logEntry.className += ' border-red-500 text-red-400';
+                    logEntry.className += ' border-red-500 text-red-400 bg-red-900 bg-opacity-20';
                 } else if (type === 'warn') {
-                    logEntry.className += ' border-yellow-500 text-yellow-300';
+                    logEntry.className += ' border-yellow-500 text-yellow-300 bg-yellow-900 bg-opacity-20';
                 } else if (type === 'log') {
                     logEntry.className += ' border-blue-500 text-blue-300';
                 } else {
@@ -1563,7 +1553,7 @@
                     return String(arg);
                 }).join(' ');
                 
-                logEntry.innerHTML = `<span class="text-gray-500">${timestamp}</span> <span class="font-bold">[${type.toUpperCase()}]</span> ${message}`;
+                logEntry.innerHTML = `<span class="text-gray-500">${timestamp}</span> <span class="font-bold">[${type.toUpperCase()}]</span> <span class="break-all">${message}</span>`;
                 
                 debugOutput.appendChild(logEntry);
                 logCount++;
@@ -1604,21 +1594,7 @@
                 addDebugLog('info', arguments);
             };
             
-            // Button handlers
-            if (debugShow) {
-                debugShow.addEventListener('click', () => {
-                    debugConsole.classList.remove('hidden');
-                    debugShow.classList.add('hidden');
-                });
-            }
-            
-            if (debugToggle) {
-                debugToggle.addEventListener('click', () => {
-                    debugConsole.classList.add('hidden');
-                    debugShow.classList.remove('hidden');
-                });
-            }
-            
+            // Clear button handler
             if (debugClear) {
                 debugClear.addEventListener('click', () => {
                     debugOutput.innerHTML = '';
@@ -1628,10 +1604,11 @@
             }
             
             // Initial log
-            addDebugLog('info', ['Debug console initialized']);
+            addDebugLog('info', ['🐛 Debug console initialized - Monitor your phone authentication here']);
+            addDebugLog('info', ['Desktop: ' + window.innerWidth + 'x' + window.innerHeight]);
         })();
     </script>
 
-    <script type="module" src="./js/app.js?v=20251021-017"></script>
+    <script type="module" src="./js/app.js?v=20251021-018"></script>
 </body>
 </html>
