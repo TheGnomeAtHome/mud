@@ -25,8 +25,10 @@ export function initializeAuth(firebase, ui, appId) {
     // Registration
     document.getElementById('register-form').addEventListener('submit', async (e) => {
         e.preventDefault();
+        e.stopPropagation();
         authError.textContent = '';
-        const email = document.getElementById('register-email').value;
+        
+        const email = document.getElementById('register-email').value.trim();
         const password = document.getElementById('register-password').value;
         
         console.log('Registration attempt:', email);
@@ -53,24 +55,35 @@ export function initializeAuth(firebase, ui, appId) {
             authError.textContent = error.message;
             authError.className = 'text-red-500 text-sm mt-4';
         }
-    });
+    }, { passive: false });
     
     // Login
     document.getElementById('login-form').addEventListener('submit', async (e) => {
         e.preventDefault();
+        e.stopPropagation();
         authError.textContent = '';
-        const email = document.getElementById('login-email').value;
+        
+        const email = document.getElementById('login-email').value.trim();
         const password = document.getElementById('login-password').value;
+        
+        console.log('Login attempt for:', email);
+        
+        if (!email || !password) {
+            authError.textContent = 'Email and password are required';
+            authError.className = 'text-red-500 text-sm mt-4';
+            return;
+        }
         
         try {
             await signInWithEmailAndPassword(auth, email, password);
+            console.log('Login successful');
             authModal.classList.add('hidden');
         } catch (error) {
-            console.error("Login Error:", error.message);
+            console.error("Login Error:", error.message, error.code);
             authError.textContent = 'Invalid credentials';
             authError.className = 'text-red-500 text-sm mt-4';
         }
-    });
+    }, { passive: false });
     
     // Password Reset
     document.getElementById('forgot-password-form').addEventListener('submit', async (e) => {

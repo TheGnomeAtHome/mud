@@ -50,15 +50,33 @@ function setupAuthFormSwitching() {
     const loginForm = document.getElementById('login-form');
     const registerForm = document.getElementById('register-form');
     const forgotPasswordForm = document.getElementById('forgot-password-form');
+    const authError = document.getElementById('auth-error');
     
     console.log('Elements found:', { showRegister, loginForm, registerForm });
     
+    // Helper to add both click and touchend events for better mobile support
+    function addMobileClickHandler(element, handler) {
+        if (!element) return;
+        
+        // Click event for desktop
+        element.addEventListener('click', handler);
+        
+        // Touchend for mobile (more reliable than click on some devices)
+        element.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            handler(e);
+        }, { passive: false });
+    }
+    
     if (showRegister) {
-        showRegister.addEventListener('click', (e) => {
+        addMobileClickHandler(showRegister, (e) => {
             console.log('Show register clicked!');
             e.preventDefault();
+            e.stopPropagation();
             loginForm.classList.add('hidden');
             registerForm.classList.remove('hidden');
+            forgotPasswordForm.classList.add('hidden');
+            if (authError) authError.textContent = '';
         });
         console.log('Register link handler attached');
     } else {
@@ -66,26 +84,35 @@ function setupAuthFormSwitching() {
     }
     
     if (showLoginRegister) {
-        showLoginRegister.addEventListener('click', (e) => {
+        addMobileClickHandler(showLoginRegister, (e) => {
             e.preventDefault();
+            e.stopPropagation();
             registerForm.classList.add('hidden');
             loginForm.classList.remove('hidden');
+            forgotPasswordForm.classList.add('hidden');
+            if (authError) authError.textContent = '';
         });
     }
     
     if (showForgotPassword) {
-        showForgotPassword.addEventListener('click', (e) => {
+        addMobileClickHandler(showForgotPassword, (e) => {
             e.preventDefault();
+            e.stopPropagation();
             loginForm.classList.add('hidden');
             forgotPasswordForm.classList.remove('hidden');
+            registerForm.classList.add('hidden');
+            if (authError) authError.textContent = '';
         });
     }
     
     if (showLoginForgot) {
-        showLoginForgot.addEventListener('click', (e) => {
+        addMobileClickHandler(showLoginForgot, (e) => {
             e.preventDefault();
+            e.stopPropagation();
             forgotPasswordForm.classList.add('hidden');
             loginForm.classList.remove('hidden');
+            registerForm.classList.add('hidden');
+            if (authError) authError.textContent = '';
         });
     }
 }

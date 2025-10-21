@@ -1370,15 +1370,15 @@
             <!-- Login Form -->
             <form id="login-form" class="space-y-3 sm:space-y-4">
                 <div>
-                    <input type="email" id="login-email" placeholder="Email" class="auth-input text-center text-sm sm:text-base" required>
+                    <input type="email" id="login-email" placeholder="Email" class="auth-input text-center text-sm sm:text-base" required autocomplete="email" inputmode="email">
                 </div>
                 <div>
-                    <input type="password" id="login-password" placeholder="Password" class="auth-input text-center text-sm sm:text-base" required>
+                    <input type="password" id="login-password" placeholder="Password" class="auth-input text-center text-sm sm:text-base" required autocomplete="current-password">
                 </div>
                 <button type="submit" class="bg-[#00ff41] text-black px-4 sm:px-6 py-2 rounded w-full text-sm sm:text-base">Login</button>
                 <div class="text-xs sm:text-sm flex justify-between">
-                    <a href="#" id="show-register" class="underline text-yellow-400">Register here</a>
-                    <a href="#" id="show-forgot-password" class="underline text-yellow-400">Forgot Password?</a>
+                    <a href="#" id="show-register" class="underline text-yellow-400 cursor-pointer">Register here</a>
+                    <a href="#" id="show-forgot-password" class="underline text-yellow-400 cursor-pointer">Forgot Password?</a>
                 </div>
             </form>
 
@@ -1386,23 +1386,23 @@
             <form id="register-form" class="hidden space-y-4">
                 <p class="text-sm mb-2">Create an account to begin your adventure!</p>
                  <div>
-                    <input type="email" id="register-email" placeholder="Email" class="auth-input text-center" required>
+                    <input type="email" id="register-email" placeholder="Email" class="auth-input text-center" required autocomplete="email" inputmode="email">
                 </div>
                 <div>
-                    <input type="password" id="register-password" placeholder="Password (min 6 characters)" class="auth-input text-center" required>
+                    <input type="password" id="register-password" placeholder="Password (min 6 characters)" class="auth-input text-center" required autocomplete="new-password">
                 </div>
                 <button type="submit" class="bg-[#00ff41] text-black px-6 py-2 rounded w-full">Register</button>
-                 <p class="text-sm">Already have an account? <a href="#" id="show-login-register" class="underline text-yellow-400">Login here</a>.</p>
+                 <p class="text-sm">Already have an account? <a href="#" id="show-login-register" class="underline text-yellow-400 cursor-pointer">Login here</a>.</p>
             </form>
 
             <!-- Forgot Password Form -->
             <form id="forgot-password-form" class="hidden space-y-4">
                 <p class="text-sm">Enter your email and we'll send a link to reset your password.</p>
                 <div>
-                    <input type="email" id="forgot-email" placeholder="Email" class="auth-input text-center" required>
+                    <input type="email" id="forgot-email" placeholder="Email" class="auth-input text-center" required autocomplete="email" inputmode="email">
                 </div>
                 <button type="submit" class="bg-[#00ff41] text-black px-6 py-2 rounded w-full">Send Reset Email</button>
-                 <p class="text-sm">Remembered it? <a href="#" id="show-login-forgot" class="underline text-yellow-400">Login here</a>.</p>
+                 <p class="text-sm">Remembered it? <a href="#" id="show-login-forgot" class="underline text-yellow-400 cursor-pointer">Login here</a>.</p>
             </form>
 
             <p id="auth-error" class="text-red-500 text-sm mt-4"></p>
@@ -1505,6 +1505,6 @@
 
 
 
-    <script type="module" src="./js/app.js?v=20251020-014"></script>
+    <script type="module" src="./js/app.js?v=20251021-015"></script>
 </body>
 </html>
