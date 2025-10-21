@@ -1362,6 +1362,23 @@
     <!-- END OF FILE: admin.html -->
 
 
+    <!-- Debug Console (for mobile debugging) -->
+    <div id="debug-console" class="fixed bottom-0 left-0 right-0 bg-black bg-opacity-95 border-t-2 border-yellow-400 text-yellow-400 font-mono text-xs overflow-y-auto z-50 hidden" style="max-height: 30vh;">
+        <div class="flex justify-between items-center p-2 border-b border-yellow-400 bg-gray-900">
+            <span class="font-bold">🐛 Debug Console</span>
+            <div class="space-x-2">
+                <button id="debug-clear" class="bg-red-500 text-white px-2 py-1 rounded text-xs">Clear</button>
+                <button id="debug-toggle" class="bg-yellow-400 text-black px-2 py-1 rounded text-xs">Hide</button>
+            </div>
+        </div>
+        <div id="debug-output" class="p-2 space-y-1"></div>
+    </div>
+    
+    <!-- Debug Toggle Button -->
+    <button id="debug-show" class="fixed bottom-4 right-4 bg-yellow-400 text-black px-3 py-2 rounded-full shadow-lg z-40 text-xs font-bold">
+        🐛 Debug
+    </button>
+
     <!-- FILE: auth.html (Login/Registration View) -->
     <div id="auth-modal" class="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
         <div class="bg-black border-2 border-[#00ff41] p-4 sm:p-8 rounded-lg text-center glow w-full max-w-sm">
@@ -1503,8 +1520,118 @@
     </div>
     <!-- END OF CHARACTER CREATION -->
 
+    <!-- Debug Console Script (must load before app.js) -->
+    <script>
+        (function() {
+            const debugOutput = document.getElementById('debug-output');
+            const debugConsole = document.getElementById('debug-console');
+            const debugShow = document.getElementById('debug-show');
+            const debugToggle = document.getElementById('debug-toggle');
+            const debugClear = document.getElementById('debug-clear');
+            
+            let logCount = 0;
+            const MAX_LOGS = 100;
+            
+            // Function to add log to debug panel
+            function addDebugLog(type, args) {
+                if (!debugOutput) return;
+                
+                const timestamp = new Date().toLocaleTimeString();
+                const logEntry = document.createElement('div');
+                logEntry.className = 'border-l-2 pl-2 py-1';
+                
+                // Color code by type
+                if (type === 'error') {
+                    logEntry.className += ' border-red-500 text-red-400';
+                } else if (type === 'warn') {
+                    logEntry.className += ' border-yellow-500 text-yellow-300';
+                } else if (type === 'log') {
+                    logEntry.className += ' border-blue-500 text-blue-300';
+                } else {
+                    logEntry.className += ' border-green-500 text-green-400';
+                }
+                
+                // Format the message
+                const message = Array.from(args).map(arg => {
+                    if (typeof arg === 'object') {
+                        try {
+                            return JSON.stringify(arg, null, 2);
+                        } catch(e) {
+                            return String(arg);
+                        }
+                    }
+                    return String(arg);
+                }).join(' ');
+                
+                logEntry.innerHTML = `<span class="text-gray-500">${timestamp}</span> <span class="font-bold">[${type.toUpperCase()}]</span> ${message}`;
+                
+                debugOutput.appendChild(logEntry);
+                logCount++;
+                
+                // Limit number of logs
+                if (logCount > MAX_LOGS) {
+                    debugOutput.removeChild(debugOutput.firstChild);
+                    logCount--;
+                }
+                
+                // Auto-scroll to bottom
+                debugOutput.scrollTop = debugOutput.scrollHeight;
+            }
+            
+            // Override console methods
+            const originalLog = console.log;
+            const originalError = console.error;
+            const originalWarn = console.warn;
+            const originalInfo = console.info;
+            
+            console.log = function() {
+                originalLog.apply(console, arguments);
+                addDebugLog('log', arguments);
+            };
+            
+            console.error = function() {
+                originalError.apply(console, arguments);
+                addDebugLog('error', arguments);
+            };
+            
+            console.warn = function() {
+                originalWarn.apply(console, arguments);
+                addDebugLog('warn', arguments);
+            };
+            
+            console.info = function() {
+                originalInfo.apply(console, arguments);
+                addDebugLog('info', arguments);
+            };
+            
+            // Button handlers
+            if (debugShow) {
+                debugShow.addEventListener('click', () => {
+                    debugConsole.classList.remove('hidden');
+                    debugShow.classList.add('hidden');
+                });
+            }
+            
+            if (debugToggle) {
+                debugToggle.addEventListener('click', () => {
+                    debugConsole.classList.add('hidden');
+                    debugShow.classList.remove('hidden');
+                });
+            }
+            
+            if (debugClear) {
+                debugClear.addEventListener('click', () => {
+                    debugOutput.innerHTML = '';
+                    logCount = 0;
+                    addDebugLog('info', ['Debug console cleared']);
+                });
+            }
+            
+            // Initial log
+            addDebugLog('info', ['Debug console initialized']);
+        })();
+    </script>
 
-
-    <script type="module" src="./js/app.js?v=20251021-016"></script>
+    <script type="module" src="./js/app.js?v=20251021-017"></script>
 </body>
 </html>
