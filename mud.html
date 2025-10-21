@@ -1362,21 +1362,6 @@
     <!-- END OF FILE: admin.html -->
 
 
-    <!-- Debug Console (always visible split-screen for desktop monitoring) -->
-    <div id="debug-console" class="fixed top-0 right-0 w-full md:w-96 h-64 md:h-screen bg-black border-l-2 border-t-2 md:border-t-0 border-yellow-400 text-yellow-400 font-mono text-xs overflow-hidden z-50 flex flex-col">
-        <div class="flex justify-between items-center p-2 border-b border-yellow-400 bg-gray-900 flex-shrink-0">
-            <span class="font-bold">🐛 Debug Console - Mobile Auth Monitor</span>
-            <button id="debug-clear" class="bg-red-500 text-white px-2 py-1 rounded text-xs hover:bg-red-600">Clear</button>
-        </div>
-        <div id="debug-output" class="p-2 space-y-1 overflow-y-auto flex-grow">
-            <div class="text-red-400">⏳ Waiting for JavaScript to load...</div>
-            <div class="text-gray-400 mt-2">If this message persists:</div>
-            <div class="text-gray-400">1. Check if js/app.js and js/auth.js are uploaded</div>
-            <div class="text-gray-400">2. Check browser console (F12) for errors</div>
-            <div class="text-gray-400">3. Hard refresh (Ctrl+F5)</div>
-        </div>
-    </div>
-
     <!-- FILE: auth.html (Login/Registration View) -->
     <div id="auth-modal" class="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
         <div class="bg-black border-2 border-[#00ff41] p-4 sm:p-8 rounded-lg text-center glow w-full max-w-sm">
@@ -1518,114 +1503,6 @@
     </div>
     <!-- END OF CHARACTER CREATION -->
 
-    <!-- Debug Console Script (must load before app.js) -->
-    <script>
-        // IMMEDIATE TEST - This should show even if everything else fails
-        alert('DEBUG SCRIPT LOADED - Check debug console on right side');
-        
-        (function() {
-            const debugOutput = document.getElementById('debug-output');
-            const debugConsole = document.getElementById('debug-console');
-            const debugClear = document.getElementById('debug-clear');
-            
-            // Visual test - make console bright red if it exists
-            if (debugConsole) {
-                debugConsole.style.backgroundColor = 'red';
-                setTimeout(() => {
-                    debugConsole.style.backgroundColor = 'black';
-                }, 2000);
-            }
-            
-            let logCount = 0;
-            const MAX_LOGS = 200; // Increased for better monitoring
-            
-            // Function to add log to debug panel
-            function addDebugLog(type, args) {
-                if (!debugOutput) return;
-                
-                const timestamp = new Date().toLocaleTimeString();
-                const logEntry = document.createElement('div');
-                logEntry.className = 'border-l-2 pl-2 py-1 text-xs';
-                
-                // Color code by type
-                if (type === 'error') {
-                    logEntry.className += ' border-red-500 text-red-400 bg-red-900 bg-opacity-20';
-                } else if (type === 'warn') {
-                    logEntry.className += ' border-yellow-500 text-yellow-300 bg-yellow-900 bg-opacity-20';
-                } else if (type === 'log') {
-                    logEntry.className += ' border-blue-500 text-blue-300';
-                } else {
-                    logEntry.className += ' border-green-500 text-green-400';
-                }
-                
-                // Format the message
-                const message = Array.from(args).map(arg => {
-                    if (typeof arg === 'object') {
-                        try {
-                            return JSON.stringify(arg, null, 2);
-                        } catch(e) {
-                            return String(arg);
-                        }
-                    }
-                    return String(arg);
-                }).join(' ');
-                
-                logEntry.innerHTML = `<span class="text-gray-500">${timestamp}</span> <span class="font-bold">[${type.toUpperCase()}]</span> <span class="break-all">${message}</span>`;
-                
-                debugOutput.appendChild(logEntry);
-                logCount++;
-                
-                // Limit number of logs
-                if (logCount > MAX_LOGS) {
-                    debugOutput.removeChild(debugOutput.firstChild);
-                    logCount--;
-                }
-                
-                // Auto-scroll to bottom
-                debugOutput.scrollTop = debugOutput.scrollHeight;
-            }
-            
-            // Override console methods
-            const originalLog = console.log;
-            const originalError = console.error;
-            const originalWarn = console.warn;
-            const originalInfo = console.info;
-            
-            console.log = function() {
-                originalLog.apply(console, arguments);
-                addDebugLog('log', arguments);
-            };
-            
-            console.error = function() {
-                originalError.apply(console, arguments);
-                addDebugLog('error', arguments);
-            };
-            
-            console.warn = function() {
-                originalWarn.apply(console, arguments);
-                addDebugLog('warn', arguments);
-            };
-            
-            console.info = function() {
-                originalInfo.apply(console, arguments);
-                addDebugLog('info', arguments);
-            };
-            
-            // Clear button handler
-            if (debugClear) {
-                debugClear.addEventListener('click', () => {
-                    debugOutput.innerHTML = '';
-                    logCount = 0;
-                    addDebugLog('info', ['Debug console cleared']);
-                });
-            }
-            
-            // Initial log
-            addDebugLog('info', ['🐛 Debug console initialized - Monitor your phone authentication here']);
-            addDebugLog('info', ['Desktop: ' + window.innerWidth + 'x' + window.innerHeight]);
-        })();
-    </script>
-
-    <script type="module" src="./js/app.js?v=20251021-019"></script>
+    <script type="module" src="./js/app.js?v=20251021-020"></script>
 </body>
 </html>

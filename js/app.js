@@ -41,10 +41,6 @@ import {
 
 // Setup auth form switching immediately
 function setupAuthFormSwitching() {
-    console.log('=== SETUP AUTH FORM SWITCHING START ===');
-    console.log('User Agent:', navigator.userAgent);
-    console.log('Touch Support:', 'ontouchstart' in window);
-    
     const showRegister = document.getElementById('show-register');
     const showLoginRegister = document.getElementById('show-login-register');
     const showForgotPassword = document.getElementById('show-forgot-password');
@@ -55,32 +51,15 @@ function setupAuthFormSwitching() {
     const forgotPasswordForm = document.getElementById('forgot-password-form');
     const authError = document.getElementById('auth-error');
     
-    console.log('Auth Elements Found:', {
-        showRegister: !!showRegister,
-        showLoginRegister: !!showLoginRegister,
-        showForgotPassword: !!showForgotPassword,
-        showLoginForgot: !!showLoginForgot,
-        loginForm: !!loginForm,
-        registerForm: !!registerForm,
-        forgotPasswordForm: !!forgotPasswordForm,
-        authError: !!authError
-    });
-    
     // Helper to add both click and touchend events for better mobile support
     function addMobileClickHandler(element, handler) {
         if (!element) return;
         
-        console.log('Adding mobile click handler to:', element.id || element.textContent);
-        
         // Click event for desktop
-        element.addEventListener('click', (e) => {
-            console.log('CLICK event on:', element.id || element.textContent);
-            handler(e);
-        });
+        element.addEventListener('click', handler);
         
         // Touchend for mobile (more reliable than click on some devices)
         element.addEventListener('touchend', (e) => {
-            console.log('TOUCHEND event on:', element.id || element.textContent);
             e.preventDefault();
             handler(e);
         }, { passive: false });
@@ -88,37 +67,28 @@ function setupAuthFormSwitching() {
     
     if (showRegister) {
         addMobileClickHandler(showRegister, (e) => {
-            console.log('>>> SHOW REGISTER HANDLER TRIGGERED <<<');
             e.preventDefault();
             e.stopPropagation();
             loginForm.classList.add('hidden');
             registerForm.classList.remove('hidden');
             forgotPasswordForm.classList.add('hidden');
             if (authError) authError.textContent = '';
-            console.log('Forms after switch - Login hidden:', loginForm.classList.contains('hidden'), 'Register visible:', !registerForm.classList.contains('hidden'));
         });
-        console.log('✓ Register link handler attached');
-    } else {
-        console.error('✗ show-register element not found!');
     }
     
     if (showLoginRegister) {
         addMobileClickHandler(showLoginRegister, (e) => {
-            console.log('>>> SHOW LOGIN (from register) HANDLER TRIGGERED <<<');
             e.preventDefault();
             e.stopPropagation();
             registerForm.classList.add('hidden');
             loginForm.classList.remove('hidden');
             forgotPasswordForm.classList.add('hidden');
             if (authError) authError.textContent = '';
-            console.log('Forms after switch - Register hidden:', registerForm.classList.contains('hidden'), 'Login visible:', !loginForm.classList.contains('hidden'));
         });
-        console.log('✓ Login (from register) link handler attached');
     }
     
     if (showForgotPassword) {
         addMobileClickHandler(showForgotPassword, (e) => {
-            console.log('>>> SHOW FORGOT PASSWORD HANDLER TRIGGERED <<<');
             e.preventDefault();
             e.stopPropagation();
             loginForm.classList.add('hidden');
@@ -126,12 +96,10 @@ function setupAuthFormSwitching() {
             registerForm.classList.add('hidden');
             if (authError) authError.textContent = '';
         });
-        console.log('✓ Forgot password link handler attached');
     }
     
     if (showLoginForgot) {
         addMobileClickHandler(showLoginForgot, (e) => {
-            console.log('>>> SHOW LOGIN (from forgot) HANDLER TRIGGERED <<<');
             e.preventDefault();
             e.stopPropagation();
             forgotPasswordForm.classList.add('hidden');
@@ -139,29 +107,17 @@ function setupAuthFormSwitching() {
             registerForm.classList.add('hidden');
             if (authError) authError.textContent = '';
         });
-        console.log('✓ Login (from forgot) link handler attached');
     }
-    
-    console.log('=== SETUP AUTH FORM SWITCHING COMPLETE ===');
 }
 
 // Set up form switching when DOM is ready
-console.log('Document readyState:', document.readyState);
 if (document.readyState === 'loading') {
-    console.log('Waiting for DOMContentLoaded...');
-    document.addEventListener('DOMContentLoaded', () => {
-        console.log('DOMContentLoaded event fired');
-        setupAuthFormSwitching();
-    });
+    document.addEventListener('DOMContentLoaded', setupAuthFormSwitching);
 } else {
-    console.log('DOM already loaded, setting up immediately');
     setupAuthFormSwitching();
 }
 
 export async function initializeApp() {
-    console.log('=== INITIALIZE APP START ===');
-    console.log('Timestamp:', new Date().toISOString());
-    console.log('Window size:', window.innerWidth, 'x', window.innerHeight);
     console.log('Initializing MUD application...');
     
     // Initialize Firebase
