@@ -1,0 +1,40 @@
+[
+  {
+    "id": "town-square",
+    "name": "Town Square",
+    "description": "A bustling town square with a fountain in the center.",
+    "exits": {
+      "north": "market",
+      "south": "tavern",
+      "east": "guild-hall",
+      "west": "temple"
+    },
+    "details": {
+      "fountain": "An ornate fountain with crystal-clear water.",
+      "statue": "A bronze statue of the town's founder."
+    }
+  },
+  {
+    "id": "dark-alley",
+    "name": "Dark Alley",
+    "description": "A narrow, dimly lit alley between two buildings.",
+    "exits": {
+      "west": "town-square"
+    },
+    "monsters": [
+      {
+        "monsterId": "thief",
+        "respawnTime": 300000
+      }
+    ]
+  },
+  {
+    "id": "treasure-room",
+    "name": "Hidden Treasure Room",
+    "description": "A secret room filled with glittering treasures.",
+    "exits": {
+      "out": "dungeon-corridor"
+    },
+    "items": ["gold-coins", "magic-amulet"]
+  }
+]

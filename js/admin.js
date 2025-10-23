@@ -225,9 +225,46 @@ export function initializeAdminPanel({
         }
         sortedItemIds.forEach(id => {
             const item = gameItems[id];
-            const isChecked = room?.items?.includes(id) ?? false;
+            
+            // Check if item exists in room (support both old format [ids] and new format [{id, quantity}])
+            let isChecked = false;
+            let quantity = 1;
+            
+            if (room?.items) {
+                // Check for old format (array of strings)
+                if (room.items.includes(id)) {
+                    isChecked = true;
+                    quantity = 1;
+                }
+                // Check for new format (array of objects)
+                const itemObj = room.items.find(i => typeof i === 'object' && i.id === id);
+                if (itemObj) {
+                    isChecked = true;
+                    quantity = itemObj.quantity || 1;
+                }
+            }
+            
             const div = document.createElement('div');
-            div.innerHTML = `<label><input type="checkbox" class="room-item-checkbox" value="${id}" ${isChecked ? 'checked' : ''}> ${item?.name || 'Unnamed Item'} (${id})</label>`;
+            div.className = 'flex items-center gap-2 mb-1';
+            div.innerHTML = `
+                <label class="flex items-center flex-1">
+                    <input type="checkbox" class="room-item-checkbox mr-2" value="${id}" ${isChecked ? 'checked' : ''}> 
+                    ${item?.name || 'Unnamed Item'} (${id})
+                </label>
+                <input type="number" class="room-item-quantity admin-input w-16 text-sm" 
+                    data-item-id="${id}" value="${quantity}" min="1" ${!isChecked ? 'disabled' : ''}>
+            `;
+            
+            // Enable/disable quantity input based on checkbox
+            const checkbox = div.querySelector('.room-item-checkbox');
+            const quantityInput = div.querySelector('.room-item-quantity');
+            checkbox.addEventListener('change', () => {
+                quantityInput.disabled = !checkbox.checked;
+                if (checkbox.checked && quantityInput.value < 1) {
+                    quantityInput.value = 1;
+                }
+            });
+            
             roomItemsSelector.appendChild(div);
         });
     }
@@ -459,7 +496,12 @@ export function initializeAdminPanel({
                 return;
             }
 
-            const checkedItems = Array.from(document.querySelectorAll('.room-item-checkbox:checked')).map(cb => cb.value);
+            const checkedItems = Array.from(document.querySelectorAll('.room-item-checkbox:checked')).map(cb => {
+                const itemId = cb.value;
+                const quantityInput = document.querySelector(`.room-item-quantity[data-item-id="${itemId}"]`);
+                const quantity = parseInt(quantityInput?.value) || 1;
+                return { id: itemId, quantity: quantity };
+            });
             const checkedNpcs = Array.from(document.querySelectorAll('.room-npc-checkbox:checked')).map(cb => cb.value);
             
             const monsterSpawns = [];
@@ -537,6 +579,7 @@ export function initializeAdminPanel({
     const itemDescriptionInput = document.getElementById('item-description');
     const itemAliasesInput = document.getElementById('item-aliases');
     const itemCostInput = document.getElementById('item-cost');
+    const itemWeightInput = document.getElementById('item-weight');
     
     if (!itemDescriptionInput) {
         console.error('[Admin] item-description field not found! HTML needs to be updated.');
@@ -588,7 +631,7 @@ export function initializeAdminPanel({
     }
 
     function clearAdminItemForm() {
-        itemIdInput.value = ''; itemNameInput.value = ''; itemDescriptionInput.value = ''; itemAliasesInput.value = ''; itemCostInput.value = '';
+        itemIdInput.value = ''; itemNameInput.value = ''; itemDescriptionInput.value = ''; itemAliasesInput.value = ''; itemCostInput.value = ''; itemWeightInput.value = '0';
         itemMovableCheckbox.checked = true;
         itemConsumableCheckbox.checked = false;
         itemNewsworthyCheckbox.checked = false;
@@ -618,6 +661,7 @@ export function initializeAdminPanel({
             itemDescriptionInput.value = item.description || '';
             itemAliasesInput.value = Array.isArray(item.aliases) ? item.aliases.join(', ') : (item.aliases || '');
             itemCostInput.value = item.cost || 0;
+            itemWeightInput.value = item.weight || 0;
             itemMovableCheckbox.checked = item.movable !== false;
             itemConsumableCheckbox.checked = item.consumable === true;
             itemNewsworthyCheckbox.checked = item.newsworthy === true;
@@ -669,6 +713,7 @@ export function initializeAdminPanel({
             itemNameInput.value = newItemData.name;
             itemDescriptionInput.value = newItemData.description || '';
             itemCostInput.value = newItemData.cost;
+            itemWeightInput.value = newItemData.weight || 0;
             itemMovableCheckbox.checked = newItemData.movable !== false;
             itemConsumableCheckbox.checked = newItemData.consumable === true;
             itemHpRestoreInput.value = newItemData.hpRestore || 0;
@@ -704,6 +749,7 @@ export function initializeAdminPanel({
             const aliasesRaw = itemAliasesInput.value.trim();
             const aliases = aliasesRaw ? aliasesRaw.split(',').map(a => a.trim()).filter(a => a.length > 0) : [];
             const cost = parseInt(itemCostInput.value) || 0;
+            const weight = parseFloat(itemWeightInput.value) || 0;
             const movable = itemMovableCheckbox.checked;
             const consumable = itemConsumableCheckbox.checked;
             const newsworthy = itemNewsworthyCheckbox.checked;
@@ -726,7 +772,7 @@ export function initializeAdminPanel({
                 return;
             }
 
-            const itemData = { name, cost, movable, consumable, newsworthy, hpRestore, effect, itemType };
+            const itemData = { name, cost, weight, movable, consumable, newsworthy, hpRestore, effect, itemType };
             
             // Add description if provided
             if (description) {
@@ -811,6 +857,8 @@ export function initializeAdminPanel({
     const npcNameInput = document.getElementById('npc-name');
     const npcDescInput = document.getElementById('npc-desc');
     const npcSellsSelector = document.getElementById('npc-sells-selector');
+    const npcBuysSelector = document.getElementById('npc-buys-selector');
+    const npcBuyRateInput = document.getElementById('npc-buy-rate');
     const npcAiEnabledCheckbox = document.getElementById('npc-ai-enabled');
     const npcDialogueInput = document.getElementById('npc-dialogue');
     const npcDialogueLabel = document.getElementById('npc-dialogue-label');
@@ -902,6 +950,8 @@ export function initializeAdminPanel({
         npcIdInput.disabled = false; npcSelect.value = '';
         updateNpcDialogueLabel();
         document.querySelectorAll('.npc-sells-checkbox').forEach(cb => cb.checked = false);
+        document.querySelectorAll('.npc-buys-checkbox').forEach(cb => cb.checked = false);
+        npcBuyRateInput.value = '';
     }
 
     function updateNpcDialogueLabel() {
@@ -983,6 +1033,8 @@ export function initializeAdminPanel({
             
             updateNpcDialogueLabel();
             populateNpcSellsSelector(npc.sells || []);
+            populateNpcBuysSelector(npc.buys || []);
+            npcBuyRateInput.value = npc.buyRate || '';
         } else {
             clearAdminNpcForm();
         }
@@ -1001,6 +1053,31 @@ export function initializeAdminPanel({
             const div = document.createElement('div');
             div.innerHTML = `<label><input type="checkbox" class="npc-sells-checkbox" value="${id}" ${isChecked ? 'checked' : ''}> ${item?.name || 'Unnamed Item'} (${id})</label>`;
             npcSellsSelector.appendChild(div);
+        });
+    }
+
+    function populateNpcBuysSelector(selectedItems = []) {
+        npcBuysSelector.innerHTML = '';
+        // Add "all" option
+        const allDiv = document.createElement('div');
+        const isAllChecked = selectedItems.includes('all');
+        allDiv.innerHTML = `<label><input type="checkbox" class="npc-buys-checkbox" value="all" ${isAllChecked ? 'checked' : ''}> <strong>[Buy Everything]</strong></label>`;
+        npcBuysSelector.appendChild(allDiv);
+        
+        const sortedItemIds = Object.keys(gameItems).sort();
+        if (sortedItemIds.length === 0) {
+            const p = document.createElement('p');
+            p.className = 'text-gray-400';
+            p.textContent = 'No items created yet.';
+            npcBuysSelector.appendChild(p);
+            return;
+        }
+        sortedItemIds.forEach(id => {
+            const item = gameItems[id];
+            const isChecked = selectedItems.includes(id);
+            const div = document.createElement('div');
+            div.innerHTML = `<label><input type="checkbox" class="npc-buys-checkbox" value="${id}" ${isChecked ? 'checked' : ''}> ${item?.name || 'Unnamed Item'} (${id})</label>`;
+            npcBuysSelector.appendChild(div);
         });
     }
 
@@ -1086,8 +1163,18 @@ export function initializeAdminPanel({
             }
 
             const sells = Array.from(document.querySelectorAll('.npc-sells-checkbox:checked')).map(cb => cb.value);
+            const buys = Array.from(document.querySelectorAll('.npc-buys-checkbox:checked')).map(cb => cb.value);
+            const buyRate = parseFloat(npcBuyRateInput.value) || undefined;
 
             const npcData = { shortName, name, description, useAI, dialogue, triggers, sells };
+            
+            // Add buys and buyRate if specified
+            if (buys.length > 0) {
+                npcData.buys = buys;
+            }
+            if (buyRate !== undefined) {
+                npcData.buyRate = buyRate;
+            }
             
             // Add wandering behavior if enabled
             if (npcWandersCheckbox.checked) {
@@ -1196,6 +1283,7 @@ export function initializeAdminPanel({
     const monsterXpInput = document.getElementById('monster-xp');
     const monsterGoldInput = document.getElementById('monster-gold');
     const monsterItemDropSelect = document.getElementById('monster-item-drop');
+    const monsterLootTableInput = document.getElementById('monster-loot-table');
     const monsterNewsworthyCheckbox = document.getElementById('monster-newsworthy');
     const adminMonsterStatus = document.getElementById('admin-monster-status');
     const generateMonsterBtn = document.getElementById('generate-monster-btn');
@@ -1233,6 +1321,7 @@ export function initializeAdminPanel({
         monsterNameInput.value = ''; monsterDescInput.value = '';
         monsterHpInput.value = ''; monsterMinAtkInput.value = ''; monsterMaxAtkInput.value = '';
         monsterXpInput.value = ''; monsterGoldInput.value = '';
+        monsterLootTableInput.value = '';
         monsterNewsworthyCheckbox.checked = false;
         monsterSelect.value = '';
         populateMonsterItemDropSelector();
@@ -1254,6 +1343,7 @@ export function initializeAdminPanel({
             monsterGoldInput.value = monster.gold || '';
             monsterNewsworthyCheckbox.checked = monster.newsworthy === true;
             populateMonsterItemDropSelector(monster.itemDrop || '');
+            monsterLootTableInput.value = monster.loot ? JSON.stringify(monster.loot, null, 2) : '';
         } else {
             clearAdminMonsterForm();
         }
@@ -1317,7 +1407,22 @@ export function initializeAdminPanel({
                 return;
             }
 
-            const monsterData = { name, description, hp, minAtk, maxAtk, xp, gold, itemDrop, newsworthy };
+            // Parse loot table
+            let loot = [];
+            if (monsterLootTableInput.value.trim()) {
+                try {
+                    loot = JSON.parse(monsterLootTableInput.value);
+                    if (!Array.isArray(loot)) {
+                        adminMonsterStatus.textContent = 'Loot table must be an array!';
+                        return;
+                    }
+                } catch (e) {
+                    adminMonsterStatus.textContent = 'Invalid JSON in loot table!';
+                    return;
+                }
+            }
+
+            const monsterData = { name, description, hp, minAtk, maxAtk, xp, gold, itemDrop, newsworthy, loot };
             
             // Save to Firebase
             await setDoc(doc(db, `/artifacts/${appId}/public/data/mud-monsters/${monsterId}`), monsterData);
@@ -2215,9 +2320,26 @@ export function initializeAdminPanel({
             prerequisites: prerequisites
         };
 
-        await setDoc(doc(db, `/artifacts/${appId}/public/data/mud-quests/${questId}`), questData);
-        adminQuestStatus.textContent = 'Quest saved successfully!';
-        populateQuestSelector();
+        try {
+            // Save to Firebase
+            await setDoc(doc(db, `/artifacts/${appId}/public/data/mud-quests/${questId}`), questData);
+            
+            // Save to MySQL if enabled
+            if (mysqlAPI && mysqlAPI.isEnabled()) {
+                try {
+                    await mysqlAPI.saveToMySQL('quests', questId, questData);
+                    console.log('Quest saved successfully to MySQL');
+                } catch (mysqlError) {
+                    console.error('MySQL save failed (Firebase save succeeded):', mysqlError);
+                }
+            }
+            
+            adminQuestStatus.textContent = 'Quest saved successfully!';
+            populateQuestSelector();
+        } catch (error) {
+            console.error('Error saving quest:', error);
+            adminQuestStatus.textContent = `Error: ${error.message}`;
+        }
     });
 
     deleteQuestBtn.addEventListener('click', async () => {
@@ -2271,20 +2393,35 @@ export function initializeAdminPanel({
         // Calculate positions based on directional exits
         const GRID_SIZE = 200; // Distance between rooms
         const positions = {};
+        const roomLevels = {}; // Track elevation level for each room
         const visited = new Set();
         
+        // Load saved manual positions from localStorage
+        const savedPositions = JSON.parse(localStorage.getItem('mud-map-positions') || '{}');
+        
         // Direction vectors: north = up (negative y), south = down, east = right, west = left
+        // up/down get horizontal offset to prevent stacking on same coordinates
         const directionVectors = {
             'north': { x: 0, y: -1 },
+            'n': { x: 0, y: -1 },
             'south': { x: 0, y: 1 },
+            's': { x: 0, y: 1 },
             'east': { x: 1, y: 0 },
+            'e': { x: 1, y: 0 },
             'west': { x: -1, y: 0 },
+            'w': { x: -1, y: 0 },
             'northeast': { x: 1, y: -1 },
+            'ne': { x: 1, y: -1 },
             'northwest': { x: -1, y: -1 },
+            'nw': { x: -1, y: -1 },
             'southeast': { x: 1, y: 1 },
+            'se': { x: 1, y: 1 },
             'southwest': { x: -1, y: 1 },
-            'up': { x: 0, y: -1.5 },
-            'down': { x: 0, y: 1.5 }
+            'sw': { x: -1, y: 1 },
+            'up': { x: 2, y: -1 },      // Larger offset to the right and up
+            'u': { x: 2, y: -1 },
+            'down': { x: 2, y: 1 },      // Larger offset to the right and down
+            'd': { x: 2, y: 1 }
         };
 
         // Find starting room (first room in gameWorld or one with most connections)
@@ -2299,24 +2436,52 @@ export function initializeAdminPanel({
         });
 
         // Recursive function to position rooms based on exits
-        function positionRoom(roomId, x, y) {
+        function positionRoom(roomId, x, y, level = 0) {
             if (visited.has(roomId)) return;
             visited.add(roomId);
-            positions[roomId] = { x: x * GRID_SIZE, y: y * GRID_SIZE };
+            
+            // Use saved position if available, otherwise calculate
+            if (savedPositions[roomId]) {
+                positions[roomId] = savedPositions[roomId];
+            } else {
+                positions[roomId] = { x: x * GRID_SIZE, y: y * GRID_SIZE };
+            }
+            roomLevels[roomId] = level;
 
             const room = gameWorld[roomId];
             if (!room || !room.exits) return;
 
             Object.entries(room.exits).forEach(([direction, targetRoomId]) => {
                 if (gameWorld[targetRoomId] && !visited.has(targetRoomId)) {
-                    const vector = directionVectors[direction.toLowerCase()] || { x: 1, y: 0 };
-                    positionRoom(targetRoomId, x + vector.x, y + vector.y);
+                    const dirKey = direction.toLowerCase();
+                    const vector = directionVectors[dirKey];
+                    if (!vector) {
+                        console.warn(`Unknown direction "${direction}" in room ${roomId}, using default vector`);
+                    }
+                    const finalVector = vector || { x: Math.random() * 2 - 1, y: Math.random() * 2 - 1 };
+                    
+                    // Track level changes for up/down
+                    let newLevel = level;
+                    if (dirKey === 'up' || dirKey === 'u') newLevel = level - 1;
+                    else if (dirKey === 'down' || dirKey === 'd') newLevel = level + 1;
+                    
+                    positionRoom(targetRoomId, x + finalVector.x, y + finalVector.y, newLevel);
                 }
             });
         }
 
-        // Start positioning from origin
-        positionRoom(startRoomId, 0, 0);
+        // Start positioning from origin at level 0
+        positionRoom(startRoomId, 0, 0, 0);
+
+        // Find disconnected rooms and position them in separate clusters
+        let clusterOffset = 0;
+        Object.keys(gameWorld).forEach(roomId => {
+            if (!visited.has(roomId)) {
+                // Start a new cluster for disconnected rooms at level 0
+                clusterOffset += 10; // Move each cluster 10 grid units to the side
+                positionRoom(roomId, clusterOffset, 0, 0);
+            }
+        });
 
         // Build nodes (rooms) with calculated positions
         const nodes = [];
@@ -2343,15 +2508,39 @@ export function initializeAdminPanel({
                 label += '\n' + badges.join(' ');
             }
             
-            // Determine node color based on contents
-            let color = '#00ff41'; // Default green
-            if (playerCount > 0) color = '#fbbf24'; // Yellow if players present
-            else if (monsterCount > 0) color = '#ef4444'; // Red if monsters
-            else if (npcCount > 0) color = '#a855f7'; // Purple if NPCs
-            else if (itemCount > 0) color = '#3b82f6'; // Blue if items
+            // Determine node color based on contents and level
+            const level = roomLevels[roomId] || 0;
+            let color;
             
-            // Get position or default to random if not visited
-            const pos = positions[roomId] || { x: Math.random() * 400 - 200, y: Math.random() * 400 - 200 };
+            // Debug log for rooms with unexpected levels
+            if (level !== 0 && room.name) {
+                console.log(`Room "${room.name}" (${roomId}): level ${level}`);
+            }
+            
+            // If players present, always show yellow
+            if (playerCount > 0) {
+                color = '#fbbf24'; // Yellow
+            } else {
+                // Color based on elevation level
+                if (level < -2) color = '#1e40af'; // Deep blue (far below)
+                else if (level === -2) color = '#3b82f6'; // Blue (below)
+                else if (level === -1) color = '#60a5fa'; // Light blue (below)
+                else if (level === 0) color = '#00ff41'; // Green (ground level)
+                else if (level === 1) color = '#fbbf24'; // Yellow/orange (above)
+                else if (level === 2) color = '#f97316'; // Orange (above)
+                else if (level > 2) color = '#dc2626'; // Red (far above)
+                
+                // Overlay indicators for special contents
+                if (monsterCount > 0) color = '#ef4444'; // Red override for monsters
+                else if (npcCount > 0) color = '#a855f7'; // Purple override for NPCs
+            }
+            
+            // Get position (all rooms should now have positions)
+            const pos = positions[roomId];
+            if (!pos) {
+                console.error(`Room ${roomId} has no position!`);
+                return; // Skip this room
+            }
             
             nodes.push({
                 id: roomId,
@@ -2454,6 +2643,19 @@ export function initializeAdminPanel({
             }
         });
 
+        // Save positions when nodes are dragged
+        networkInstance.on('dragEnd', (params) => {
+            if (params.nodes.length > 0) {
+                const savedPositions = JSON.parse(localStorage.getItem('mud-map-positions') || '{}');
+                params.nodes.forEach(nodeId => {
+                    const position = networkInstance.getPositions([nodeId])[nodeId];
+                    savedPositions[nodeId] = { x: position.x, y: position.y };
+                });
+                localStorage.setItem('mud-map-positions', JSON.stringify(savedPositions));
+                console.log(`Saved positions for ${params.nodes.length} room(s)`);
+            }
+        });
+
         // Fit the network to show all nodes
         setTimeout(() => {
             networkInstance.fit({
@@ -2468,6 +2670,15 @@ export function initializeAdminPanel({
     // Refresh map button
     document.getElementById('refresh-map-btn')?.addEventListener('click', () => {
         generateMap();
+    });
+
+    // Reset map positions button
+    document.getElementById('reset-map-positions-btn')?.addEventListener('click', () => {
+        if (confirm('Reset all manually positioned rooms? This will restore automatic positioning based on exits.')) {
+            localStorage.removeItem('mud-map-positions');
+            console.log('Cleared saved map positions');
+            generateMap();
+        }
     });
 
     // Refresh dropdowns button

@@ -252,6 +252,10 @@
                         <label for="item-cost" class="block mb-1 mt-2">Cost (in gold)</label>
                         <input type="number" id="item-cost" class="admin-input" value="0">
                     </div>
+                    <div>
+                        <label for="item-weight" class="block mb-1 mt-2">Weight (in lbs)</label>
+                        <input type="number" id="item-weight" class="admin-input" value="0" step="0.1" min="0">
+                    </div>
                 </div>
                 <div class="mt-2">
                     <label for="item-description" class="block mb-1">Description (shown when examined)</label>
@@ -383,6 +387,12 @@
                 <div>
                     <label class="block mb-1 mt-2">Items This NPC Sells</label>
                     <div id="npc-sells-selector" class="admin-input h-24 overflow-y-auto"></div>
+                </div>
+                <div>
+                    <label class="block mb-1 mt-2">Items This NPC Buys (from players)</label>
+                    <div id="npc-buys-selector" class="admin-input h-24 overflow-y-auto"></div>
+                    <label for="npc-buy-rate" class="block mb-1 mt-2">Buy Rate (0.0-1.0, e.g., 0.4 = pays 40%)</label>
+                    <input type="number" id="npc-buy-rate" class="admin-input" step="0.1" min="0" max="1" placeholder="0.4">
                 </div>
                 <div class="mt-2">
                     <label class="flex items-center">
@@ -572,11 +582,16 @@
                         <input type="number" id="monster-gold" class="admin-input" value="5">
                     </div>
                     <div>
-                        <label>Item Drop (optional)</label>
+                        <label>Item Drop (optional, legacy)</label>
                         <select id="monster-item-drop" class="admin-input">
                             <option value="">-- None --</option>
                         </select>
                     </div>
+                </div>
+                <div class="mt-2">
+                    <label for="monster-loot-table">Loot Table (JSON array - supports multiple items with quantities & drop rates)</label>
+                    <textarea id="monster-loot-table" class="admin-input font-mono text-sm" rows="4" placeholder='[{"itemId":"iron_ore","quantity":1,"dropRate":80}]'></textarea>
+                    <div class="text-xs text-gray-400 mt-1">Format: [{"itemId":"item_id","quantity":1,"dropRate":100}] - dropRate is 0-100 (default 100)</div>
                 </div>
                 <div class="mt-2">
                     <label class="flex items-center">
@@ -1227,13 +1242,17 @@
                         <span class="text-red-400">👹 Has Monsters</span>
                         <span class="text-yellow-400">⭐ Has Players</span>
                     </div>
-                    <button id="refresh-map-btn" class="mt-2 bg-yellow-400 text-black px-4 py-2 rounded">Refresh Map</button>
+                    <div class="mt-2 flex gap-2">
+                        <button id="refresh-map-btn" class="bg-yellow-400 text-black px-4 py-2 rounded">Refresh Map</button>
+                        <button id="reset-map-positions-btn" class="bg-red-600 text-white px-4 py-2 rounded">Reset Positions</button>
+                    </div>
                 </div>
                 
                 <div id="map-network"></div>
                 
                 <div class="mt-4 text-sm text-gray-400 text-center">
-                    <p>💡 Click and drag to pan • Scroll to zoom • Click a room to edit it</p>
+                    <p>💡 Click and drag to pan • Scroll to zoom • Click a room to edit it • Drag rooms to reposition (saved automatically)</p>
+                    <p class="mt-1 text-xs">🎨 Room colors indicate elevation: Blue (below) → Green (ground) → Orange/Red (above)</p>
                 </div>
             </div>
 
@@ -1505,6 +1524,6 @@
     </div>
     <!-- END OF CHARACTER CREATION -->
 
-    <script type="module" src="./js/app.js?v=20251021-024"></script>
+    <script type="module" src="./js/app.js?v=20251021-063"></script>
 </body>
 </html>

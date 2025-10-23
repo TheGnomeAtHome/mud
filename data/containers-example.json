@@ -1,0 +1,93 @@
+{
+  "containers": [
+    {
+      "id": "leather_backpack",
+      "name": "Leather Backpack",
+      "description": "A sturdy leather backpack with multiple pockets and straps.",
+      "itemType": "container",
+      "weight": 3,
+      "value": 25,
+      "movable": true,
+      "specialData": {
+        "capacity": 50,
+        "capacityBonus": 20,
+        "description": "A well-crafted backpack that can hold many items and increases your carrying capacity."
+      }
+    },
+    {
+      "id": "small_pouch",
+      "name": "Small Pouch",
+      "description": "A small leather pouch suitable for carrying coins or small items.",
+      "itemType": "container",
+      "weight": 0.5,
+      "value": 5,
+      "movable": true,
+      "specialData": {
+        "capacity": 10,
+        "description": "A compact pouch for organizing small items."
+      }
+    },
+    {
+      "id": "military_duffel",
+      "name": "Military Duffel Bag",
+      "description": "A heavy-duty canvas duffel bag designed for carrying large amounts of gear.",
+      "itemType": "container",
+      "weight": 5,
+      "value": 50,
+      "movable": true,
+      "specialData": {
+        "capacity": 100,
+        "capacityBonus": 50,
+        "description": "An enormous bag that significantly increases your carrying capacity."
+      }
+    },
+    {
+      "id": "wooden_chest",
+      "name": "Wooden Chest",
+      "description": "A heavy wooden chest with iron bands and a sturdy lock.",
+      "itemType": "container",
+      "weight": 20,
+      "value": 100,
+      "movable": true,
+      "specialData": {
+        "capacity": 200,
+        "description": "A large chest perfect for storing valuables. Too heavy to carry comfortably while full."
+      }
+    },
+    {
+      "id": "spell_component_pouch",
+      "name": "Spell Component Pouch",
+      "description": "A magical pouch with many small compartments for spell reagents.",
+      "itemType": "container",
+      "weight": 1,
+      "value": 75,
+      "movable": true,
+      "specialData": {
+        "capacity": 15,
+        "capacityBonus": 5,
+        "description": "Specially designed for organizing spell components and magical items."
+      }
+    },
+    {
+      "id": "adventurers_satchel",
+      "name": "Adventurer's Satchel",
+      "description": "A practical shoulder bag with waterproof lining.",
+      "itemType": "container",
+      "weight": 2,
+      "value": 35,
+      "movable": true,
+      "specialData": {
+        "capacity": 30,
+        "capacityBonus": 15,
+        "description": "A reliable companion for any adventurer, with room for essentials."
+      }
+    }
+  ],
+  "notes": {
+    "weight": "Weight in pounds. The container's weight is separate from its contents.",
+    "capacity": "Maximum weight of items that can be stored inside (in pounds).",
+    "capacityBonus": "If the container is equipped, this bonus is added to the player's total carrying capacity.",
+    "contents": "Runtime property - not defined in template. Each instance stores its contents array.",
+    "equipped": "Runtime property - containers can be 'equipped' to provide carrying capacity bonuses."
+  }
+}

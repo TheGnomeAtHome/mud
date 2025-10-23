@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MUD Game - MySQL Bulk Import v2</title>
+    <!-- Version 2.0 - Updated API key handling -->
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Courier New', monospace;
+            background-color: #0a0a0a;
+            color: #00ff00;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            color: #00ff00;
+            text-shadow: 0 0 10px #00ff00;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #00aaff;
+            margin-bottom: 30px;
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .tab {
+            padding: 10px 20px;
+            background-color: #1a1a1a;
+            border: 2px solid #00ff00;
+            color: #00ff00;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .tab:hover {
+            background-color: #00ff00;
+            color: #000;
+        }
+        
+        .tab.active {
+            background-color: #00ff00;
+            color: #000;
+        }
+        
+        .tab-content {
+            display: none;
+            background-color: #1a1a1a;
+            border: 2px solid #00ff00;
+            padding: 20px;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        textarea {
+            width: 100%;
+            min-height: 400px;
+            background-color: #000;
+            color: #00ff00;
+            border: 2px solid #00ff00;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            resize: vertical;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            padding: 12px 24px;
+            background-color: #00ff00;
+            color: #000;
+            border: none;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        
+        button:hover {
+            background-color: #00cc00;
+            box-shadow: 0 0 10px #00ff00;
+        }
+        
+        button:disabled {
+            background-color: #666;
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+        
+        .load-template {
+            background-color: #0088ff;
+        }
+        
+        .load-template:hover {
+            background-color: #0066cc;
+        }
+        
+        .clear-btn {
+            background-color: #ff9900;
+        }
+        
+        .clear-btn:hover {
+            background-color: #cc7700;
+        }
+        
+        #status {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #000;
+            border: 2px solid #00ff00;
+            min-height: 100px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .status-line {
+            margin: 5px 0;
+            padding: 5px;
+        }
+        
+        .success {
+            color: #00ff00;
+        }
+        
+        .error {
+            color: #ff0000;
+        }
+        
+        .info {
+            color: #00aaff;
+        }
+        
+        .warning {
+            color: #ff9900;
+        }
+        
+        .help {
+            background-color: #1a1a1a;
+            border: 2px solid #00aaff;
+            padding: 15px;
+            margin-top: 20px;
+            color: #00aaff;
+        }
+        
+        .help h3 {
+            color: #00aaff;
+            margin-bottom: 10px;
+        }
+        
+        .help ul {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+        
+        .help code {
+            background-color: #000;
+            padding: 2px 6px;
+            color: #00ff00;
+        }
+        
+        .config-section {
+            background-color: #1a1a1a;
+            border: 2px solid #ff9900;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .config-section h3 {
+            color: #ff9900;
+            margin-bottom: 10px;
+        }
+        
+        .config-row {
+            display: flex;
+            gap: 10px;
+            margin: 10px 0;
+            align-items: center;
+        }
+        
+        .config-row label {
+            min-width: 120px;
+            color: #00ff00;
+        }
+        
+        .config-row input {
+            flex: 1;
+            background-color: #000;
+            color: #00ff00;
+            border: 2px solid #00ff00;
+            padding: 8px;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚔️ MUD GAME - MySQL Bulk Import ⚔️</h1>
+        <p class="subtitle">Import game content directly to MySQL database</p>
+        
+        <div class="config-section">
+            <h3>🔧 Configuration</h3>
+            <div class="config-row">
+                <label>API URL:</label>
+                <input type="text" id="apiUrl" value="https://jphsoftware.com/api">
+            </div>
+            <div class="config-row">
+                <label>Admin API Key:</label>
+                <input type="password" id="apiKey" value="cu4s2YmwWdpMGZ8PfLaJC6RTje1FNSbO">
+            </div>
+        </div>
+        
+        <div class="tabs">
+            <div class="tab active" data-tab="rooms">📍 Rooms</div>
+            <div class="tab" data-tab="items">🗡️ Items</div>
+            <div class="tab" data-tab="npcs">👥 NPCs</div>
+            <div class="tab" data-tab="monsters">👹 Monsters</div>
+            <div class="tab" data-tab="classes">⚔️ Classes</div>
+            <div class="tab" data-tab="quests">📜 Quests</div>
+            <div class="tab" data-tab="spells">✨ Spells</div>
+        </div>
+        
+        <div class="tab-content active" data-content="rooms">
+            <h3>Import Rooms</h3>
+            <p style="margin: 10px 0; color: #00aaff;">Paste JSON array of room objects. Each room must have: id, name, description</p>
+            <textarea id="rooms-data" placeholder='[{"id": "room1", "name": "Room Name", "description": "Room description", "exits": {"north": "room2"}}]'></textarea>
+            <div class="button-group">
+                <button onclick="importData('rooms')">Import Rooms</button>
+                <button class="load-template" onclick="loadTemplate('rooms')">Load Template</button>
+                <button class="clear-btn" onclick="clearData('rooms')">Clear</button>
+            </div>
+        </div>
+        
+        <div class="tab-content" data-content="items">
+            <h3>Import Items</h3>
+            <p style="margin: 10px 0; color: #00aaff;">Paste JSON array of item objects. Each item must have: id, name, description, type</p>
+            <textarea id="items-data" placeholder='[{"id": "sword1", "name": "Iron Sword", "description": "A sharp sword", "type": "weapon", "value": 50, "damage": 10}]'></textarea>
+            <div class="button-group">
+                <button onclick="importData('items')">Import Items</button>
+                <button class="load-template" onclick="loadTemplate('items')">Load Template</button>
+                <button class="clear-btn" onclick="clearData('items')">Clear</button>
+            </div>
+        </div>
+        
+        <div class="tab-content" data-content="npcs">
+            <h3>Import NPCs</h3>
+            <p style="margin: 10px 0; color: #00aaff;">Paste JSON array of NPC objects. Each NPC must have: id, name, description</p>
+            <textarea id="npcs-data" placeholder='[{"id": "merchant1", "name": "Bob the Merchant", "description": "A friendly trader", "roomId": "town", "isTrader": true}]'></textarea>
+            <div class="button-group">
+                <button onclick="importData('npcs')">Import NPCs</button>
+                <button class="load-template" onclick="loadTemplate('npcs')">Load Template</button>
+                <button class="clear-btn" onclick="clearData('npcs')">Clear</button>
+            </div>
+        </div>
+        
+        <div class="tab-content" data-content="monsters">
+            <h3>Import Monsters</h3>
+            <p style="margin: 10px 0; color: #00aaff;">Paste JSON array of monster objects. Each monster must have: id, name, description, hp, maxHp</p>
+            <textarea id="monsters-data" placeholder='[{"id": "goblin", "name": "Goblin", "description": "A small green creature", "hp": 20, "maxHp": 20, "damage": 5}]'></textarea>
+            <div class="button-group">
+                <button onclick="importData('monsters')">Import Monsters</button>
+                <button class="load-template" onclick="loadTemplate('monsters')">Load Template</button>
+                <button class="clear-btn" onclick="clearData('monsters')">Clear</button>
+            </div>
+        </div>
+        
+        <div class="tab-content" data-content="classes">
+            <h3>Import Classes</h3>
+            <p style="margin: 10px 0; color: #00aaff;">Paste JSON array of class objects. Each class must have: id, name, description</p>
+            <textarea id="classes-data" placeholder='[{"id": "warrior", "name": "Warrior", "description": "Strong fighter", "statBonuses": {"str": 3, "con": 2}}]'></textarea>
+            <div class="button-group">
+                <button onclick="importData('classes')">Import Classes</button>
+                <button class="load-template" onclick="loadTemplate('classes')">Load Template</button>
+                <button class="clear-btn" onclick="clearData('classes')">Clear</button>
+            </div>
+        </div>
+        
+        <div class="tab-content" data-content="quests">
+            <h3>Import Quests</h3>
+            <p style="margin: 10px 0; color: #00aaff;">Paste JSON array of quest objects. Each quest must have: id, name, description, type</p>
+            <textarea id="quests-data" placeholder='[{"id": "quest1", "name": "Kill Goblins", "description": "Defeat 5 goblins", "type": "kill", "target": "goblin", "count": 5}]'></textarea>
+            <div class="button-group">
+                <button onclick="importData('quests')">Import Quests</button>
+                <button class="load-template" onclick="loadTemplate('quests')">Load Template</button>
+                <button class="clear-btn" onclick="clearData('quests')">Clear</button>
+            </div>
+        </div>
+        
+        <div class="tab-content" data-content="spells">
+            <h3>Import Spells</h3>
+            <p style="margin: 10px 0; color: #00aaff;">Paste JSON array of spell objects. Each spell must have: id, name, description, manaCost</p>
+            <textarea id="spells-data" placeholder='[{"id": "fireball", "name": "Fireball", "description": "A ball of flame", "manaCost": 20, "damage": 30}]'></textarea>
+            <div class="button-group">
+                <button onclick="importData('spells')">Import Spells</button>
+                <button class="load-template" onclick="loadTemplate('spells')">Load Template</button>
+                <button class="clear-btn" onclick="clearData('spells')">Clear</button>
+            </div>
+        </div>
+        
+        <div id="status">
+            <div class="status-line info">Ready to import. Paste your JSON data above and click Import.</div>
+        </div>
+        
+        <div class="help">
+            <h3>📖 Instructions</h3>
+            <ul>
+                <li>Select a tab above for the type of content you want to import</li>
+                <li>Paste JSON array of objects (or click "Load Template" to see examples)</li>
+                <li>Each object must include an <code>id</code> field and type-specific required fields</li>
+                <li>Click "Import" to send data to MySQL database</li>
+                <li>If an item with the same ID exists, it will be updated (not duplicated)</li>
+                <li>Template files are available in <code>/data/templates/</code></li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabName = tab.dataset.tab;
+                
+                // Update tabs
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                // Update content
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                document.querySelector(`[data-content="${tabName}"]`).classList.add('active');
+            });
+        });
+        
+        function log(message, type = 'info') {
+            const status = document.getElementById('status');
+            const line = document.createElement('div');
+            line.className = `status-line ${type}`;
+            line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            status.appendChild(line);
+            status.scrollTop = status.scrollHeight;
+        }
+        
+        async function importData(type) {
+            const textarea = document.getElementById(`${type}-data`);
+            const apiUrl = document.getElementById('apiUrl').value;
+            const apiKey = document.getElementById('apiKey').value;
+            
+            if (!textarea.value.trim()) {
+                log(`Error: No data provided for ${type}`, 'error');
+                return;
+            }
+            
+            try {
+                // Parse JSON
+                const items = JSON.parse(textarea.value);
+                
+                if (!Array.isArray(items)) {
+                    log('Error: Data must be a JSON array', 'error');
+                    return;
+                }
+                
+                if (items.length === 0) {
+                    log('Error: Array is empty', 'error');
+                    return;
+                }
+                
+                log(`Importing ${items.length} ${type}...`, 'info');
+                
+                // Send to API
+                const response = await fetch(`${apiUrl}/bulk-import.php`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-API-Key': apiKey
+                    },
+                    body: JSON.stringify({
+                        type: type,
+                        items: items,
+                        api_key: apiKey
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    log(`✓ Successfully imported ${result.imported}/${result.total} ${type}`, 'success');
+                    
+                    if (result.errors && result.errors.length > 0) {
+                        log(`⚠ ${result.errors.length} items had errors:`, 'warning');
+                        result.errors.forEach(err => log(`  - ${err}`, 'warning'));
+                    }
+                    
+                    // Clear textarea on success
+                    textarea.value = '';
+                } else {
+                    log(`✗ Import failed: ${result.error}`, 'error');
+                }
+                
+            } catch (error) {
+                log(`✗ Error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function loadTemplate(type) {
+            const textarea = document.getElementById(`${type}-data`);
+            
+            try {
+                const response = await fetch(`data/templates/${type}-example.json`);
+                if (response.ok) {
+                    const text = await response.text();
+                    textarea.value = text;
+                    log(`Loaded template for ${type}`, 'success');
+                } else {
+                    log(`Template not found: data/templates/${type}-example.json`, 'warning');
+                }
+            } catch (error) {
+                log(`Error loading template: ${error.message}`, 'error');
+            }
+        }
+        
+        function clearData(type) {
+            const textarea = document.getElementById(`${type}-data`);
+            textarea.value = '';
+            log(`Cleared ${type} data`, 'info');
+        }
+    </script>
+</body>
+</html>

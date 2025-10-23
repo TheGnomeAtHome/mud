@@ -1,10 +1,17 @@
 // Firebase initialization module
 import { FIREBASE_CONFIG } from './config.js';
 
+// Initialize Firebase immediately for exports
+const { initializeApp } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
+const { getAuth } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
+const { getFirestore } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+
+const app = initializeApp(FIREBASE_CONFIG);
+export const auth = getAuth(app);
+export const db = getFirestore(app);
+
 export async function initializeFirebase() {
-    const { initializeApp } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
     const { 
-        getAuth, 
         onAuthStateChanged, 
         createUserWithEmailAndPassword, 
         signInWithEmailAndPassword, 
@@ -12,7 +19,6 @@ export async function initializeFirebase() {
         sendPasswordResetEmail 
     } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
     const { 
-        getFirestore, 
         doc, 
         getDoc, 
         setDoc, 
@@ -31,11 +37,6 @@ export async function initializeFirebase() {
         deleteDoc, 
         runTransaction 
     } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
-
-    // Use the Firebase configuration from config.js
-    const app = initializeApp(FIREBASE_CONFIG);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
 
     return {
         app,

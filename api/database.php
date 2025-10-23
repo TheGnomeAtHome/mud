@@ -123,4 +123,9 @@ class Database {
         }
     }
 }
+
+// Helper function for bulk-import.php
+function getDatabase() {
+    return Database::getInstance()->getConnection();
+}
 ?>

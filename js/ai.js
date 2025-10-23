@@ -89,6 +89,87 @@ export async function parseCommandWithGemini(command, logToTerminal) {
         return { action: "go", target: lowerCmd };
     }
     
+    // Pre-process common trading commands
+    console.log(`[Command Parser] Testing command: "${lowerCmd}"`);
+    
+    const sellMatch = lowerCmd.match(/^(?:sell|vendor)\s+(.+?)\s+(?:to|from)\s+(.+)$/);
+    if (sellMatch) {
+        console.log(`[Command Parser] Sell command detected: "${command}" -> item: "${sellMatch[1]}", npc: "${sellMatch[2]}"`);
+        return { action: "sell", target: sellMatch[1], npc_target: sellMatch[2] };
+    }
+    
+    const buyMatch = lowerCmd.match(/^(?:buy|purchase)\s+(.+?)\s+(?:from|at)\s+(.+)$/);
+    if (buyMatch) {
+        console.log(`[Command Parser] Buy command detected: "${command}" -> item: "${buyMatch[1]}", npc: "${buyMatch[2]}"`);
+        return { action: "buy", target: buyMatch[1], npc_target: buyMatch[2] };
+    }
+    
+    // Haggle formats - order matters, most specific first:
+    // "haggle torch for 5 from frank" - with "for" before price
+    // "haggle torch 5 from frank" - standard format
+    // "haggle torch 5 frank" - no preposition
+    // "haggle for torch from frank" - no price
+    
+    // Try: "haggle <item> for <price> from/with <npc>"
+    const haggleForMatch = lowerCmd.match(/^(?:haggle|negotiate|barter)\s+(\w+(?:\s+\w+)?)\s+for\s+(\d+)\s+(?:from|with)\s+(.+)$/);
+    if (haggleForMatch) {
+        console.log(`[Command Parser] Haggle (with 'for') detected: "${command}"`);
+        return { action: "haggle", target: haggleForMatch[1], topic: haggleForMatch[2], npc_target: haggleForMatch[3] };
+    }
+    
+    // Try: "haggle <item> <price> from/with <npc>"
+    const haggleWithPriceMatch = lowerCmd.match(/^(?:haggle|negotiate|barter)\s+(\w+(?:\s+\w+)?)\s+(\d+)\s+(?:from|with)\s+(.+)$/);
+    if (haggleWithPriceMatch) {
+        console.log(`[Command Parser] Haggle with price detected: "${command}"`);
+        return { action: "haggle", target: haggleWithPriceMatch[1], topic: haggleWithPriceMatch[2], npc_target: haggleWithPriceMatch[3] };
+    }
+    
+    // Try: "haggle <item> <price> <npc>" (no preposition)
+    const haggleSimpleMatch = lowerCmd.match(/^(?:haggle|negotiate|barter)\s+(\w+(?:\s+\w+)?)\s+(\d+)\s+(.+)$/);
+    if (haggleSimpleMatch) {
+        console.log(`[Command Parser] Haggle (simple) detected: "${command}"`);
+        return { action: "haggle", target: haggleSimpleMatch[1], topic: haggleSimpleMatch[2], npc_target: haggleSimpleMatch[3] };
+    }
+    
+    // Try: "haggle for <item> from/with <npc>" (no price)
+    const haggleMatch = lowerCmd.match(/^(?:haggle|negotiate|barter)\s+(?:for\s+)?(\w+(?:\s+\w+)?)\s+(?:from|with)\s+(.+)$/);
+    if (haggleMatch) {
+        console.log(`[Command Parser] Haggle command detected: "${command}"`);
+        return { action: "haggle", target: haggleMatch[1], npc_target: haggleMatch[2] };
+    }
+    
+    const giveMatch = lowerCmd.match(/^give\s+(.+?)\s+to\s+(.+)$/);
+    if (giveMatch) {
+        console.log(`[Command Parser] Give command detected: "${command}"`);
+        return { action: "give", target: giveMatch[1], npc_target: giveMatch[2] };
+    }
+    
+    const tradeMatch = lowerCmd.match(/^(?:trade|swap)\s+(?:with\s+)?(.+)$/);
+    if (tradeMatch) {
+        console.log(`[Command Parser] Trade command detected: "${command}"`);
+        return { action: "trade", npc_target: tradeMatch[1] };
+    }
+    
+    const listMatch = lowerCmd.match(/^(?:list|show|display|view)\s+(?:inventory\s+)?(?:from\s+)?(.+)$/);
+    if (listMatch) {
+        console.log(`[Command Parser] List command detected: "${command}" -> npc: "${listMatch[1]}"`);
+        return { action: "list", target: listMatch[1] };
+    }
+    
+    const appraiseMatch = lowerCmd.match(/^(?:appraise|value|price|worth)\s+(.+)$/);
+    if (appraiseMatch) {
+        console.log(`[Command Parser] Appraise command detected: "${command}" -> item: "${appraiseMatch[1]}"`);
+        return { action: "appraise", target: appraiseMatch[1] };
+    }
+    
+    const reputationMatch = lowerCmd.match(/^(?:reputation|rep|standing)\s+(?:with\s+)?(.+)$/);
+    if (reputationMatch) {
+        console.log(`[Command Parser] Reputation command detected: "${command}" -> npc: "${reputationMatch[1]}"`);
+        return { action: "reputation", npc_target: reputationMatch[1] };
+    }
+    
+    console.log(`[Command Parser] No pre-processor match, sending to Gemini...`);
+    
     const apiUrl = `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
     const prompt = `You are a text adventure game command parser. Parse this command into JSON format.
@@ -96,23 +177,119 @@ export async function parseCommandWithGemini(command, logToTerminal) {
 User command: "${command}"
 
 Rules:
-- The action must be one of: "go", "get", "drop", "examine", "say", "buy", "attack", "ask_dm", "talk", "ask_npc", "look", "inventory", "who", "score", "stats", "help", "logout", "use", "drink", "consume", "eat", "read", "cast", "spells", "spell", "learn", "guild", "guilds", "gc", "quest", "quests", "party", "pc", "npcchats", "unknown"
+- The action must be one of: "go", "north", "south", "east", "west", "northeast", "northwest", "southeast", "southwest", "up", "down", "n", "s", "e", "w", "ne", "nw", "se", "sw", "u", "d", "get", "drop", "examine", "say", "buy", "sell", "haggle", "give", "trade", "attack", "ask_dm", "talk", "ask_npc", "look", "inventory", "who", "score", "stats", "help", "logout", "use", "unlock", "lock", "drink", "consume", "eat", "read", "cast", "spells", "spell", "learn", "guild", "guilds", "gc", "quest", "quests", "party", "pc", "npcchats", "put", "take", "equip", "unequip", "wear", "wield", "remove", "equipment", "equipped", "unknown"
 - For movement: "go north" -> {"action": "go", "target": "north"}
+- For movement: "north" -> {"action": "north"}
+- For movement: "n" -> {"action": "n"}
+- For movement: "walk north" -> {"action": "go", "target": "north"}
+- For movement: "head east" -> {"action": "go", "target": "east"}
+- For movement: "move to the south" -> {"action": "go", "target": "south"}
+- For movement: "I want to go west" -> {"action": "go", "target": "west"}
+- For movement: "let's go upstairs" -> {"action": "go", "target": "up"}
+- For movement: "climb down" -> {"action": "go", "target": "down"}
+- For movement: "southeast" -> {"action": "southeast"}
+- For movement: "se" -> {"action": "se"}
 - For items: "get torch" -> {"action": "get", "target": "torch"}
+- For items: "pick up the sword" -> {"action": "get", "target": "sword"}
+- For items: "grab the key" -> {"action": "get", "target": "key"}
+- For items: "take the iron" -> {"action": "get", "target": "iron"}
+- For items: "I want to pick up the torch" -> {"action": "get", "target": "torch"}
+- For dropping: "drop sword" -> {"action": "drop", "target": "sword"}
+- For dropping: "put down the axe" -> {"action": "drop", "target": "axe"}
+- For dropping: "leave the shield here" -> {"action": "drop", "target": "shield"}
+- For examining: "look at the door" -> {"action": "examine", "target": "door"}
+- For examining: "check out the painting" -> {"action": "examine", "target": "painting"}
+- For examining: "inspect the chest" -> {"action": "examine", "target": "chest"}
+- For examining: "what's that statue" -> {"action": "examine", "target": "statue"}
 - For NPCs: "talk to guard" -> {"action": "talk", "npc_target": "guard"}
+- For NPCs: "speak with the merchant" -> {"action": "talk", "npc_target": "merchant"}
+- For NPCs: "chat with bob" -> {"action": "talk", "npc_target": "bob"}
+- For NPCs: "I want to talk to the blacksmith" -> {"action": "talk", "npc_target": "blacksmith"}
 - For buying: "buy beer from barman" -> {"action": "buy", "target": "beer", "npc_target": "barman"}
+- For buying: "purchase a sword" -> {"action": "buy", "target": "sword"}
+- For buying: "I'd like to buy the armor" -> {"action": "buy", "target": "armor"}
+- For buying: "can I buy a potion from the alchemist" -> {"action": "buy", "target": "potion", "npc_target": "alchemist"}
+- For selling: "sell ring to frank" -> {"action": "sell", "target": "ring", "npc_target": "frank"}
+- For selling: "I want to sell my sword" -> {"action": "sell", "target": "sword"}
+- For selling: "can I sell this axe" -> {"action": "sell", "target": "axe"}
+- For haggling: "haggle sword 50 from merchant" -> {"action": "haggle", "target": "sword", "topic": "50", "npc_target": "merchant"}
+- For haggling: "negotiate the price of the sword" -> {"action": "haggle", "target": "sword"}
+- For haggling: "can you do better on the price" -> {"action": "haggle"}
+- For giving: "give potion to bob" -> {"action": "give", "target": "potion", "npc_target": "bob"}
+- For giving: "hand the key to the guard" -> {"action": "give", "target": "key", "npc_target": "guard"}
+- For trading: "trade with alice" -> {"action": "trade", "npc_target": "alice"}
+- For trading: "I want to trade with the merchant" -> {"action": "trade", "npc_target": "merchant"}
+- For trading: "open trade window" -> {"action": "trade"}
 - For asking: "ask man about cave" -> {"action": "ask_npc", "npc_target": "man", "topic": "cave"}
+- For asking: "what does the guard know about dragons" -> {"action": "ask_npc", "npc_target": "guard", "topic": "dragons"}
+- For asking: "hey merchant, tell me about quests" -> {"action": "ask_npc", "npc_target": "merchant", "topic": "quests"}
 - For attacking: "kick goblin" -> {"action": "attack", "target": "goblin", "verb": "kick"}
 - For attacking: "punch dragon" -> {"action": "attack", "target": "dragon", "verb": "punch"}
 - For attacking: "slash troll" -> {"action": "attack", "target": "troll", "verb": "slash"}
-- For attacking: ALWAYS extract the combat verb and include it in the "verb" field (kick, punch, slash, stab, bite, headbutt, etc.)
+- For attacking: "attack the orc" -> {"action": "attack", "target": "orc"}
+- For attacking: "fight the wolf" -> {"action": "attack", "target": "wolf"}
+- For attacking: "hit the skeleton" -> {"action": "attack", "target": "skeleton", "verb": "hit"}
+- For attacking: "strike the monster" -> {"action": "attack", "target": "monster", "verb": "strike"}
+- For attacking: "I want to fight the dragon" -> {"action": "attack", "target": "dragon"}
+- For attacking: ALWAYS extract the combat verb and include it in the "verb" field (kick, punch, slash, stab, bite, headbutt, strike, hit, etc.)
 - For consuming: "drink beer" -> {"action": "drink", "target": "beer"}
 - For reading: "read scroll" -> {"action": "read", "target": "scroll"}
 - For reading: "read sign" -> {"action": "read", "target": "sign"}
+- For unlocking: "unlock door" -> {"action": "unlock", "target": "door"}
+- For unlocking: "unlock north" -> {"action": "unlock", "target": "north"}
+- For locking: "lock door" -> {"action": "lock", "target": "door"}
+- For locking: "lock gate behind me" -> {"action": "lock", "target": "gate"}
+- For containers: "put sword in backpack" -> {"action": "put", "target": "sword in backpack"}
+- For containers: "store the axe in my bag" -> {"action": "put", "target": "axe in bag"}
+- For containers: "place potion in chest" -> {"action": "put", "target": "potion in chest"}
+- For containers: "take sword from backpack" -> {"action": "take", "target": "sword from backpack"}
+- For containers: "get the key from the chest" -> {"action": "take", "target": "key from chest"}
+- For containers: "retrieve my armor from the bag" -> {"action": "take", "target": "armor from bag"}
+- For containers: "open backpack" -> {"action": "use", "target": "backpack"}
+- For containers: "open the chest" -> {"action": "use", "target": "chest"}
+- For containers: "check what's in my bag" -> {"action": "use", "target": "bag"}
+- For using items: "use key" -> {"action": "use", "target": "key"}
+- For using items: "use the potion" -> {"action": "use", "target": "potion"}
+- For using items: "drink the water" -> {"action": "drink", "target": "water"}
+- For using items: "eat the bread" -> {"action": "eat", "target": "bread"}
+- For equipping: "equip sword" -> {"action": "equip", "target": "sword"}
+- For equipping: "wear armor" -> {"action": "wear", "target": "armor"}
+- For equipping: "wield axe" -> {"action": "wield", "target": "axe"}
+- For equipping: "put on the helmet" -> {"action": "wear", "target": "helmet"}
+- For equipping: "I want to equip my sword" -> {"action": "equip", "target": "sword"}
+- For unequipping: "unequip sword" -> {"action": "unequip", "target": "sword"}
+- For unequipping: "remove armor" -> {"action": "remove", "target": "armor"}
+- For unequipping: "take off the boots" -> {"action": "remove", "target": "boots"}
+- For unequipping: "stop wearing the shield" -> {"action": "unequip", "target": "shield"}
+- For inventory: "inventory" -> {"action": "inventory"}
+- For inventory: "what am I carrying" -> {"action": "inventory"}
+- For inventory: "show my items" -> {"action": "inventory"}
+- For inventory: "check my bag" -> {"action": "inventory"}
+- For looking: "look" -> {"action": "look"}
+- For looking: "look around" -> {"action": "look"}
+- For looking: "where am I" -> {"action": "look"}
+- For looking: "describe the room" -> {"action": "look"}
+- For stats: "stats" -> {"action": "stats"}
+- For stats: "score" -> {"action": "score"}
+- For stats: "show my stats" -> {"action": "stats"}
+- For stats: "how am I doing" -> {"action": "stats"}
+- For stats: "character sheet" -> {"action": "stats"}
+- For who: "who" -> {"action": "who"}
+- For who: "who's online" -> {"action": "who"}
+- For who: "show players" -> {"action": "who"}
+- For who: "who else is here" -> {"action": "who"}
+- For equipment list: "equipment" -> {"action": "equipment"}
+- For equipment list: "what am I wearing" -> {"action": "equipment"}
+- For equipment list: "show equipped items" -> {"action": "equipment"}
+- For equipment list: "what do I have equipped" -> {"action": "equipment"}
 - For spells: "cast fireball" -> {"action": "cast", "target": "fireball"}
-- For spells: "cast fireball goblin" -> {"action": "cast", "target": "fireball", "npc_target": "goblin"}
+- For spells: "cast fireball at goblin" -> {"action": "cast", "target": "fireball", "npc_target": "goblin"}
+- For spells: "use fireball on the dragon" -> {"action": "cast", "target": "fireball", "npc_target": "dragon"}
 - For learning: "learn fireball" -> {"action": "learn", "target": "fireball"}
+- For learning: "study the fireball spell" -> {"action": "learn", "target": "fireball"}
 - For spell list: "spells" -> {"action": "spells"}
+- For spell list: "what spells do I know" -> {"action": "spells"}
+- For spell list: "show my magic" -> {"action": "spells"}
 - For guilds: "guild" -> {"action": "guild"}
 - For guilds: "guild create Dragons" -> {"action": "guild", "target": "create", "npc_target": "Dragons"}
 - For guilds: "guild invite John" -> {"action": "guild", "target": "invite", "npc_target": "John"}
@@ -124,9 +301,19 @@ Rules:
 - For guilds: "guild disband confirm" -> {"action": "guild", "target": "disband", "npc_target": "confirm"}
 - For guild chat: "gc Hello everyone" -> {"action": "gc", "target": "Hello everyone"}
 - For quests: "quests" -> {"action": "quests"}
+- For quests: "show me my quests" -> {"action": "quests"}
+- For quests: "what quests do I have" -> {"action": "quests"}
 - For quests: "quest accept dragon slayer" -> {"action": "quest", "target": "accept", "topic": "dragon slayer"}
+- For quests: "accept quest dragon slayer" -> {"action": "quest", "target": "accept", "topic": "dragon slayer"}
+- For quests: "accept the iron quest" -> {"action": "quest", "target": "accept", "topic": "iron"}
+- For quests: "I want to accept the quest about iron" -> {"action": "quest", "target": "accept", "topic": "iron"}
+- For quests: "take the quest" -> {"action": "quest", "target": "accept"}
 - For quests: "quest abandon dragon slayer" -> {"action": "quest", "target": "abandon", "topic": "dragon slayer"}
+- For quests: "abandon quest" -> {"action": "quest", "target": "abandon"}
+- For quests: "drop the quest" -> {"action": "quest", "target": "abandon"}
 - For quests: "quest progress" -> {"action": "quest", "target": "progress"}
+- For quests: "how am I doing on my quests" -> {"action": "quest", "target": "progress"}
+- For quests: "check quest progress" -> {"action": "quest", "target": "progress"}
 - For quests: "quest log" -> {"action": "quest", "target": "log"}
 - For parties: "party" -> {"action": "party"}
 - For parties: "party create" -> {"action": "party", "target": "create"}
@@ -136,7 +323,25 @@ Rules:
 - For parties: "party kick PlayerName" -> {"action": "party", "target": "kick", "npc_target": "PlayerName"}
 - For parties: "party list" -> {"action": "party", "target": "list"}
 - For party chat: "pc Hello team" -> {"action": "pc", "target": "Hello team"}
-- Accept synonyms: "purchase"="buy", "fight"="attack", "speak"="talk", "consume"="use", "eat"="use", "drink"="use", "magic"="spells", "missions"="quests", "tasks"="quests", "group"="party", "team"="party"
+- Accept synonyms and natural variations:
+  - "purchase", "obtain", "acquire" = "buy"
+  - "vendor", "vend" = "sell"
+  - "barter", "negotiate", "bargain" = "haggle"
+  - "offer", "swap", "exchange" = "trade"
+  - "fight", "combat", "battle", "engage" = "attack"
+  - "speak", "chat", "converse" = "talk"
+  - "consume", "eat", "drink", "quaff" = "use"
+  - "magic", "abilities" = "spells"
+  - "missions", "tasks", "objectives" = "quests"
+  - "group", "team", "squad" = "party"
+  - "grab", "collect", "retrieve", "fetch" = "get"
+  - "discard", "toss", "leave" = "drop"
+  - "inspect", "study", "check", "view" = "examine"
+  - "walk", "move", "travel", "head" = "go"
+  - "bag", "pack", "inv", "items", "i" = "inventory"
+  - "character", "sheet", "info", "status" = "stats"
+- Be flexible with phrasing: understand "I want to...", "Can I...", "Let me...", "How do I...", etc.
+- Extract the core action and targets even from conversational language
 
 Respond with ONLY valid JSON in this exact format:
 {"action": "...", "target": "...", "npc_target": "...", "topic": "...", "verb": "..."}

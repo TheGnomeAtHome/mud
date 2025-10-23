@@ -1,0 +1,67 @@
+[
+  {
+    "id": "fireball",
+    "name": "Fireball",
+    "description": "A blazing sphere of flame erupts from your fingertips.",
+    "manaCost": 25,
+    "damage": 35,
+    "type": "offensive",
+    "range": "ranged",
+    "targetType": "single",
+    "cooldown": 0,
+    "requiredLevel": 3,
+    "classRestriction": ["wizard", "sorcerer"]
+  },
+  {
+    "id": "heal",
+    "name": "Heal",
+    "description": "Channel divine energy to restore health.",
+    "manaCost": 20,
+    "healing": 50,
+    "type": "healing",
+    "range": "touch",
+    "targetType": "single",
+    "cooldown": 0,
+    "requiredLevel": 1,
+    "classRestriction": ["priest", "cleric", "paladin"]
+  },
+  {
+    "id": "lightning-bolt",
+    "name": "Lightning Bolt",
+    "description": "A stroke of lightning forming a line strikes out from you.",
+    "manaCost": 30,
+    "damage": 40,
+    "type": "offensive",
+    "range": "ranged",
+    "targetType": "single",
+    "cooldown": 0,
+    "requiredLevel": 5,
+    "classRestriction": ["wizard", "sorcerer"]
+  },
+  {
+    "id": "shield",
+    "name": "Magical Shield",
+    "description": "An invisible barrier of magical force protects you.",
+    "manaCost": 15,
+    "defense": 10,
+    "duration": 300,
+    "type": "buff",
+    "range": "self",
+    "targetType": "self",
+    "cooldown": 60,
+    "requiredLevel": 2,
+    "classRestriction": ["wizard", "sorcerer", "cleric"]
+  },
+  {
+    "id": "cure-poison",
+    "name": "Cure Poison",
+    "description": "You neutralize poison in a creature you touch.",
+    "manaCost": 10,
+    "type": "utility",
+    "range": "touch",
+    "targetType": "single",
+    "cooldown": 0,
+    "requiredLevel": 3,
+    "classRestriction": ["priest", "cleric", "druid"]
+  }
+]

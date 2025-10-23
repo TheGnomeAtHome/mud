@@ -1,0 +1,126 @@
+[
+  {
+    "id": "castle-gate",
+    "name": "Castle Gate",
+    "description": "A massive iron gate towers before you, blocking the path north. The gate is sealed with an intricate lock mechanism. Stone walls extend east and west.",
+    "exits": {
+      "south": "village-square",
+      "north": "castle-courtyard"
+    },
+    "lockedExits": {
+      "north": {
+        "keyId": "castle-key",
+        "name": "iron gate",
+        "lockedMessage": "The massive iron gate is locked. You'll need the castle key to open it.",
+        "unlockMessage": "You insert the castle key. With a loud CLANK, the gate's mechanisms engage and it slowly swings open!",
+        "lockMessage": "You lock the gate behind you. The mechanisms engage with a satisfying CLANK.",
+        "relockable": true
+      }
+    },
+    "details": {
+      "gate": "The gate is made of thick iron bars, reinforced with steel plates. The lock mechanism looks incredibly complex.",
+      "walls": "High stone walls, impossible to climb."
+    }
+  },
+  {
+    "id": "village-square",
+    "name": "Village Square",
+    "description": "The heart of the village. A fountain bubbles in the center. The castle gate looms to the north.",
+    "exits": {
+      "north": "castle-gate",
+      "east": "village-shop",
+      "west": "village-inn"
+    },
+    "items": ["castle-key"],
+    "details": {
+      "fountain": "The fountain depicts a dragon breathing water. At the base, you spot something shiny - a key!"
+    }
+  },
+  {
+    "id": "castle-courtyard",
+    "name": "Castle Courtyard",
+    "description": "You stand in the grand courtyard. Paths lead to various parts of the castle.",
+    "exits": {
+      "south": "castle-gate",
+      "east": "castle-armory",
+      "west": "castle-treasury"
+    },
+    "lockedExits": {
+      "west": {
+        "keyId": "treasury-key",
+        "name": "treasury door",
+        "lockedMessage": "The treasury door is sealed with a golden lock. Guards must keep the key.",
+        "unlockMessage": "The treasury key turns smoothly. The door opens with a satisfying click."
+      }
+    }
+  },
+  {
+    "id": "dungeon-entrance",
+    "name": "Dungeon Entrance",
+    "description": "Dark stone steps lead down into darkness. A heavy wooden door blocks the way.",
+    "exits": {
+      "up": "castle-courtyard",
+      "down": "dungeon-cell-1"
+    },
+    "lockedExits": {
+      "down": {
+        "keyId": "dungeon-key",
+        "name": "wooden door",
+        "lockedMessage": "The wooden door is locked. You hear faint moaning from below.",
+        "unlockMessage": "The dungeon key fits the rusty lock. The door creaks open, revealing darkness below."
+      }
+    }
+  },
+  {
+    "id": "secret-library",
+    "name": "Hidden Library",
+    "description": "Ancient tomes line the walls of this secret room.",
+    "exits": {
+      "out": "castle-study"
+    },
+    "items": ["ancient-spellbook", "treasure-map"]
+  },
+  {
+    "id": "castle-study",
+    "name": "Castle Study",
+    "description": "A scholarly room filled with books and papers. One bookshelf looks suspicious.",
+    "exits": {
+      "south": "castle-courtyard",
+      "in": "secret-library"
+    },
+    "lockedExits": {
+      "in": {
+        "keyId": "hidden-lever",
+        "name": "bookshelf",
+        "lockedMessage": "The bookshelf is solid, but something seems off. Perhaps pulling a specific book would reveal more?",
+        "unlockMessage": "You pull the hidden lever disguised as a book. The entire bookshelf swings inward, revealing a secret passage!",
+        "relockable": false
+      }
+    },
+    "details": {
+      "bookshelf": "One of the books seems to be stuck in place, as if it's not really a book at all..."
+    }
+  },
+  {
+    "id": "safe-room",
+    "name": "Safe Room",
+    "description": "A small reinforced chamber. This looks like a good place to rest. A heavy door to the west can be locked from the inside.",
+    "exits": {
+      "west": "dangerous-corridor"
+    },
+    "lockedExits": {
+      "west": {
+        "keyId": "safe-room-key",
+        "name": "reinforced door",
+        "lockedMessage": "The reinforced door is locked. You feel safer with it closed.",
+        "unlockMessage": "You unlock the heavy door. It swings open with a creak.",
+        "lockMessage": "You lock the door behind you. The heavy bolt slides into place with a reassuring THUNK.",
+        "relockable": true
+      }
+    },
+    "items": ["safe-room-key"],
+    "details": {
+      "door": "A thick wooden door reinforced with iron bands. The lock looks sturdy."
+    }
+  }
+]

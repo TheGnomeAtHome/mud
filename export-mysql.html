@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MUD Game - MySQL Data Export</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Courier New', monospace;
+            background-color: #0a0a0a;
+            color: #00ff00;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            color: #00ff00;
+            text-shadow: 0 0 10px #00ff00;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #00aaff;
+            margin-bottom: 30px;
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .tab {
+            padding: 10px 20px;
+            background-color: #1a1a1a;
+            border: 2px solid #00ff00;
+            color: #00ff00;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .tab:hover {
+            background-color: #00ff00;
+            color: #000;
+        }
+        
+        .tab.active {
+            background-color: #00ff00;
+            color: #000;
+        }
+        
+        .tab-content {
+            display: none;
+            background-color: #1a1a1a;
+            border: 2px solid #00ff00;
+            padding: 20px;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            padding: 12px 24px;
+            background-color: #00ff00;
+            color: #000;
+            border: none;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        
+        button:hover {
+            background-color: #00cc00;
+            box-shadow: 0 0 10px #00ff00;
+        }
+        
+        button:disabled {
+            background-color: #666;
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+        
+        .export-json {
+            background-color: #0088ff;
+        }
+        
+        .export-json:hover {
+            background-color: #0066cc;
+        }
+        
+        .export-csv {
+            background-color: #ff9900;
+        }
+        
+        .export-csv:hover {
+            background-color: #cc7700;
+        }
+        
+        .data-display {
+            margin-top: 20px;
+        }
+        
+        .json-view {
+            background-color: #000;
+            border: 2px solid #00ff00;
+            padding: 15px;
+            max-height: 600px;
+            overflow: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-size: 12px;
+        }
+        
+        .table-view {
+            background-color: #000;
+            border: 2px solid #00ff00;
+            overflow-x: auto;
+            max-height: 600px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            color: #00ff00;
+        }
+        
+        th, td {
+            border: 1px solid #00ff00;
+            padding: 8px;
+            text-align: left;
+        }
+        
+        th {
+            background-color: #1a1a1a;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        
+        tr:hover {
+            background-color: #1a1a1a;
+        }
+        
+        .stats {
+            background-color: #1a1a1a;
+            border: 2px solid #00aaff;
+            padding: 15px;
+            margin-bottom: 20px;
+            color: #00aaff;
+        }
+        
+        .stats h3 {
+            color: #00aaff;
+            margin-bottom: 10px;
+        }
+        
+        #status {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #000;
+            border: 2px solid #00ff00;
+            min-height: 100px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .status-line {
+            margin: 5px 0;
+            padding: 5px;
+        }
+        
+        .success {
+            color: #00ff00;
+        }
+        
+        .error {
+            color: #ff0000;
+        }
+        
+        .info {
+            color: #00aaff;
+        }
+        
+        .warning {
+            color: #ff9900;
+        }
+        
+        .view-toggle {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .view-toggle button {
+            background-color: #666;
+        }
+        
+        .view-toggle button.active {
+            background-color: #00ff00;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚔️ MUD GAME - MySQL Data Export ⚔️</h1>
+        <p class="subtitle">Export and view your game data from MySQL database</p>
+        
+        <div class="tabs">
+            <div class="tab active" data-tab="rooms">📍 Rooms</div>
+            <div class="tab" data-tab="items">🗡️ Items</div>
+            <div class="tab" data-tab="npcs">👥 NPCs</div>
+            <div class="tab" data-tab="monsters">👹 Monsters</div>
+            <div class="tab" data-tab="classes">⚔️ Classes</div>
+            <div class="tab" data-tab="quests">📜 Quests</div>
+            <div class="tab" data-tab="spells">✨ Spells</div>
+        </div>
+        
+        <div class="tab-content active" data-content="rooms">
+            <h3>Export Rooms</h3>
+            <div class="button-group">
+                <button onclick="loadData('rooms')">Load Rooms</button>
+                <button class="export-json" onclick="exportJSON('rooms')">Export as JSON</button>
+                <button class="export-csv" onclick="exportCSV('rooms')">Export as CSV</button>
+                <button onclick="copyToClipboard('rooms')">Copy JSON to Clipboard</button>
+            </div>
+            <div class="stats" id="rooms-stats" style="display:none;"></div>
+            <div class="view-toggle" id="rooms-toggle" style="display:none;">
+                <button class="active" onclick="switchView('rooms', 'json')">JSON View</button>
+                <button onclick="switchView('rooms', 'table')">Table View</button>
+            </div>
+            <div class="data-display" id="rooms-display"></div>
+        </div>
+        
+        <div class="tab-content" data-content="items">
+            <h3>Export Items</h3>
+            <div class="button-group">
+                <button onclick="loadData('items')">Load Items</button>
+                <button class="export-json" onclick="exportJSON('items')">Export as JSON</button>
+                <button class="export-csv" onclick="exportCSV('items')">Export as CSV</button>
+                <button onclick="copyToClipboard('items')">Copy JSON to Clipboard</button>
+            </div>
+            <div class="stats" id="items-stats" style="display:none;"></div>
+            <div class="view-toggle" id="items-toggle" style="display:none;">
+                <button class="active" onclick="switchView('items', 'json')">JSON View</button>
+                <button onclick="switchView('items', 'table')">Table View</button>
+            </div>
+            <div class="data-display" id="items-display"></div>
+        </div>
+        
+        <div class="tab-content" data-content="npcs">
+            <h3>Export NPCs</h3>
+            <div class="button-group">
+                <button onclick="loadData('npcs')">Load NPCs</button>
+                <button class="export-json" onclick="exportJSON('npcs')">Export as JSON</button>
+                <button class="export-csv" onclick="exportCSV('npcs')">Export as CSV</button>
+                <button onclick="copyToClipboard('npcs')">Copy JSON to Clipboard</button>
+            </div>
+            <div class="stats" id="npcs-stats" style="display:none;"></div>
+            <div class="view-toggle" id="npcs-toggle" style="display:none;">
+                <button class="active" onclick="switchView('npcs', 'json')">JSON View</button>
+                <button onclick="switchView('npcs', 'table')">Table View</button>
+            </div>
+            <div class="data-display" id="npcs-display"></div>
+        </div>
+        
+        <div class="tab-content" data-content="monsters">
+            <h3>Export Monsters</h3>
+            <div class="button-group">
+                <button onclick="loadData('monsters')">Load Monsters</button>
+                <button class="export-json" onclick="exportJSON('monsters')">Export as JSON</button>
+                <button class="export-csv" onclick="exportCSV('monsters')">Export as CSV</button>
+                <button onclick="copyToClipboard('monsters')">Copy JSON to Clipboard</button>
+            </div>
+            <div class="stats" id="monsters-stats" style="display:none;"></div>
+            <div class="view-toggle" id="monsters-toggle" style="display:none;">
+                <button class="active" onclick="switchView('monsters', 'json')">JSON View</button>
+                <button onclick="switchView('monsters', 'table')">Table View</button>
+            </div>
+            <div class="data-display" id="monsters-display"></div>
+        </div>
+        
+        <div class="tab-content" data-content="classes">
+            <h3>Export Classes</h3>
+            <div class="button-group">
+                <button onclick="loadData('classes')">Load Classes</button>
+                <button class="export-json" onclick="exportJSON('classes')">Export as JSON</button>
+                <button class="export-csv" onclick="exportCSV('classes')">Export as CSV</button>
+                <button onclick="copyToClipboard('classes')">Copy JSON to Clipboard</button>
+            </div>
+            <div class="stats" id="classes-stats" style="display:none;"></div>
+            <div class="view-toggle" id="classes-toggle" style="display:none;">
+                <button class="active" onclick="switchView('classes', 'json')">JSON View</button>
+                <button onclick="switchView('classes', 'table')">Table View</button>
+            </div>
+            <div class="data-display" id="classes-display"></div>
+        </div>
+        
+        <div class="tab-content" data-content="quests">
+            <h3>Export Quests</h3>
+            <div class="button-group">
+                <button onclick="loadData('quests')">Load Quests</button>
+                <button class="export-json" onclick="exportJSON('quests')">Export as JSON</button>
+                <button class="export-csv" onclick="exportCSV('quests')">Export as CSV</button>
+                <button onclick="copyToClipboard('quests')">Copy JSON to Clipboard</button>
+            </div>
+            <div class="stats" id="quests-stats" style="display:none;"></div>
+            <div class="view-toggle" id="quests-toggle" style="display:none;">
+                <button class="active" onclick="switchView('quests', 'json')">JSON View</button>
+                <button onclick="switchView('quests', 'table')">Table View</button>
+            </div>
+            <div class="data-display" id="quests-display"></div>
+        </div>
+        
+        <div class="tab-content" data-content="spells">
+            <h3>Export Spells</h3>
+            <div class="button-group">
+                <button onclick="loadData('spells')">Load Spells</button>
+                <button class="export-json" onclick="exportJSON('spells')">Export as JSON</button>
+                <button class="export-csv" onclick="exportCSV('spells')">Export as CSV</button>
+                <button onclick="copyToClipboard('spells')">Copy JSON to Clipboard</button>
+            </div>
+            <div class="stats" id="spells-stats" style="display:none;"></div>
+            <div class="view-toggle" id="spells-toggle" style="display:none;">
+                <button class="active" onclick="switchView('spells', 'json')">JSON View</button>
+                <button onclick="switchView('spells', 'table')">Table View</button>
+            </div>
+            <div class="data-display" id="spells-display"></div>
+        </div>
+        
+        <div id="status">
+            <div class="status-line info">Ready to export. Click "Load [Type]" to fetch data from database.</div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'https://jphsoftware.com/api';
+        const dataCache = {};
+        const currentView = {};
+        
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabName = tab.dataset.tab;
+                
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                document.querySelector(`[data-content="${tabName}"]`).classList.add('active');
+            });
+        });
+        
+        function log(message, type = 'info') {
+            const status = document.getElementById('status');
+            const line = document.createElement('div');
+            line.className = `status-line ${type}`;
+            line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            status.appendChild(line);
+            status.scrollTop = status.scrollHeight;
+        }
+        
+        async function loadData(type) {
+            log(`Loading ${type} from database...`, 'info');
+            
+            try {
+                // Use REST-style URL: /api/rooms instead of ?type=rooms
+                const response = await fetch(`${API_URL}/${type}`);
+                const result = await response.json();
+                
+                // Check if we got an error response
+                if (!response.ok || result.error) {
+                    log(`✗ Failed to load ${type}: ${result.error || result.message || 'Unknown error'}`, 'error');
+                    return;
+                }
+                
+                // The API can return data in multiple formats
+                let items;
+                if (Array.isArray(result)) {
+                    // Array format: [{id: "room1", name: "..."}, ...]
+                    items = result;
+                } else if (typeof result === 'object' && !result.data && !result.error) {
+                    // Object format with IDs as keys: {"room1": {name: "..."}, ...}
+                    items = Object.entries(result).map(([id, data]) => ({
+                        id,
+                        ...data
+                    }));
+                } else if (result.data) {
+                    // Wrapped format: {data: {...}}
+                    if (Array.isArray(result.data)) {
+                        items = result.data;
+                    } else {
+                        items = Object.entries(result.data).map(([id, data]) => ({
+                            id,
+                            ...data
+                        }));
+                    }
+                } else {
+                    log(`✗ Unexpected response format for ${type}`, 'error');
+                    console.error('Unexpected format:', result);
+                    return;
+                }
+                
+                dataCache[type] = items;
+                currentView[type] = 'json';
+                
+                displayStats(type, items);
+                displayJSON(type, items);
+                
+                document.getElementById(`${type}-toggle`).style.display = 'flex';
+                
+                log(`✓ Loaded ${items.length} ${type}`, 'success');
+            } catch (error) {
+                log(`✗ Error loading ${type}: ${error.message}`, 'error');
+            }
+        }
+        
+        function displayStats(type, items) {
+            const stats = document.getElementById(`${type}-stats`);
+            stats.style.display = 'block';
+            stats.innerHTML = `
+                <h3>📊 Statistics</h3>
+                <p><strong>Total ${type}:</strong> ${items.length}</p>
+                <p><strong>Data size:</strong> ${(JSON.stringify(items).length / 1024).toFixed(2)} KB</p>
+            `;
+        }
+        
+        function displayJSON(type, items) {
+            const display = document.getElementById(`${type}-display`);
+            const json = JSON.stringify(items, null, 2);
+            display.innerHTML = `<div class="json-view">${escapeHtml(json)}</div>`;
+        }
+        
+        function displayTable(type, items) {
+            if (items.length === 0) {
+                return '<p>No data to display</p>';
+            }
+            
+            // Get all unique keys from all items
+            const allKeys = new Set();
+            items.forEach(item => {
+                Object.keys(item).forEach(key => allKeys.add(key));
+            });
+            
+            const keys = Array.from(allKeys);
+            
+            let html = '<div class="table-view"><table><thead><tr>';
+            keys.forEach(key => {
+                html += `<th>${escapeHtml(key)}</th>`;
+            });
+            html += '</tr></thead><tbody>';
+            
+            items.forEach(item => {
+                html += '<tr>';
+                keys.forEach(key => {
+                    const value = item[key];
+                    let displayValue = '';
+                    
+                    if (value === null || value === undefined) {
+                        displayValue = '<em>null</em>';
+                    } else if (typeof value === 'object') {
+                        displayValue = JSON.stringify(value);
+                    } else {
+                        displayValue = String(value);
+                    }
+                    
+                    html += `<td>${escapeHtml(displayValue)}</td>`;
+                });
+                html += '</tr>';
+            });
+            
+            html += '</tbody></table></div>';
+            return html;
+        }
+        
+        function switchView(type, view) {
+            const items = dataCache[type];
+            if (!items) {
+                log('Load data first', 'warning');
+                return;
+            }
+            
+            currentView[type] = view;
+            const display = document.getElementById(`${type}-display`);
+            const buttons = document.querySelectorAll(`#${type}-toggle button`);
+            
+            buttons.forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            if (view === 'json') {
+                displayJSON(type, items);
+            } else {
+                display.innerHTML = displayTable(type, items);
+            }
+        }
+        
+        function exportJSON(type) {
+            const items = dataCache[type];
+            if (!items) {
+                log('Load data first', 'warning');
+                return;
+            }
+            
+            const json = JSON.stringify(items, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `mud-${type}-export.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            log(`✓ Exported ${items.length} ${type} as JSON`, 'success');
+        }
+        
+        function exportCSV(type) {
+            const items = dataCache[type];
+            if (!items || items.length === 0) {
+                log('No data to export', 'warning');
+                return;
+            }
+            
+            // Get all unique keys
+            const allKeys = new Set();
+            items.forEach(item => {
+                Object.keys(item).forEach(key => allKeys.add(key));
+            });
+            
+            const keys = Array.from(allKeys);
+            
+            // Create CSV header
+            let csv = keys.map(k => `"${k}"`).join(',') + '\n';
+            
+            // Create CSV rows
+            items.forEach(item => {
+                const row = keys.map(key => {
+                    const value = item[key];
+                    if (value === null || value === undefined) {
+                        return '';
+                    } else if (typeof value === 'object') {
+                        return `"${JSON.stringify(value).replace(/"/g, '""')}"`;
+                    } else {
+                        return `"${String(value).replace(/"/g, '""')}"`;
+                    }
+                });
+                csv += row.join(',') + '\n';
+            });
+            
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `mud-${type}-export.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            log(`✓ Exported ${items.length} ${type} as CSV`, 'success');
+        }
+        
+        async function copyToClipboard(type) {
+            const items = dataCache[type];
+            if (!items) {
+                log('Load data first', 'warning');
+                return;
+            }
+            
+            const json = JSON.stringify(items, null, 2);
+            
+            try {
+                await navigator.clipboard.writeText(json);
+                log(`✓ Copied ${items.length} ${type} to clipboard`, 'success');
+            } catch (error) {
+                log(`✗ Failed to copy: ${error.message}`, 'error');
+            }
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>

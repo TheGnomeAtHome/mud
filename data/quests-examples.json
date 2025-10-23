@@ -1,0 +1,463 @@
+{
+  "beginner_fetch": {
+    "id": "beginner_fetch",
+    "title": "First Steps",
+    "description": "Welcome to the village! The blacksmith needs some iron ore to get started. Collect 3 pieces of iron ore from the cave to the north.",
+    "giverNpcId": "bronson",
+    "turninNpcId": "bronson",
+    "levelRequired": 1,
+    "isRepeatable": false,
+    "objectives": [
+      {
+        "type": "collect",
+        "itemId": "iron_ore",
+        "count": 3
+      }
+    ],
+    "rewards": {
+      "xp": 50,
+      "gold": 10,
+      "items": ["health_potion"]
+    }
+  },
+
+  "daily_iron_gathering": {
+    "id": "daily_iron_gathering",
+    "title": "Daily Iron Supply",
+    "description": "I always need more iron for the forge. Bring me 5 pieces of iron ore whenever you can spare the time.",
+    "giverNpcId": "bronson",
+    "levelRequired": 1,
+    "isRepeatable": true,
+    "objectives": [
+      {
+        "type": "collect",
+        "itemId": "iron_ore",
+        "count": 5
+      }
+    ],
+    "rewards": {
+      "xp": 100,
+      "gold": 20,
+      "items": ["iron_sword"]
+    }
+  },
+
+  "goblin_menace": {
+    "id": "goblin_menace",
+    "title": "The Goblin Menace",
+    "description": "Goblins have been attacking travelers on the north road. Defeat 10 of them to make the area safe.",
+    "giverNpcId": "guard_captain",
+    "levelRequired": 3,
+    "isRepeatable": false,
+    "objectives": [
+      {
+        "type": "kill",
+        "monsterId": "goblin",
+        "count": 10
+      }
+    ],
+    "rewards": {
+      "xp": 500,
+      "gold": 50,
+      "items": ["steel_sword", "leather_armor"]
+    }
+  },
+
+  "wolf_hunter": {
+    "id": "wolf_hunter",
+    "title": "Wolf Hunter",
+    "description": "Wolves have been preying on our livestock. Hunt down 5 wolves and I'll reward you well.",
+    "giverNpcId": "farmer",
+    "levelRequired": 2,
+    "isRepeatable": true,
+    "objectives": [
+      {
+        "type": "kill",
+        "monsterId": "wolf",
+        "count": 5
+      }
+    ],
+    "rewards": {
+      "xp": 200,
+      "gold": 30
+    }
+  },
+
+  "explore_the_cave": {
+    "id": "explore_the_cave",
+    "title": "Scout the Northern Cave",
+    "description": "We've heard strange noises from the cave to the north. Go investigate and report back what you find.",
+    "giverNpcId": "scout_master",
+    "levelRequired": 1,
+    "isRepeatable": false,
+    "objectives": [
+      {
+        "type": "visit",
+        "roomId": "echoing_caverns",
+        "count": 1
+      }
+    ],
+    "rewards": {
+      "xp": 75,
+      "gold": 15
+    }
+  },
+
+  "visit_the_markets": {
+    "id": "visit_the_markets",
+    "title": "Tour the Town",
+    "description": "New to town? Let me show you around! Visit the smithy, the general store, and the tavern to get familiar with the village.",
+    "giverNpcId": "town_guide",
+    "levelRequired": 1,
+    "isRepeatable": false,
+    "objectives": [
+      {
+        "type": "visit",
+        "roomId": "smithy",
+        "count": 1
+      },
+      {
+        "type": "visit",
+        "roomId": "general_store",
+        "count": 1
+      },
+      {
+        "type": "visit",
+        "roomId": "tavern",
+        "count": 1
+      }
+    ],
+    "rewards": {
+      "xp": 100,
+      "gold": 25,
+      "items": ["backpack", "torch"]
+    }
+  },
+
+  "messenger_quest": {
+    "id": "messenger_quest",
+    "title": "Urgent Message",
+    "description": "I need you to deliver this urgent message to the merchant in the marketplace. Time is of the essence!",
+    "giverNpcId": "mayor",
+    "turninNpcId": "merchant",
+    "levelRequired": 1,
+    "isRepeatable": false,
+    "objectives": [
+      {
+        "type": "talk",
+        "npcId": "merchant",
+        "count": 1
+      }
+    ],
+    "rewards": {
+      "xp": 50,
+      "gold": 10
+    }
+  },
+
+  "delivery_quest": {
+    "id": "delivery_quest",
+    "title": "Special Delivery",
+    "description": "Take this package of herbs to the alchemist. She's been waiting for them.",
+    "giverNpcId": "herbalist",
+    "turninNpcId": "alchemist",
+    "levelRequired": 1,
+    "isRepeatable": true,
+    "objectives": [
+      {
+        "type": "collect",
+        "itemId": "herb_package",
+        "count": 1
+      },
+      {
+        "type": "talk",
+        "npcId": "alchemist",
+        "count": 1
+      }
+    ],
+    "rewards": {
+      "xp": 100,
+      "gold": 20,
+      "items": ["health_potion", "mana_potion"]
+    }
+  },
+
+  "multi_objective_quest": {
+    "id": "multi_objective_quest",
+    "title": "The Blacksmith's Request",
+    "description": "I need materials for a special project. Bring me 10 iron ore, defeat 5 goblins who've been stealing from my shipments, and visit the ancient forge to the east.",
+    "giverNpcId": "bronson",
+    "levelRequired": 5,
+    "isRepeatable": false,
+    "objectives": [
+      {
+        "type": "collect",
+        "itemId": "iron_ore",
+        "count": 10
+      },
+      {
+        "type": "kill",
+        "monsterId": "goblin",
+        "count": 5
+      },
+      {
+        "type": "visit",
+        "roomId": "ancient_forge",
+        "count": 1
+      }
+    ],
+    "rewards": {
+      "xp": 1000,
+      "gold": 100,
+      "items": ["legendary_sword", "master_crafted_armor", "health_potion", "health_potion"]
+    }
+  },
+
+  "party_dragon_hunt": {
+    "id": "party_dragon_hunt",
+    "title": "Dragon Slayer",
+    "description": "A terrible dragon has been terrorizing the countryside! Gather your strongest allies and defeat this ancient evil. This quest requires a party.",
+    "giverNpcId": "king",
+    "levelRequired": 15,
+    "isPartyQuest": true,
+    "isRepeatable": false,
+    "objectives": [
+      {
+        "type": "kill",
+        "monsterId": "ancient_dragon",
+        "count": 1
+      }
+    ],
+    "rewards": {
+      "xp": 5000,
+      "gold": 1000,
+      "items": ["dragon_scale_armor", "legendary_weapon", "treasure_chest"]
+    }
+  },
+
+  "party_dungeon_clear": {
+    "id": "party_dungeon_clear",
+    "title": "Clear the Dungeon",
+    "description": "The old dungeon has been overrun with monsters. Take your party and clear it out!",
+    "giverNpcId": "dungeon_master",
+    "levelRequired": 10,
+    "isPartyQuest": true,
+    "isRepeatable": true,
+    "objectives": [
+      {
+        "type": "kill",
+        "monsterId": "skeleton",
+        "count": 10
+      },
+      {
+        "type": "kill",
+        "monsterId": "zombie",
+        "count": 10
+      },
+      {
+        "type": "visit",
+        "roomId": "dungeon_boss_room",
+        "count": 1
+      }
+    ],
+    "rewards": {
+      "xp": 2000,
+      "gold": 500,
+      "items": ["epic_sword", "epic_shield"]
+    }
+  },
+
+  "quest_chain_1": {
+    "id": "quest_chain_1",
+    "title": "Helping the Village - Part 1",
+    "description": "The village needs supplies. Gather 10 pieces of wood from the forest.",
+    "giverNpcId": "village_elder",
+    "levelRequired": 1,
+    "isRepeatable": false,
+    "objectives": [
+      {
+        "type": "collect",
+        "itemId": "wood",
+        "count": 10
+      }
+    ],
+    "rewards": {
+      "xp": 100,
+      "gold": 20
+    }
+  },
+
+  "quest_chain_2": {
+    "id": "quest_chain_2",
+    "title": "Helping the Village - Part 2",
+    "description": "Great work! Now take that wood to the carpenter so he can start building.",
+    "giverNpcId": "village_elder",
+    "turninNpcId": "carpenter",
+    "levelRequired": 1,
+    "isRepeatable": false,
+    "prerequisites": ["quest_chain_1"],
+    "objectives": [
+      {
+        "type": "talk",
+        "npcId": "carpenter",
+        "count": 1
+      }
+    ],
+    "rewards": {
+      "xp": 150,
+      "gold": 30
+    }
+  },
+
+  "quest_chain_3": {
+    "id": "quest_chain_3",
+    "title": "Helping the Village - Part 3",
+    "description": "The carpenter needs protection while he works. Defeat the bandits that have been harassing him.",
+    "giverNpcId": "carpenter",
+    "levelRequired": 3,
+    "isRepeatable": false,
+    "prerequisites": ["quest_chain_2"],
+    "objectives": [
+      {
+        "type": "kill",
+        "monsterId": "bandit",
+        "count": 8
+      }
+    ],
+    "rewards": {
+      "xp": 500,
+      "gold": 75,
+      "items": ["steel_axe", "sturdy_shield"]
+    }
+  },
+
+  "epic_collection_quest": {
+    "id": "epic_collection_quest",
+    "title": "The Master Collector",
+    "description": "I seek rare and valuable items for my collection. Bring me these legendary artifacts and I shall reward you handsomely!",
+    "giverNpcId": "collector",
+    "levelRequired": 20,
+    "isRepeatable": false,
+    "prerequisites": ["quest_chain_3", "party_dragon_hunt"],
+    "objectives": [
+      {
+        "type": "collect",
+        "itemId": "dragon_egg",
+        "count": 1
+      },
+      {
+        "type": "collect",
+        "itemId": "ancient_artifact",
+        "count": 1
+      },
+      {
+        "type": "collect",
+        "itemId": "magic_crystal",
+        "count": 5
+      }
+    ],
+    "rewards": {
+      "xp": 10000,
+      "gold": 5000,
+      "items": ["ultimate_weapon", "ultimate_armor", "ring_of_power", "health_potion", "health_potion", "health_potion", "mana_potion", "mana_potion", "mana_potion"]
+    }
+  },
+
+  "tutorial_combat": {
+    "id": "tutorial_combat",
+    "title": "Learning to Fight",
+    "description": "Before you venture out, you should know how to defend yourself. Defeat 3 training dummies to prove you're ready.",
+    "giverNpcId": "combat_trainer",
+    "levelRequired": 1,
+    "isRepeatable": false,
+    "objectives": [
+      {
+        "type": "kill",
+        "monsterId": "training_dummy",
+        "count": 3
+      }
+    ],
+    "rewards": {
+      "xp": 50,
+      "gold": 5,
+      "items": ["basic_sword", "basic_shield"]
+    }
+  },
+
+  "daily_training": {
+    "id": "daily_training",
+    "title": "Daily Training Regimen",
+    "description": "Keep your skills sharp! Defeat 5 enemies and I'll give you some bonus experience.",
+    "giverNpcId": "combat_trainer",
+    "levelRequired": 5,
+    "isRepeatable": true,
+    "objectives": [
+      {
+        "type": "kill",
+        "monsterId": "any",
+        "count": 5
+      }
+    ],
+    "rewards": {
+      "xp": 300,
+      "gold": 50
+    }
+  },
+
+  "treasure_hunt": {
+    "id": "treasure_hunt",
+    "title": "The Treasure Hunt",
+    "description": "I have a map to hidden treasure! Visit these three locations and claim your reward.",
+    "giverNpcId": "treasure_hunter",
+    "levelRequired": 8,
+    "isRepeatable": false,
+    "objectives": [
+      {
+        "type": "visit",
+        "roomId": "hidden_grotto",
+        "count": 1
+      },
+      {
+        "type": "visit",
+        "roomId": "ancient_ruins",
+        "count": 1
+      },
+      {
+        "type": "visit",
+        "roomId": "mountain_peak",
+        "count": 1
+      }
+    ],
+    "rewards": {
+      "xp": 800,
+      "gold": 200,
+      "items": ["treasure_map", "gold_coins", "rare_gem"]
+    }
+  },
+
+  "boss_preparation": {
+    "id": "boss_preparation",
+    "title": "Preparing for Battle",
+    "description": "Before you can face the dungeon boss, you must prove yourself. Defeat 20 regular monsters and collect 5 healing potions.",
+    "giverNpcId": "wise_sage",
+    "levelRequired": 12,
+    "isRepeatable": false,
+    "objectives": [
+      {
+        "type": "kill",
+        "monsterId": "any",
+        "count": 20
+      },
+      {
+        "type": "collect",
+        "itemId": "health_potion",
+        "count": 5
+      }
+    ],
+    "rewards": {
+      "xp": 1500,
+      "gold": 300,
+      "items": ["boss_key", "elixir_of_strength", "elixir_of_vitality"]
+    }
+  }
+}

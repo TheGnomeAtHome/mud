@@ -1,0 +1,57 @@
+[
+  {
+    "id": "iron-longsword",
+    "name": "Iron Longsword",
+    "description": "A well-balanced longsword made of iron.",
+    "type": "weapon",
+    "value": 50,
+    "cost": 75,
+    "damage": 12,
+    "weight": 4,
+    "movable": true
+  },
+  {
+    "id": "leather-armor",
+    "name": "Leather Armor",
+    "description": "Light armor made from cured leather.",
+    "type": "armor",
+    "value": 30,
+    "cost": 45,
+    "defense": 8,
+    "weight": 6,
+    "movable": true
+  },
+  {
+    "id": "health-potion",
+    "name": "Health Potion",
+    "description": "A red potion that restores 50 health points.",
+    "type": "consumable",
+    "value": 20,
+    "cost": 25,
+    "healing": 50,
+    "weight": 0.5,
+    "movable": true
+  },
+  {
+    "id": "magic-ring",
+    "name": "Ring of Protection",
+    "description": "A silver ring inscribed with protective runes.",
+    "type": "jewelry",
+    "value": 200,
+    "cost": 300,
+    "defense": 3,
+    "weight": 0.1,
+    "movable": true,
+    "aliases": ["ring", "protection ring"]
+  },
+  {
+    "id": "old-key",
+    "name": "Rusty Old Key",
+    "description": "An old key covered in rust. What does it unlock?",
+    "type": "key",
+    "value": 5,
+    "weight": 0.2,
+    "movable": true,
+    "aliases": ["key", "rusty key"]
+  }
+]

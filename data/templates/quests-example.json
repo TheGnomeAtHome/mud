@@ -1,0 +1,91 @@
+[
+  {
+    "id": "goblin-slayer",
+    "name": "Goblin Problem",
+    "description": "The town has been plagued by goblins. Kill 10 goblins to earn a reward.",
+    "type": "kill",
+    "objectives": [
+      {
+        "type": "kill",
+        "target": "goblin",
+        "count": 10,
+        "description": "Kill 10 goblins"
+      }
+    ],
+    "rewards": {
+      "xp": 200,
+      "gold": 100,
+      "items": ["iron-sword"]
+    },
+    "requiredLevel": 1,
+    "giver": "town-guard"
+  },
+  {
+    "id": "fetch-herbs",
+    "name": "Gathering Herbs",
+    "description": "The healer needs rare herbs for medicine. Collect 5 moonflower petals.",
+    "type": "gather",
+    "objectives": [
+      {
+        "type": "collect",
+        "target": "moonflower-petal",
+        "count": 5,
+        "description": "Collect 5 moonflower petals"
+      }
+    ],
+    "rewards": {
+      "xp": 150,
+      "gold": 75,
+      "items": ["health-potion", "health-potion"]
+    },
+    "requiredLevel": 1,
+    "giver": "healer"
+  },
+  {
+    "id": "rescue-mission",
+    "name": "Lost in the Dungeon",
+    "description": "A merchant's son went exploring in the dungeon and hasn't returned. Find him and bring him back safely.",
+    "type": "rescue",
+    "objectives": [
+      {
+        "type": "talk",
+        "target": "merchant-son",
+        "description": "Find the merchant's son"
+      },
+      {
+        "type": "escort",
+        "target": "merchant-son",
+        "destination": "town-square",
+        "description": "Escort him back to town"
+      }
+    ],
+    "rewards": {
+      "xp": 300,
+      "gold": 200,
+      "items": ["magic-ring"]
+    },
+    "requiredLevel": 3,
+    "giver": "worried-merchant"
+  },
+  {
+    "id": "dragon-slayer",
+    "name": "Slay the Dragon",
+    "description": "A fearsome dragon has taken residence in the mountain caves. Defeat it to save the kingdom!",
+    "type": "boss",
+    "objectives": [
+      {
+        "type": "kill",
+        "target": "ancient-dragon",
+        "count": 1,
+        "description": "Defeat the Ancient Dragon"
+      }
+    ],
+    "rewards": {
+      "xp": 1000,
+      "gold": 1000,
+      "items": ["dragon-slayer-sword", "dragon-scale-armor"]
+    },
+    "requiredLevel": 10,
+    "giver": "king"
+  }
+]

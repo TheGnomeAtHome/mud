@@ -1,0 +1,105 @@
+[
+  {
+    "id": "castle-key",
+    "name": "Castle Key",
+    "description": "A large iron key with the castle crest engraved on the handle. It feels heavy and important.",
+    "itemType": "key",
+    "value": 100,
+    "specialData": {
+      "unlocks": "north",
+      "consumeOnUse": false
+    }
+  },
+  {
+    "id": "treasury-key",
+    "name": "Treasury Key",
+    "description": "A golden key that gleams in the light. Only the castle guard would have something like this.",
+    "itemType": "key",
+    "value": 250,
+    "specialData": {
+      "unlocks": "west",
+      "consumeOnUse": false
+    }
+  },
+  {
+    "id": "dungeon-key",
+    "name": "Rusty Dungeon Key",
+    "description": "An old, corroded key covered in rust. It looks like it hasn't been used in years.",
+    "itemType": "key",
+    "value": 25,
+    "specialData": {
+      "unlocks": "down"
+    }
+  },
+  {
+    "id": "hidden-lever",
+    "name": "Hidden Mechanism",
+    "description": "Not really an item, but a disguised lever that opens secret passages. It crumbles after one use.",
+    "itemType": "key",
+    "value": 0,
+    "specialData": {
+      "unlocks": "in"
+    }
+  },
+  {
+    "id": "safe-room-key",
+    "name": "Safe Room Key",
+    "description": "A sturdy brass key. Perfect for securing a room while you rest.",
+    "itemType": "key",
+    "value": 50,
+    "specialData": {
+      "unlocks": "west",
+      "consumeOnUse": false
+    }
+  },
+  {
+    "id": "skeleton-key",
+    "name": "Master Skeleton Key",
+    "description": "A mysterious key that seems to shimmer and change shape. Legends say it can open any lock.",
+    "itemType": "key",
+    "value": 1000,
+    "specialData": {
+      "unlocks": "any",
+      "consumeOnUse": false
+    }
+  },
+  {
+    "id": "crystal-orb",
+    "name": "Glowing Crystal Orb",
+    "description": "A perfectly spherical crystal that pulses with inner light. It feels warm to the touch and hums with magical energy.",
+    "itemType": "key",
+    "value": 500,
+    "specialData": {
+      "unlocks": "down",
+      "consumeOnUse": false
+    }
+  },
+  {
+    "id": "elder-token",
+    "name": "Elder's Token",
+    "description": "A small wooden token carved with ancient symbols. The village elders give these only to those who have proven themselves worthy.",
+    "itemType": "key",
+    "value": 0,
+    "specialData": {
+      "unlocks": "east"
+    }
+  },
+  {
+    "id": "vault-key-fragment-1",
+    "name": "Vault Key Fragment (1 of 3)",
+    "description": "Part of a broken key. It looks like two more pieces are needed to complete it.",
+    "itemType": "normal",
+    "value": 100
+  },
+  {
+    "id": "vault-key-complete",
+    "name": "Complete Vault Key",
+    "description": "A fully assembled key forged from three fragments. It radiates power.",
+    "itemType": "key",
+    "value": 500,
+    "specialData": {
+      "unlocks": "vault",
+      "consumeOnUse": false
+    }
+  }
+]

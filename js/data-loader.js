@@ -1,4 +1,12 @@
 // Data loading module - Handles loading game data from Firebase or static JSON files
+
+// Global game data objects (exported for use in other modules)
+export const gameWorld = {};
+export const gameItems = {};
+export const gameNpcs = {};
+export const gameMonsters = {};
+export const gamePlayers = {};
+
 export function initializeDataLoader(firebase, appId) {
     const { db, firestoreFunctions } = firebase;
     const { collection, onSnapshot, getDocs } = firestoreFunctions;
@@ -23,11 +31,11 @@ export function initializeDataLoader(firebase, appId) {
     };
     
     const gameData = {
-        gameWorld: {},
-        gameItems: {},
-        gameNpcs: {},
-        gameMonsters: {},
-        gamePlayers: {},
+        gameWorld,
+        gameItems,
+        gameNpcs,
+        gameMonsters,
+        gamePlayers,
         activeMonsters: {},
         gameClasses: {},
         gameSpells: {},

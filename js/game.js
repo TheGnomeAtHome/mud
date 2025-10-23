@@ -75,6 +75,14 @@ export function initializeGameLogic(dependencies) {
     // Helper function to add appropriate article (a/an) to a noun
     function addArticle(name) {
         if (!name) return 'something';
+        
+        // Check if name already starts with an article
+        const nameLower = name.toLowerCase();
+        if (nameLower.startsWith('a ') || nameLower.startsWith('an ') || 
+            nameLower.startsWith('the ') || nameLower.startsWith('some ')) {
+            return name; // Already has an article, don't add another
+        }
+        
         const firstChar = name.charAt(0).toLowerCase();
         const vowels = ['a', 'e', 'i', 'o', 'u'];
         const article = vowels.includes(firstChar) ? 'an' : 'a';
@@ -395,13 +403,21 @@ export function initializeGameLogic(dependencies) {
     function getObjectiveDescription(objective) {
         switch (objective.type) {
             case 'kill':
-                return `Kill ${objective.count} ${objective.target}`;
+                const monster = gameMonsters[objective.monsterId];
+                const monsterName = monster?.name || objective.target || `[missing monster: ${objective.monsterId}]`;
+                return `Kill ${objective.count} ${monsterName}`;
             case 'collect':
-                return `Collect ${objective.count} ${objective.item}`;
+                const item = gameItems[objective.itemId];
+                const itemName = item?.name || objective.item || `[missing item: ${objective.itemId}]`;
+                return `Collect ${objective.count} ${itemName}`;
             case 'visit':
-                return `Visit ${objective.room}`;
+                const room = gameWorld[objective.roomId];
+                const roomName = room?.name || objective.room || `[missing room: ${objective.roomId}]`;
+                return `Visit ${roomName}`;
             case 'talk':
-                return `Talk to ${objective.npc}`;
+                const npc = gameNpcs[objective.npcId];
+                const npcName = npc?.name || objective.npc || `[missing NPC: ${objective.npcId}]`;
+                return `Talk to ${npcName}`;
             default:
                 return `Complete objective: ${objective.type}`;
         }
@@ -409,10 +425,15 @@ export function initializeGameLogic(dependencies) {
 
     // Helper function to update quest progress
     async function updateQuestProgress(playerId, progressType, target, count = 1) {
+        console.log(`[updateQuestProgress] Called with: playerId=${playerId}, type=${progressType}, target=${target}, count=${count}`);
+        
         const playerData = gamePlayers[playerId];
         if (!playerData || !playerData.activeQuests || playerData.activeQuests.length === 0) {
+            console.log('[updateQuestProgress] No active quests found');
             return [];
         }
+
+        console.log(`[updateQuestProgress] Active quests:`, playerData.activeQuests);
 
         // Find player's party
         const playerParty = Object.values(gameParties).find(p => 
@@ -427,14 +448,19 @@ export function initializeGameLogic(dependencies) {
             let questUpdated = false;
             const updatedObjectives = quest.objectives.map(obj => {
                 if (obj.type === progressType) {
-                    // Match target (case insensitive)
-                    const objTarget = (obj.target || obj.item || obj.room || obj.npc || '').toLowerCase();
+                    // Match target (case insensitive) - support multiple field names
+                    const objTarget = (obj.target || obj.itemId || obj.monsterId || obj.roomId || obj.npcId || obj.item || obj.room || obj.npc || '').toLowerCase();
                     const matchTarget = target.toLowerCase();
+                    
+                    console.log(`[updateQuestProgress] Checking objective: type=${obj.type}, objTarget=${objTarget}, matchTarget=${matchTarget}, current=${obj.current}/${obj.count}`);
                     
                     if (objTarget === matchTarget || objTarget.includes(matchTarget) || matchTarget.includes(objTarget)) {
                         if (obj.current < obj.count) {
+                            console.log(`[updateQuestProgress] MATCH! Incrementing from ${obj.current} to ${obj.current + count}`);
                             questUpdated = true;
                             return { ...obj, current: Math.min(obj.current + count, obj.count) };
+                        } else {
+                            console.log(`[updateQuestProgress] Already at max count`);
                         }
                     }
                 }
@@ -772,9 +798,22 @@ export function initializeGameLogic(dependencies) {
         }
         
         if (room.items && room.items.length > 0) {
-            const itemNames = room.items.map(itemId => {
+            const itemNames = room.items.map(itemEntry => {
+                // Support both old format (string) and new format ({id, quantity})
+                let itemId, quantity;
+                if (typeof itemEntry === 'string') {
+                    itemId = itemEntry;
+                    quantity = 1;
+                } else {
+                    itemId = itemEntry.id;
+                    quantity = itemEntry.quantity || 1;
+                }
+                
                 const item = gameItems[itemId];
-                return item ? addArticle(item.name) : 'an unknown object';
+                if (!item) return 'an unknown object';
+                
+                const itemName = addArticle(item.name);
+                return quantity > 1 ? `${itemName} (x${quantity})` : itemName;
             }).join(', ');
             logToTerminal(`You see here: <span class="text-yellow-300">${itemNames}</span>.`, 'game');
         }
@@ -929,7 +968,7 @@ export function initializeGameLogic(dependencies) {
         }
     }
     
-    async function handleAiNpcInteraction(npc, interactionType, currentRoom, topicOrSpeech = null) {
+    async function handleAiNpcInteraction(npc, interactionType, currentRoom, topicOrSpeech = null, availableQuests = []) {
         // If starting a new conversation with a different NPC, clear history
         if (lastNpcInteraction !== npc.id) {
             conversationHistory = [];
@@ -970,6 +1009,16 @@ export function initializeGameLogic(dependencies) {
             ).join(' ');
             triggerInstructions += rules;
         }
+        
+        // Add quest information if this NPC has quests available
+        let questInstructions = "";
+        if (availableQuests && availableQuests.length > 0) {
+            questInstructions += "\n\nQUESTS AVAILABLE: You have the following quest(s) available for the player:\n";
+            for (const quest of availableQuests) {
+                questInstructions += `- "${quest.title}": ${quest.description}\n`;
+            }
+            questInstructions += "You should naturally mention these quests in your conversation. The player can accept them by typing 'quest accept [quest name]'.\n";
+        }
 
         // Build conversation history context
         let historyContext = "";
@@ -982,7 +1031,7 @@ export function initializeGameLogic(dependencies) {
 
         const fullPrompt = `CONTEXT: You are playing an NPC in a game. Your name is ${npc.shortName || npc.name}. The player you are talking to is named ${playerName}. You are in a location called "${currentRoom.name}".
         PERSONALITY: ${personalityPrompt}
-        ${triggerInstructions}${historyContext}
+        ${triggerInstructions}${questInstructions}${historyContext}
         TASK: ${taskPrompt}
         
         IMPORTANT FORMATTING RULES:
@@ -1756,27 +1805,33 @@ Your response:`;
         }
         
         // Generate greeting using AI
-        const greeting = await generateProactiveGreeting(npc, playersInRoom);
-        
-        if (greeting) {
-            // Broadcast greeting to room
-            const messageRef = collection(db, `/artifacts/${appId}/public/data/mud-messages`);
-            await addDoc(messageRef, {
-                roomId: roomId,
-                userId: `npc-${npcId}`,
-                username: npc.shortName || npc.name,
-                text: greeting,
-                timestamp: serverTimestamp(),
-                isNpcGreeting: true
-            });
+        try {
+            const greeting = await generateProactiveGreeting(npc, playersInRoom);
             
-            // Update last greeting time
-            npcLastGreeting[npcId] = Date.now();
-            
-            console.log(`[Proactive NPCs] ${npc.name} greeted players: "${greeting}"`);
-            
-            // Schedule next ambient dialogue
-            scheduleAmbientDialogue(npcId, roomId);
+            if (greeting) {
+                // Broadcast greeting to room
+                const messageRef = collection(db, `/artifacts/${appId}/public/data/mud-messages`);
+                await addDoc(messageRef, {
+                    roomId: roomId,
+                    userId: `npc-${npcId}`,
+                    username: npc.shortName || npc.name,
+                    text: greeting,
+                    timestamp: serverTimestamp(),
+                    isNpcGreeting: true
+                });
+                
+                // Update last greeting time
+                npcLastGreeting[npcId] = Date.now();
+                
+                console.log(`[Proactive NPCs] ${npc.name} greeted players: "${greeting}"`);
+                
+                // Schedule next ambient dialogue
+                scheduleAmbientDialogue(npcId, roomId);
+            } else {
+                console.log(`[Proactive NPCs] ${npc.name} greeting generation failed (AI unavailable)`);
+            }
+        } catch (error) {
+            console.log(`[Proactive NPCs] ${npc.name} greeting skipped due to AI error:`, error.message);
         }
     }
     
@@ -1822,10 +1877,14 @@ Examples of INCORRECT formatting (DO NOT DO THIS):
 - I greet the newcomers warmly (dialogue should be in quotes)`;
 
         try {
-            const response = await callGeminiForText(prompt, logToTerminal);
+            const response = await Promise.race([
+                callGeminiForText(prompt, logToTerminal),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('AI timeout')), 5000))
+            ]);
             return response.replace(/^["']|["']$/g, '').trim();
         } catch (error) {
-            console.error('[Proactive NPCs] Error generating greeting:', error);
+            // Silently fail for AI errors - this is a nice-to-have feature
+            console.log('[Proactive NPCs] AI greeting unavailable:', error.message);
             return null;
         }
     }
@@ -2581,6 +2640,51 @@ Examples:
             return { finalDamage, blocked: false, dodged: false };
         };
 
+        // Calculate total weight of items in inventory
+        const calculateInventoryWeight = (inventory) => {
+            let totalWeight = 0;
+            for (const item of inventory) {
+                const itemData = gameItems[item.id];
+                if (itemData) {
+                    const itemWeight = itemData.weight || 0;
+                    const quantity = item.quantity || 1;
+                    totalWeight += itemWeight * quantity;
+                }
+            }
+            return totalWeight;
+        };
+
+        // Calculate maximum carrying capacity based on strength
+        const calculateMaxCarryWeight = (playerData) => {
+            const strength = playerData.strength || 10;
+            const baseCapacity = 50; // Base capacity
+            const strengthBonus = strength * 5; // 5 lbs per point of strength
+            
+            // Check for equipped bags/backpacks that increase capacity
+            let bagBonus = 0;
+            const inventory = playerData.inventory || [];
+            for (const item of inventory) {
+                const itemData = gameItems[item.id];
+                if (itemData && itemData.itemType === 'container' && item.equipped) {
+                    bagBonus += itemData.specialData?.capacityBonus || 0;
+                }
+            }
+            
+            return baseCapacity + strengthBonus + bagBonus;
+        };
+
+        // Check if player can carry an item
+        const canCarryItem = (playerData, itemId, quantity = 1) => {
+            const itemData = gameItems[itemId];
+            if (!itemData) return false;
+            
+            const itemWeight = (itemData.weight || 0) * quantity;
+            const currentWeight = calculateInventoryWeight(playerData.inventory || []);
+            const maxWeight = calculateMaxCarryWeight(playerData);
+            
+            return (currentWeight + itemWeight) <= maxWeight;
+        };
+
         // Handle special item types (keys, teleport devices, etc.)
         const handleSpecialItem = async (itemType, itemData, inventoryItem, playerData) => {
             const playerRef = doc(db, `/artifacts/${appId}/public/data/mud-players/${userId}`);
@@ -2588,11 +2692,77 @@ Examples:
 
             switch(itemType) {
                 case 'key':
-                    // Keys can unlock doors - future feature
-                    // Check if current room has a locked exit that this key unlocks
-                    const unlocks = specialData.unlocks; // e.g., "gate", "door"
-                    logToTerminal(`You hold up ${itemData.name}. It might unlock something nearby.`, 'system');
-                    logToTerminal(`(Key system not yet implemented - keys will unlock doors in future updates)`, 'game');
+                    // Keys unlock doors/exits in the current room
+                    const unlocks = specialData.unlocks || specialData.direction; // e.g., "north", "gate", or specific exit
+                    const consumeOnUse = specialData.consumeOnUse !== false; // Default: true (key is consumed)
+                    
+                    if (!unlocks) {
+                        logToTerminal(`${itemData.name} doesn't seem to fit any lock here.`, 'error');
+                        break;
+                    }
+                    
+                    // Get current room
+                    const currentRoomForKey = gameWorld[playerData.roomId];
+                    if (!currentRoomForKey || !currentRoomForKey.lockedExits) {
+                        logToTerminal(`There's nothing to unlock here.`, 'error');
+                        break;
+                    }
+                    
+                    // Find matching locked exit
+                    let unlockedDirection = null;
+                    let lockInfo = null;
+                    
+                    // Try direct match first (e.g., "north")
+                    if (currentRoomForKey.lockedExits[unlocks]) {
+                        unlockedDirection = unlocks;
+                        lockInfo = currentRoomForKey.lockedExits[unlocks];
+                    } else {
+                        // Try to match by keyId
+                        for (const [dir, lock] of Object.entries(currentRoomForKey.lockedExits)) {
+                            if (lock.keyId === itemData.id || lock.key === itemData.id) {
+                                unlockedDirection = dir;
+                                lockInfo = lock;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (!unlockedDirection) {
+                        logToTerminal(`${itemData.name} doesn't fit any lock in this room.`, 'error');
+                        break;
+                    }
+                    
+                    // Unlock the exit permanently
+                    const exitKey = `${playerData.roomId}:${unlockedDirection}`;
+                    const currentUnlockedExits = playerData.unlockedExits || [];
+                    
+                    if (currentUnlockedExits.includes(exitKey)) {
+                        logToTerminal(`The way ${unlockedDirection} is already unlocked.`, 'game');
+                        break;
+                    }
+                    
+                    // Add to unlocked exits
+                    await updateDoc(playerRef, {
+                        unlockedExits: arrayUnion(exitKey)
+                    });
+                    
+                    // Show unlock message
+                    const unlockMessage = lockInfo.unlockMessage || 
+                                        lockInfo.unlocked || 
+                                        `You use ${itemData.name} to unlock the way ${unlockedDirection}. *Click*`;
+                    logToTerminal(unlockMessage, 'success');
+                    
+                    // Remove key from inventory if consumable
+                    if (consumeOnUse) {
+                        const updatedInv = playerData.inventory.filter(item => 
+                            item.id !== inventoryItem.id || item.name !== inventoryItem.name
+                        );
+                        await updateDoc(playerRef, { inventory: updatedInv });
+                        logToTerminal(`${itemData.name} crumbles to dust after use.`, 'system');
+                    } else {
+                        logToTerminal(`You can use ${itemData.name} again if needed.`, 'system');
+                    }
+                    
                     break;
 
                 case 'teleport':
@@ -2615,8 +2785,40 @@ Examples:
 
                 case 'container':
                     // Container - can hold items
-                    logToTerminal(`You open ${itemData.name}. It could store items.`, 'system');
-                    logToTerminal(`(Container system not yet implemented - will allow item storage in future updates)`, 'game');
+                    // Initialize contents if not exists
+                    if (!inventoryItem.contents) {
+                        inventoryItem.contents = [];
+                    }
+                    
+                    // Show container contents
+                    logToTerminal(`You open ${itemData.name}.`, 'system');
+                    
+                    if (inventoryItem.contents.length === 0) {
+                        logToTerminal(`The ${itemData.name} is empty.`, 'game');
+                    } else {
+                        logToTerminal(`It contains:`, 'game');
+                        inventoryItem.contents.forEach(containedItem => {
+                            const containedItemData = gameItems[containedItem.id];
+                            if (containedItemData) {
+                                const qty = containedItem.quantity || 1;
+                                const weight = containedItemData.weight || 0;
+                                logToTerminal(`- ${containedItemData.name}${qty > 1 ? ` (x${qty})` : ''} [${weight * qty} lbs]`, 'game');
+                            }
+                        });
+                    }
+                    
+                    // Show capacity info
+                    const maxCapacity = specialData.capacity || 50;
+                    let currentContentsWeight = 0;
+                    for (const item of inventoryItem.contents) {
+                        const itemData = gameItems[item.id];
+                        if (itemData) {
+                            currentContentsWeight += (itemData.weight || 0) * (item.quantity || 1);
+                        }
+                    }
+                    logToTerminal(`Capacity: ${currentContentsWeight.toFixed(1)}/${maxCapacity} lbs`, 'info');
+                    logToTerminal(`Use 'put [item] in ${itemData.name}' to store items.`, 'hint');
+                    logToTerminal(`Use 'take [item] from ${itemData.name}' to retrieve items.`, 'hint');
                     break;
 
                 case 'spellbook':
@@ -3034,6 +3236,33 @@ Examples:
                         break;
                     }
                     
+                    // Check if exit is locked
+                    if (currentRoom.lockedExits && currentRoom.lockedExits[direction]) {
+                        const lockInfo = currentRoom.lockedExits[direction];
+                        const requiredKey = lockInfo.keyId || lockInfo.key;
+                        
+                        // Check if player has unlocked this exit before (persistent unlock)
+                        const unlockedExits = playerData.unlockedExits || [];
+                        const exitKey = `${currentPlayerRoomId}:${direction}`;
+                        
+                        if (!unlockedExits.includes(exitKey)) {
+                            // Exit is still locked - show locked message
+                            const lockMessage = lockInfo.lockedMessage || 
+                                              lockInfo.message || 
+                                              `The way ${direction} is locked. You need ${requiredKey ? 'a key' : 'to unlock it somehow'}.`;
+                            logToTerminal(lockMessage, 'error');
+                            
+                            // Hint about the key if specified
+                            if (requiredKey) {
+                                const keyItem = gameItems[requiredKey];
+                                const keyName = keyItem ? keyItem.name : requiredKey;
+                                logToTerminal(`(You need to use ${keyName} to unlock this exit)`, 'system');
+                            }
+                            break;
+                        }
+                        // If we get here, the exit was previously unlocked - allow passage
+                    }
+                    
                     const updates = { roomId: destinationRoomId };
                     
                     // Direction names for messages
@@ -3101,14 +3330,203 @@ Examples:
                     await showRoom(destinationRoomId);
                 } else { logToTerminal("You can't go that way.", "error"); }
                 break;
+            
+            // Shorthand direction commands
+            case 'north':
+            case 'n':
+                {
+                    const moveTarget = 'north';
+                    console.log(`[Movement] Attempting to go ${moveTarget}`);
+                    const direction = moveTarget.toLowerCase();
+                    console.log(`[Movement] Direction: ${direction}, Current room exits:`, currentRoom.exits);
+                    if (currentRoom.exits && currentRoom.exits[direction]) {
+                        const destinationRoomId = currentRoom.exits[direction];
+                        const destinationRoom = gameWorld[destinationRoomId];
+                        const playerDoc = await getDoc(playerRef);
+                        const playerData = playerDoc.data();
+                        
+                        stopNpcConversationsInRoom(currentPlayerRoomId);
+                        stopProactiveNpcsInRoom(currentPlayerRoomId);
+                        
+                        const guildHallGuild = Object.values(gameGuilds).find(g => g.guildHallRoomId === destinationRoomId);
+                        if (guildHallGuild) {
+                            const playerGuildId = playerData.guildId;
+                            if (playerGuildId !== guildHallGuild.id && !playerData.isAdmin) {
+                                logToTerminal(`The entrance to ${guildHallGuild.name}'s guild hall is restricted to members only.`, 'error');
+                                break;
+                            }
+                        }
+                        
+                        if (typeof weatherSystem !== 'undefined' && !weatherSystem.canMove(userId)) {
+                            const weather = weatherSystem.getCurrentWeather();
+                            logToTerminal(`<span class="text-yellow-400">The ${weather.type} weather makes it difficult to move. You struggle against the elements but can't make progress.</span>`, 'game');
+                            break;
+                        }
+                        
+                        if (currentRoom.lockedExits && currentRoom.lockedExits[direction]) {
+                            const lockInfo = currentRoom.lockedExits[direction];
+                            const requiredKey = lockInfo.keyId || lockInfo.key;
+                            const unlockedExits = playerData.unlockedExits || [];
+                            const exitKey = `${currentPlayerRoomId}:${direction}`;
+                            
+                            if (!unlockedExits.includes(exitKey)) {
+                                const lockMessage = lockInfo.lockedMessage || lockInfo.message || `The way ${direction} is locked. You need ${requiredKey ? 'a key' : 'to unlock it somehow'}.`;
+                                logToTerminal(lockMessage, 'error');
+                                if (requiredKey) {
+                                    const keyItem = gameItems[requiredKey];
+                                    const keyName = keyItem ? keyItem.name : requiredKey;
+                                    logToTerminal(`(You need to use ${keyName} to unlock this exit)`, 'system');
+                                }
+                                break;
+                            }
+                        }
+                        
+                        const updates = { roomId: destinationRoomId };
+                        const directionNames = {'north': 'the north', 'south': 'the south', 'east': 'the east', 'west': 'the west', 'up': 'above', 'down': 'below', 'northeast': 'the northeast', 'northwest': 'the northwest', 'southeast': 'the southeast', 'southwest': 'the southwest'};
+                        const oppositeDirections = {'north': 'south', 'south': 'north', 'east': 'west', 'west': 'east', 'up': 'down', 'down': 'up', 'northeast': 'southwest', 'northwest': 'southeast', 'southeast': 'northwest', 'southwest': 'northeast'};
+                        
+                        await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {senderId: userId, senderName: playerName, roomId: currentPlayerRoomId, text: `${playerName} leaves ${directionNames[direction] || direction}.`, isEmote: true, timestamp: serverTimestamp()});
+                        
+                        if (!playerData.visitedRooms || !playerData.visitedRooms.includes(destinationRoomId)) {
+                            updates.score = (playerData.score || 0) + 25;
+                            updates.visitedRooms = arrayUnion(destinationRoomId);
+                            logToTerminal("You discovered a new area! +25 XP", "system");
+                            const newLevel = getLevelFromXp(updates.score);
+                            if (newLevel > (playerData.level || 1)) {
+                                updates.level = newLevel;
+                                await checkLevelUp(playerData.score, playerData.level || 1);
+                            }
+                        }
+                        
+                        await updateDoc(playerRef, updates);
+                        await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {senderId: userId, senderName: playerName, roomId: destinationRoomId, text: `${playerName} arrives from ${directionNames[oppositeDirections[direction]] || oppositeDirections[direction] || 'somewhere'}.`, isEmote: true, timestamp: serverTimestamp()});
+                        
+                        const completedQuests = await updateQuestProgress(userId, 'visit', destinationRoomId, 1);
+                        for (const completed of completedQuests) {
+                            const quest = gameQuests[completed.questId];
+                            if (quest) {
+                                logToTerminal(`🎉 Quest Objectives Complete: ${quest.title}!`, 'quest');
+                                logToTerminal(`Return to ${quest.turninNpcId || quest.giverNpcId} to claim your reward.`, 'quest');
+                            }
+                        }
+                        
+                        await showRoom(destinationRoomId);
+                    } else { logToTerminal("You can't go that way.", "error"); }
+                }
+                break;
+            
+            case 'south':
+            case 's':
+            case 'east':
+            case 'e':
+            case 'west':
+            case 'w':
+            case 'northeast':
+            case 'ne':
+            case 'northwest':
+            case 'nw':
+            case 'southeast':
+            case 'se':
+            case 'southwest':
+            case 'sw':
+            case 'up':
+            case 'u':
+            case 'down':
+            case 'd':
+                {
+                    // Map shorthand to full direction name
+                    const directionMap = {'s': 'south', 'e': 'east', 'w': 'west', 'ne': 'northeast', 'nw': 'northwest', 'se': 'southeast', 'sw': 'southwest', 'u': 'up', 'd': 'down'};
+                    const moveTarget = directionMap[action] || action; // Use mapping or keep original if it's already full name
+                    
+                    console.log(`[Movement] Attempting to go ${moveTarget}`);
+                    const direction = moveTarget.toLowerCase();
+                    console.log(`[Movement] Direction: ${direction}, Current room exits:`, currentRoom.exits);
+                    if (currentRoom.exits && currentRoom.exits[direction]) {
+                        const destinationRoomId = currentRoom.exits[direction];
+                        const destinationRoom = gameWorld[destinationRoomId];
+                        const playerDoc = await getDoc(playerRef);
+                        const playerData = playerDoc.data();
+                        
+                        stopNpcConversationsInRoom(currentPlayerRoomId);
+                        stopProactiveNpcsInRoom(currentPlayerRoomId);
+                        
+                        const guildHallGuild = Object.values(gameGuilds).find(g => g.guildHallRoomId === destinationRoomId);
+                        if (guildHallGuild) {
+                            const playerGuildId = playerData.guildId;
+                            if (playerGuildId !== guildHallGuild.id && !playerData.isAdmin) {
+                                logToTerminal(`The entrance to ${guildHallGuild.name}'s guild hall is restricted to members only.`, 'error');
+                                break;
+                            }
+                        }
+                        
+                        if (typeof weatherSystem !== 'undefined' && !weatherSystem.canMove(userId)) {
+                            const weather = weatherSystem.getCurrentWeather();
+                            logToTerminal(`<span class="text-yellow-400">The ${weather.type} weather makes it difficult to move. You struggle against the elements but can't make progress.</span>`, 'game');
+                            break;
+                        }
+                        
+                        if (currentRoom.lockedExits && currentRoom.lockedExits[direction]) {
+                            const lockInfo = currentRoom.lockedExits[direction];
+                            const requiredKey = lockInfo.keyId || lockInfo.key;
+                            const unlockedExits = playerData.unlockedExits || [];
+                            const exitKey = `${currentPlayerRoomId}:${direction}`;
+                            
+                            if (!unlockedExits.includes(exitKey)) {
+                                const lockMessage = lockInfo.lockedMessage || lockInfo.message || `The way ${direction} is locked. You need ${requiredKey ? 'a key' : 'to unlock it somehow'}.`;
+                                logToTerminal(lockMessage, 'error');
+                                if (requiredKey) {
+                                    const keyItem = gameItems[requiredKey];
+                                    const keyName = keyItem ? keyItem.name : requiredKey;
+                                    logToTerminal(`(You need to use ${keyName} to unlock this exit)`, 'system');
+                                }
+                                break;
+                            }
+                        }
+                        
+                        const updates = { roomId: destinationRoomId };
+                        const directionNames = {'north': 'the north', 'south': 'the south', 'east': 'the east', 'west': 'the west', 'up': 'above', 'down': 'below', 'northeast': 'the northeast', 'northwest': 'the northwest', 'southeast': 'the southeast', 'southwest': 'the southwest'};
+                        const oppositeDirections = {'north': 'south', 'south': 'north', 'east': 'west', 'west': 'east', 'up': 'down', 'down': 'up', 'northeast': 'southwest', 'northwest': 'southeast', 'southeast': 'northwest', 'southwest': 'northeast'};
+                        
+                        await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {senderId: userId, senderName: playerName, roomId: currentPlayerRoomId, text: `${playerName} leaves ${directionNames[direction] || direction}.`, isEmote: true, timestamp: serverTimestamp()});
+                        
+                        if (!playerData.visitedRooms || !playerData.visitedRooms.includes(destinationRoomId)) {
+                            updates.score = (playerData.score || 0) + 25;
+                            updates.visitedRooms = arrayUnion(destinationRoomId);
+                            logToTerminal("You discovered a new area! +25 XP", "system");
+                            const newLevel = getLevelFromXp(updates.score);
+                            if (newLevel > (playerData.level || 1)) {
+                                updates.level = newLevel;
+                                await checkLevelUp(playerData.score, playerData.level || 1);
+                            }
+                        }
+                        
+                        await updateDoc(playerRef, updates);
+                        await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {senderId: userId, senderName: playerName, roomId: destinationRoomId, text: `${playerName} arrives from ${directionNames[oppositeDirections[direction]] || oppositeDirections[direction] || 'somewhere'}.`, isEmote: true, timestamp: serverTimestamp()});
+                        
+                        const completedQuests = await updateQuestProgress(userId, 'visit', destinationRoomId, 1);
+                        for (const completed of completedQuests) {
+                            const quest = gameQuests[completed.questId];
+                            if (quest) {
+                                logToTerminal(`🎉 Quest Objectives Complete: ${quest.title}!`, 'quest');
+                                logToTerminal(`Return to ${quest.turninNpcId || quest.giverNpcId} to claim your reward.`, 'quest');
+                            }
+                        }
+                        
+                        await showRoom(destinationRoomId);
+                    } else { logToTerminal("You can't go that way.", "error"); }
+                }
+                break;
+            
             case 'get':
                 const roomItemIds = currentRoom.items || [];
-                const itemIdToGet = roomItemIds.find(id => {
-                    const item = gameItems[id];
+                const itemEntryToGet = roomItemIds.find(itemEntry => {
+                    // Support both old format (string) and new format ({id, quantity})
+                    const itemId = typeof itemEntry === 'string' ? itemEntry : itemEntry.id;
+                    const item = gameItems[itemId];
                     if (!item) return false;
                     
                     // Check ID match
-                    if (id.toLowerCase() === target) return true;
+                    if (itemId.toLowerCase() === target) return true;
                     
                     // Check name match
                     if (item.name.toLowerCase().includes(target)) return true;
@@ -3121,18 +3539,55 @@ Examples:
                     return false;
                 });
                 
-                if (itemIdToGet) {
+                if (itemEntryToGet) {
+                    // Handle both formats
+                    const itemIdToGet = typeof itemEntryToGet === 'string' ? itemEntryToGet : itemEntryToGet.id;
+                    const itemQuantityInRoom = typeof itemEntryToGet === 'string' ? 1 : (itemEntryToGet.quantity || 1);
+                    
                     const item = gameItems[itemIdToGet];
                     if (item.movable === false) {
-                        logToTerminal("You can't take that.", "error"); return;
+                        logToTerminal("You can't take that.", "error"); 
+                        break;
                     }
+                    
+                    // Check weight limit
+                    const playerDocGet = await getDoc(playerRef);
+                    const playerGetData = playerDocGet.data();
+                    if (!canCarryItem(playerGetData, itemIdToGet, 1)) {
+                        const currentWeight = calculateInventoryWeight(playerGetData.inventory || []);
+                        const maxWeight = calculateMaxCarryWeight(playerGetData);
+                        const itemWeight = item.weight || 0;
+                        logToTerminal(`You can't carry that! (Current: ${currentWeight.toFixed(1)}/${maxWeight} lbs, item weighs ${itemWeight} lbs)`, "error");
+                        logToTerminal(`Try dropping some items first, or store items in a container.`, "hint");
+                        break;
+                    }
+                    
                     const fullItemObject = { id: itemIdToGet, ...item };
-                    await updateDoc(playerRef, { inventory: arrayUnion(fullItemObject) });
-                    await updateDoc(roomRef, { items: arrayRemove(itemIdToGet) });
+                    // Use manual array update instead of arrayUnion to allow duplicate items
+                    const currentInventory = playerGetData.inventory || [];
+                    await updateDoc(playerRef, { inventory: [...currentInventory, fullItemObject] });
+                    
+                    // Update room: decrease quantity or remove item
+                    if (itemQuantityInRoom > 1) {
+                        // Decrease quantity
+                        const updatedItems = roomItemIds.map(entry => {
+                            if (typeof entry === 'object' && entry.id === itemIdToGet) {
+                                return { ...entry, quantity: entry.quantity - 1 };
+                            }
+                            return entry;
+                        });
+                        await updateDoc(roomRef, { items: updatedItems });
+                    } else {
+                        // Remove item completely (works for both formats)
+                        await updateDoc(roomRef, { items: arrayRemove(itemEntryToGet) });
+                    }
+                    
                     logToTerminal(`You take ${addArticle(item.name)}.`, 'game');
                     
                     // Check quest progress for item collection
+                    console.log(`[GET] Calling updateQuestProgress for collect ${itemIdToGet}`);
                     const completedQuests = await updateQuestProgress(userId, 'collect', itemIdToGet, 1);
+                    console.log(`[GET] Quest update returned:`, completedQuests);
                     for (const completed of completedQuests) {
                         const quest = gameQuests[completed.questId];
                         if (quest) {
@@ -3156,10 +3611,291 @@ Examples:
 
                 if (itemToDrop) {
                     await updateDoc(playerRef, { inventory: arrayRemove(itemToDrop) });
-                    await updateDoc(roomRef, { items: arrayUnion(itemToDrop.id) });
+                    
+                    // Add to room using new format with quantity
+                    const currentRoomItems = currentRoom.items || [];
+                    const existingItemEntry = currentRoomItems.find(entry => {
+                        const entryId = typeof entry === 'string' ? entry : entry.id;
+                        return entryId === itemToDrop.id;
+                    });
+                    
+                    if (existingItemEntry && typeof existingItemEntry === 'object') {
+                        // Item already exists in room with quantity, increase it
+                        const updatedItems = currentRoomItems.map(entry => {
+                            if (typeof entry === 'object' && entry.id === itemToDrop.id) {
+                                return { ...entry, quantity: (entry.quantity || 1) + 1 };
+                            }
+                            return entry;
+                        });
+                        await updateDoc(roomRef, { items: updatedItems });
+                    } else {
+                        // Add new item entry with quantity 1
+                        await updateDoc(roomRef, { items: arrayUnion({ id: itemToDrop.id, quantity: 1 }) });
+                    }
+                    
                     logToTerminal(`You drop ${addArticle(itemToDrop.name)}.`, 'game');
                 } else { logToTerminal("You aren't carrying that.", 'error'); }
                 break;
+            
+            case 'equip':
+            case 'wear':
+            case 'wield':
+                if (!target) {
+                    logToTerminal("What do you want to equip?", 'error');
+                    break;
+                }
+                
+                const playerDocEquip = await getDoc(playerRef);
+                const playerDataEquip = playerDocEquip.data();
+                const inventoryEquip = playerDataEquip.inventory || [];
+                
+                // Find item in inventory
+                const itemToEquip = inventoryEquip.find(i => 
+                    i && i.id && i.name && 
+                    (i.id.toLowerCase() === target || i.name.toLowerCase().includes(target))
+                );
+                
+                if (!itemToEquip) {
+                    logToTerminal("You aren't carrying that item.", 'error');
+                    break;
+                }
+                
+                const itemDataEquip = gameItems[itemToEquip.id];
+                if (!itemDataEquip) {
+                    logToTerminal("Item data not found.", 'error');
+                    break;
+                }
+                
+                // Determine equipment type and slot
+                let equipSlot = null;
+                let equipField = null;
+                const updates = {};
+                
+                // Weapon
+                if (itemDataEquip.isWeapon || itemDataEquip.itemType === 'weapon') {
+                    equipSlot = 'weapon';
+                    equipField = 'equippedWeapon';
+                    
+                    // Unequip current weapon if any
+                    if (playerDataEquip.equippedWeapon) {
+                        const oldWeapon = inventoryEquip.find(i => i.id === playerDataEquip.equippedWeapon);
+                        if (oldWeapon && oldWeapon.equipped) {
+                            oldWeapon.equipped = false;
+                        }
+                    }
+                    
+                    updates.equippedWeapon = itemToEquip.id;
+                }
+                // Shield
+                else if (itemDataEquip.type === 'shield' || itemDataEquip.itemType === 'shield') {
+                    equipSlot = 'shield';
+                    equipField = 'equippedShield';
+                    
+                    // Unequip current shield if any
+                    if (playerDataEquip.equippedShield) {
+                        const oldShield = inventoryEquip.find(i => i.id === playerDataEquip.equippedShield);
+                        if (oldShield && oldShield.equipped) {
+                            oldShield.equipped = false;
+                        }
+                    }
+                    
+                    updates.equippedShield = itemToEquip.id;
+                }
+                // Armor
+                else if (itemDataEquip.type === 'armor' || itemDataEquip.itemType === 'armor') {
+                    equipSlot = 'armor';
+                    equipField = 'equippedArmor';
+                    
+                    // Unequip current armor if any
+                    if (playerDataEquip.equippedArmor) {
+                        const oldArmor = inventoryEquip.find(i => i.id === playerDataEquip.equippedArmor);
+                        if (oldArmor && oldArmor.equipped) {
+                            oldArmor.equipped = false;
+                        }
+                    }
+                    
+                    updates.equippedArmor = itemToEquip.id;
+                }
+                // Clothing and other wearables
+                else if (itemDataEquip.itemType === 'clothing' || itemDataEquip.itemType === 'container') {
+                    equipSlot = itemDataEquip.specialData?.slot || 'accessory';
+                    
+                    // For containers, just mark as equipped (for capacity bonus)
+                    if (itemDataEquip.itemType === 'container') {
+                        equipSlot = 'container';
+                    }
+                }
+                else {
+                    logToTerminal("That item cannot be equipped.", 'error');
+                    break;
+                }
+                
+                // Mark item as equipped
+                itemToEquip.equipped = true;
+                
+                // Update inventory with modified items
+                const updatedInventoryEquip = inventoryEquip.map(i => {
+                    if (i.id === itemToEquip.id && i.name === itemToEquip.name) {
+                        return itemToEquip;
+                    }
+                    return i;
+                });
+                
+                updates.inventory = updatedInventoryEquip;
+                
+                await updateDoc(playerRef, updates);
+                
+                // Show success message with stats if applicable
+                let message = `You equip ${addArticle(itemDataEquip.name)}.`;
+                
+                if (itemDataEquip.weaponDamage) {
+                    message += ` (+${itemDataEquip.weaponDamage} damage)`;
+                }
+                if (itemDataEquip.damageReduction) {
+                    message += ` (+${itemDataEquip.damageReduction} armor)`;
+                }
+                if (itemDataEquip.specialData?.capacityBonus) {
+                    message += ` (+${itemDataEquip.specialData.capacityBonus} lbs carrying capacity)`;
+                }
+                
+                logToTerminal(message, 'success');
+                break;
+            
+            case 'unequip':
+            case 'remove':
+                if (!target) {
+                    logToTerminal("What do you want to unequip?", 'error');
+                    break;
+                }
+                
+                const playerDocUnequip = await getDoc(playerRef);
+                const playerDataUnequip = playerDocUnequip.data();
+                const inventoryUnequip = playerDataUnequip.inventory || [];
+                
+                // Find equipped item
+                const itemToUnequip = inventoryUnequip.find(i => 
+                    i && i.id && i.name && i.equipped &&
+                    (i.id.toLowerCase() === target || i.name.toLowerCase().includes(target))
+                );
+                
+                if (!itemToUnequip) {
+                    logToTerminal("You don't have that item equipped.", 'error');
+                    break;
+                }
+                
+                const itemDataUnequip = gameItems[itemToUnequip.id];
+                const updatesUnequip = {};
+                
+                // Unmark as equipped
+                itemToUnequip.equipped = false;
+                
+                // Clear equipment slot references
+                if (itemDataUnequip?.isWeapon || itemDataUnequip?.itemType === 'weapon') {
+                    if (playerDataUnequip.equippedWeapon === itemToUnequip.id) {
+                        updatesUnequip.equippedWeapon = null;
+                    }
+                }
+                else if (itemDataUnequip?.type === 'shield' || itemDataUnequip?.itemType === 'shield') {
+                    if (playerDataUnequip.equippedShield === itemToUnequip.id) {
+                        updatesUnequip.equippedShield = null;
+                    }
+                }
+                else if (itemDataUnequip?.type === 'armor' || itemDataUnequip?.itemType === 'armor') {
+                    if (playerDataUnequip.equippedArmor === itemToUnequip.id) {
+                        updatesUnequip.equippedArmor = null;
+                    }
+                }
+                
+                // Update inventory
+                const updatedInventoryUnequip = inventoryUnequip.map(i => {
+                    if (i.id === itemToUnequip.id && i.name === itemToUnequip.name) {
+                        return itemToUnequip;
+                    }
+                    return i;
+                });
+                
+                updatesUnequip.inventory = updatedInventoryUnequip;
+                
+                await updateDoc(playerRef, updatesUnequip);
+                logToTerminal(`You unequip ${addArticle(itemDataUnequip?.name || itemToUnequip.name)}.`, 'game');
+                break;
+            
+            case 'equipment':
+            case 'equipped':
+                const playerDocEq = await getDoc(playerRef);
+                const playerDataEq = playerDocEq.data();
+                const inventoryEq = playerDataEq.inventory || [];
+                
+                logToTerminal("=== Equipped Items ===", 'system');
+                
+                let hasEquipped = false;
+                
+                // Show weapon
+                if (playerDataEq.equippedWeapon) {
+                    const weapon = inventoryEq.find(i => i.id === playerDataEq.equippedWeapon);
+                    if (weapon) {
+                        const weaponData = gameItems[weapon.id];
+                        const dmg = weaponData?.weaponDamage || 0;
+                        logToTerminal(`Weapon: ${weapon.name} (+${dmg} damage)`, 'game');
+                        hasEquipped = true;
+                    }
+                }
+                
+                // Show shield
+                if (playerDataEq.equippedShield) {
+                    const shield = inventoryEq.find(i => i.id === playerDataEq.equippedShield);
+                    if (shield) {
+                        logToTerminal(`Shield: ${shield.name}`, 'game');
+                        hasEquipped = true;
+                    }
+                }
+                
+                // Show armor
+                if (playerDataEq.equippedArmor) {
+                    const armor = inventoryEq.find(i => i.id === playerDataEq.equippedArmor);
+                    if (armor) {
+                        const armorData = gameItems[armor.id];
+                        const reduction = armorData?.damageReduction || 0;
+                        logToTerminal(`Armor: ${armor.name} (+${reduction} protection)`, 'game');
+                        hasEquipped = true;
+                    }
+                }
+                
+                // Show other equipped items (containers, clothing, etc)
+                const otherEquipped = inventoryEq.filter(i => 
+                    i.equipped && 
+                    i.id !== playerDataEq.equippedWeapon && 
+                    i.id !== playerDataEq.equippedShield && 
+                    i.id !== playerDataEq.equippedArmor
+                );
+                
+                if (otherEquipped.length > 0) {
+                    otherEquipped.forEach(item => {
+                        const itemData = gameItems[item.id];
+                        let info = '';
+                        if (itemData?.specialData?.capacityBonus) {
+                            info = ` (+${itemData.specialData.capacityBonus} lbs capacity)`;
+                        }
+                        logToTerminal(`${itemData?.itemType || 'Item'}: ${item.name}${info}`, 'game');
+                    });
+                    hasEquipped = true;
+                }
+                
+                if (!hasEquipped) {
+                    logToTerminal("You have nothing equipped.", 'system');
+                } else {
+                    // Show total bonuses
+                    const totalDamage = playerDataEq.equippedWeapon ? 
+                        (gameItems[playerDataEq.equippedWeapon]?.weaponDamage || 0) : 0;
+                    const totalArmor = playerDataEq.equippedArmor ? 
+                        (gameItems[playerDataEq.equippedArmor]?.damageReduction || 0) : 0;
+                    
+                    if (totalDamage > 0 || totalArmor > 0) {
+                        logToTerminal(`\nTotal Bonuses: +${totalDamage} damage, +${totalArmor} armor`, 'info');
+                    }
+                }
+                break;
+            
             case 'say':
                 // Check if player is muted
                 const currentPlayerData = gamePlayers[userId];
@@ -3358,11 +4094,44 @@ Examples:
             
             case 'inventory':
                 const pDocInv = await getDoc(playerRef);
-                const inv = pDocInv.data().inventory || [];
+                const playerDataInv = pDocInv.data();
+                const inv = playerDataInv.inventory || [];
+                
                 if (inv.length > 0) {
                     logToTerminal("You are carrying:", 'system');
-                    inv.forEach(item => logToTerminal(`- ${item.name}`, 'game'));
-                } else { logToTerminal("You are not carrying anything.", 'system'); }
+                    
+                    // Show each item with weight
+                    inv.forEach(item => {
+                        const itemData = gameItems[item.id];
+                        const weight = itemData?.weight || 0;
+                        const equipped = item.equipped ? ' (equipped)' : '';
+                        
+                        // Show container contents count if applicable
+                        if (itemData?.itemType === 'container' && item.contents && item.contents.length > 0) {
+                            logToTerminal(`- ${item.name}${equipped} [${weight} lbs] (contains ${item.contents.length} item${item.contents.length !== 1 ? 's' : ''})`, 'game');
+                        } else {
+                            logToTerminal(`- ${item.name}${equipped} [${weight} lbs]`, 'game');
+                        }
+                    });
+                    
+                    // Show total weight and capacity
+                    const currentWeight = calculateInventoryWeight(inv);
+                    const maxWeight = calculateMaxCarryWeight(playerDataInv);
+                    const percentUsed = (currentWeight / maxWeight * 100).toFixed(0);
+                    
+                    logToTerminal(`\nCarrying: ${currentWeight.toFixed(1)}/${maxWeight} lbs (${percentUsed}%)`, 'info');
+                    
+                    if (percentUsed >= 90) {
+                        logToTerminal(`⚠️ You're heavily encumbered! Consider dropping items or storing them in a container.`, 'warning');
+                    } else if (percentUsed >= 75) {
+                        logToTerminal(`You're carrying a heavy load.`, 'hint');
+                    }
+                    
+                } else { 
+                    logToTerminal("You are not carrying anything.", 'system');
+                    const maxWeight = calculateMaxCarryWeight(playerDataInv);
+                    logToTerminal(`Carrying capacity: 0/${maxWeight} lbs`, 'info');
+                }
                 break;
             case 'examine':
                 // Special case: leaderboard frame
@@ -3484,7 +4253,7 @@ Examples:
                 }
                 
                 // Use trading module for advanced purchase
-                const { acceptHagglePrice, buyFromNPC } = await import('./trading.js');
+                const { acceptHagglePrice, buyFromNPC } = await import('./trading.js?v=056');
                 await acceptHagglePrice(auth.currentUser.uid, vendor, itemToBuy);
                 break;
             
@@ -3496,14 +4265,26 @@ Examples:
                     break;
                 }
                 
-                const itemToSell = findItemByName(target);
+                // Get player's current inventory
+                const playerDocSell = await getDoc(playerRef);
+                const sellInv = playerDocSell.data().inventory || [];
+                
+                // Find the item in inventory by name/alias
+                const itemToSell = sellInv.find(invItem => {
+                    const item = gameItems[invItem.id];
+                    if (!item) return false;
+                    const lowerTarget = target.toLowerCase();
+                    if (item.name.toLowerCase().includes(lowerTarget)) return true;
+                    if (item.aliases && item.aliases.some(alias => alias.toLowerCase().includes(lowerTarget))) return true;
+                    return false;
+                });
+                
                 if (!itemToSell) {
-                    logToTerminal(`Item "${target}" not found.`, "error");
+                    logToTerminal(`You don't have ${target}.`, "error");
                     break;
                 }
                 
-                const { sellToNPC } = await import('./trading.js');
-                const playerDocSell = await getDoc(playerRef);
+                const { sellToNPC } = await import('./trading.js?v=056');
                 await sellToNPC(auth.currentUser.uid, buyer, itemToSell, playerDocSell.data());
                 break;
             
@@ -3640,29 +4421,35 @@ Examples:
                 if (itemRecipientPlayer) {
                     const [recipientId, recipientData] = itemRecipientPlayer;
                     
-                    const itemToGivePlayer = findItemByName(target);
-                    if (!itemToGivePlayer) {
+                    // Get player's current inventory
+                    const playerDocGiveItem = await getDoc(playerRef);
+                    const playerInv = playerDocGiveItem.data().inventory || [];
+                    
+                    // Find the item in inventory by name/alias
+                    const itemIndex = playerInv.findIndex(invItem => {
+                        const item = gameItems[invItem.id];
+                        if (!item) return false;
+                        const lowerTarget = target.toLowerCase();
+                        if (item.name.toLowerCase().includes(lowerTarget)) return true;
+                        if (item.aliases && item.aliases.some(alias => alias.toLowerCase().includes(lowerTarget))) return true;
+                        return false;
+                    });
+                    
+                    if (itemIndex === -1) {
                         logToTerminal(`You don't have ${target}.`, "error");
                         break;
                     }
                     
+                    const itemToGivePlayer = playerInv[itemIndex];
+                    
                     // Remove item from giver's inventory
-                    const playerDocGiveItem = await getDoc(playerRef);
-                    const playerInv = playerDocGiveItem.data().inventory || [];
-                    const itemIndex = playerInv.indexOf(itemToGivePlayer.id);
-                    
-                    if (itemIndex === -1) {
-                        logToTerminal(`You don't have ${itemToGivePlayer.name}.`, "error");
-                        break;
-                    }
-                    
                     playerInv.splice(itemIndex, 1);
                     await updateDoc(playerRef, { inventory: playerInv });
                     
                     // Add item to recipient's inventory
                     const recipientRef = doc(db, `/artifacts/${appId}/public/data/mud-players/${recipientId}`);
                     await updateDoc(recipientRef, {
-                        inventory: arrayUnion(itemToGivePlayer.id)
+                        inventory: arrayUnion(itemToGivePlayer)
                     });
                     
                     logToTerminal(`You give ${itemToGivePlayer.name} to ${recipientData.name}.`, "success");
@@ -3698,22 +4485,28 @@ Examples:
                     break;
                 }
                 
-                const itemToGive = findItemByName(target);
-                if (!itemToGive) {
+                // Get player's current inventory
+                const playerDocGiveItem = await getDoc(playerRef);
+                const playerInv = playerDocGiveItem.data().inventory || [];
+                
+                // Find the item in inventory by name/alias
+                const itemIndex = playerInv.findIndex(invItem => {
+                    const item = gameItems[invItem.id];
+                    if (!item) return false;
+                    const lowerTarget = target.toLowerCase();
+                    if (item.name.toLowerCase().includes(lowerTarget)) return true;
+                    if (item.aliases && item.aliases.some(alias => alias.toLowerCase().includes(lowerTarget))) return true;
+                    return false;
+                });
+                
+                if (itemIndex === -1) {
                     logToTerminal(`You don't have ${target}.`, "error");
                     break;
                 }
                 
+                const itemToGive = playerInv[itemIndex];
+                
                 // Remove item from player inventory
-                const playerDocGiveItem = await getDoc(playerRef);
-                const playerInv = playerDocGiveItem.data().inventory || [];
-                const itemIndex = playerInv.indexOf(itemToGive.id);
-                
-                if (itemIndex === -1) {
-                    logToTerminal(`You don't have ${itemToGive.name}.`, "error");
-                    break;
-                }
-                
                 playerInv.splice(itemIndex, 1);
                 await updateDoc(playerRef, { inventory: playerInv });
                 
@@ -3739,51 +4532,95 @@ Examples:
                 break;
             
             case 'haggle':
-                // NEW: Haggle with merchants
-                if (!npc_target) {
-                    logToTerminal("Haggle with whom?", "error");
-                    break;
+                // Haggle with merchants - expects target=item, topic=price, npc_target=merchant
+                try {
+                    if (!npc_target) {
+                        logToTerminal("Haggle with whom?", "error");
+                        break;
+                    }
+                    
+                    if (!target) {
+                        logToTerminal("Haggle for what item?", "error");
+                        break;
+                    }
+                    
+                    const merchant = findNpcInRoom(npc_target);
+                    if (!merchant) {
+                        logToTerminal(`${npc_target} is not here.`, "error");
+                        break;
+                    }
+                    
+                    if (!merchant.sells || merchant.sells.length === 0) {
+                        logToTerminal(`${merchant.shortName || merchant.name} doesn't sell anything.`, "error");
+                        break;
+                    }
+                    
+                    // Find item in merchant's inventory
+                    let itemToHaggle = null;
+                    const targetLower = target.toLowerCase();
+                    
+                    for (const itemId of merchant.sells) {
+                        const item = gameItems[itemId];
+                        if (item && (
+                            item.id.toLowerCase() === targetLower ||
+                            item.name.toLowerCase().includes(targetLower) ||
+                            (item.aliases && item.aliases.some(alias => alias.toLowerCase() === targetLower))
+                        )) {
+                            itemToHaggle = item;
+                            break;
+                        }
+                    }
+                    
+                    if (!itemToHaggle) {
+                        logToTerminal(`${merchant.shortName || merchant.name} doesn't sell "${target}".`, "error");
+                        break;
+                    }
+                    
+                    // If topic is provided, use it as the offered price, otherwise let haggleWithNPC handle it
+                    const offeredPrice = topic ? parseInt(topic) : null;
+                    
+                    if (topic && isNaN(offeredPrice)) {
+                        logToTerminal("Invalid price. Please specify a number.", "error");
+                        break;
+                    }
+                    
+                    const { haggleWithNPC } = await import('./trading.js?v=056');
+                    const playerDocHaggle = await getDoc(playerRef);
+                    await haggleWithNPC(auth.currentUser.uid, merchant, itemToHaggle, offeredPrice, playerDocHaggle.data());
+                } catch (error) {
+                    console.error('Error in haggle command:', error);
+                    logToTerminal('An error occurred while haggling. Please try again.', 'error');
                 }
-                
-                const merchant = findNpcInRoom(npc_target);
-                if (!merchant) {
-                    logToTerminal(`${npc_target} is not here.`, "error");
-                    break;
-                }
-                
-                // Parse: "haggle 50 for sword from merchant" or "haggle 50 gold for sword from merchant"
-                // target should be the price, and we need to extract the item name
-                const haggleMatch = cmdText.match(/haggle\s+(\d+)(?:\s+gold)?\s+for\s+(.+?)\s+(?:from|with)\s+/i);
-                if (!haggleMatch) {
-                    logToTerminal('Usage: haggle <price> for <item> from <merchant>', 'error');
-                    break;
-                }
-                
-                const offeredPrice = parseInt(haggleMatch[1]);
-                const itemName = haggleMatch[2].trim();
-                const itemToHaggle = findItemByName(itemName);
-                
-                if (!itemToHaggle) {
-                    logToTerminal(`Item "${itemName}" not found.`, "error");
-                    break;
-                }
-                
-                const { haggleWithNPC } = await import('./trading.js');
-                const playerDocHaggle = await getDoc(playerRef);
-                await haggleWithNPC(auth.currentUser.uid, merchant, itemToHaggle, offeredPrice, playerDocHaggle.data());
                 break;
             
             case 'list':
                 // NEW: List merchant inventory with prices
-                const shopkeeper = npc_target ? findNpcInRoom(npc_target) : findNpcInRoom('');
+                // Try to find NPC by target or npc_target
+                const merchantName = target || npc_target;
+                console.log('[List Command] Searching for merchant:', merchantName);
+                console.log('[List Command] Current room NPCs:', currentRoom?.npcs);
+                
+                const shopkeeper = merchantName ? findNpcInRoom(merchantName) : findNpcInRoom('');
+                console.log('[List Command] Found shopkeeper:', shopkeeper);
                 
                 if (!shopkeeper) {
                     // Find any NPC with sells array in the room
-                    const npcsInRoom = Object.values(gameNpcs).filter(npc => 
-                        npc.currentRoom === currentPlayerRoomId && 
-                        npc.sells && 
-                        npc.sells.length > 0
-                    );
+                    const currentRoom = gameWorld[currentPlayerRoomId];
+                    const roomNpcIds = currentRoom?.npcs || [];
+                    console.log('[List Command] Checking all NPCs in room:', roomNpcIds);
+                    const npcsInRoom = roomNpcIds
+                        .map(npcId => {
+                            const npc = gameNpcs[npcId];
+                            console.log('[List Command] NPC:', npcId, npc);
+                            return npc;
+                        })
+                        .filter(npc => {
+                            const hasSells = npc && npc.sells && npc.sells.length > 0;
+                            console.log('[List Command] Has sells?', hasSells, npc?.sells);
+                            return hasSells;
+                        });
+                    
+                    console.log('[List Command] Merchants found:', npcsInRoom);
                     
                     if (npcsInRoom.length === 0) {
                         logToTerminal("There are no merchants here.", "error");
@@ -3795,11 +4632,29 @@ Examples:
                         break;
                     }
                     
-                    const { listMerchantInventory } = await import('./trading.js');
-                    listMerchantInventory(npcsInRoom[0], auth.currentUser.uid);
+                    try {
+                        const { listMerchantInventory } = await import('./trading.js?v=056');
+                        console.log('[List Command] Calling listMerchantInventory with:', npcsInRoom[0]);
+                        listMerchantInventory(npcsInRoom[0], auth.currentUser.uid, gameItems);
+                    } catch (error) {
+                        console.error('[List Command] Error:', error);
+                        logToTerminal(`Error listing inventory: ${error.message}`, 'error');
+                    }
                 } else {
-                    const { listMerchantInventory } = await import('./trading.js');
-                    listMerchantInventory(shopkeeper, auth.currentUser.uid);
+                    console.log('[List Command] Entering ELSE block for shopkeeper');
+                    try {
+                        console.log('[List Command] About to import trading.js');
+                        const tradingModule = await import('./trading.js?v=056');
+                        console.log('[List Command] Trading module imported:', tradingModule);
+                        const { listMerchantInventory } = tradingModule;
+                        console.log('[List Command] listMerchantInventory function:', listMerchantInventory);
+                        console.log('[List Command] Calling listMerchantInventory with:', shopkeeper, auth.currentUser.uid, 'gameItems:', gameItems);
+                        await listMerchantInventory(shopkeeper, auth.currentUser.uid, gameItems);
+                        console.log('[List Command] listMerchantInventory completed');
+                    } catch (error) {
+                        console.error('[List Command] Error:', error);
+                        logToTerminal(`Error listing inventory: ${error.message}`, 'error');
+                    }
                 }
                 break;
             
@@ -3812,7 +4667,7 @@ Examples:
                     break;
                 }
                 
-                const { appraiseItem } = await import('./trading.js');
+                const { appraiseItem } = await import('./trading.js?v=056');
                 await appraiseItem(auth.currentUser.uid, itemToAppraise);
                 break;
             
@@ -3829,7 +4684,7 @@ Examples:
                     break;
                 }
                 
-                const { getMerchantReputation, getReputationLevel, REP_LEVELS } = await import('./trading.js');
+                const { getMerchantReputation, getReputationLevel, REP_LEVELS } = await import('./trading.js?v=056');
                 const reputation = await getMerchantReputation(auth.currentUser.uid, repMerchant.id);
                 const repLevel = getReputationLevel(reputation);
                 
@@ -3860,7 +4715,7 @@ Examples:
                     break;
                 }
                 
-                const { getMerchantReputation: getRepForList, getReputationLevel: getRepLevelForList } = await import('./trading.js');
+                const { getMerchantReputation: getRepForList, getReputationLevel: getRepLevelForList } = await import('./trading.js?v=056');
                 
                 for (const npc of merchantNpcs) {
                     const rep = await getRepForList(auth.currentUser.uid, npc.id);
@@ -3878,14 +4733,14 @@ Examples:
                     break;
                 }
                 
-                const { initiatePlayerTrade } = await import('./player-trading.js');
+                const { initiatePlayerTrade } = await import('./player-trading.js?v=056');
                 await initiatePlayerTrade(auth.currentUser.uid, target, currentPlayerRoomId);
                 break;
             
             case 'accept':
                 // Check if accepting trade or something else
                 if (target === 'trade' || cmdText.toLowerCase().includes('accept trade')) {
-                    const { acceptTradeRequest } = await import('./player-trading.js');
+                    const { acceptTradeRequest } = await import('./player-trading.js?v=056');
                     await acceptTradeRequest(auth.currentUser.uid);
                 } else {
                     logToTerminal("Accept what?", "error");
@@ -3894,7 +4749,7 @@ Examples:
             
             case 'decline':
                 if (target === 'trade' || cmdText.toLowerCase().includes('decline trade')) {
-                    const { declineTradeRequest } = await import('./player-trading.js');
+                    const { declineTradeRequest } = await import('./player-trading.js?v=056');
                     await declineTradeRequest(auth.currentUser.uid);
                 } else {
                     logToTerminal("Decline what?", "error");
@@ -3908,7 +4763,7 @@ Examples:
                     break;
                 }
                 
-                const { offerTradeItem, offerTradeGold } = await import('./player-trading.js');
+                const { offerTradeItem, offerTradeGold } = await import('./player-trading.js?v=056');
                 
                 // Check if offering gold
                 if (target.match(/^\d+$/) || cmdText.toLowerCase().includes('gold')) {
@@ -3926,7 +4781,7 @@ Examples:
             case 'remove':
                 // NEW: Remove item from trade offer
                 // Check if in context of trade
-                const { getPlayerTradeSession, removeTradeItem } = await import('./player-trading.js');
+                const { getPlayerTradeSession, removeTradeItem } = await import('./player-trading.js?v=056');
                 const tradeSession = getPlayerTradeSession(auth.currentUser.uid);
                 
                 if (tradeSession) {
@@ -3938,7 +4793,7 @@ Examples:
             
             case 'confirm':
                 if (target === 'trade' || cmdText.toLowerCase().includes('confirm trade')) {
-                    const { confirmTrade } = await import('./player-trading.js');
+                    const { confirmTrade } = await import('./player-trading.js?v=056');
                     await confirmTrade(auth.currentUser.uid);
                 } else {
                     logToTerminal("Confirm what?", "error");
@@ -3947,11 +4802,417 @@ Examples:
             
             case 'cancel':
                 if (target === 'trade' || cmdText.toLowerCase().includes('cancel trade')) {
-                    const { cancelPlayerTrade } = await import('./player-trading.js');
+                    const { cancelPlayerTrade } = await import('./player-trading.js?v=056');
                     await cancelPlayerTrade(auth.currentUser.uid, 'cancelled');
                 } else {
                     logToTerminal("Cancel what?", "error");
                 }
+                break;
+
+            case 'unlock':
+                // Unlock command - alias for using a key
+                if (!target) {
+                    logToTerminal("Unlock what? Try 'unlock door' or 'unlock north'", 'error');
+                    break;
+                }
+                
+                // Get player's current inventory
+                const playerDocUnlock = await getDoc(playerRef);
+                const playerDataUnlock = playerDocUnlock.data();
+                const inventoryUnlock = playerDataUnlock.inventory || [];
+                
+                // Get current room
+                const currentRoomUnlock = gameWorld[playerDataUnlock.roomId];
+                if (!currentRoomUnlock || !currentRoomUnlock.lockedExits) {
+                    logToTerminal("There's nothing to unlock here.", 'error');
+                    break;
+                }
+                
+                // Determine which direction to unlock
+                let directionToUnlock = target.toLowerCase();
+                
+                // Check if it's a valid direction
+                const validDirections = ['north', 'south', 'east', 'west', 'northeast', 'northwest', 'southeast', 'southwest', 'up', 'down'];
+                if (!validDirections.includes(directionToUnlock)) {
+                    // Try to find a locked exit that matches keywords like "door", "gate", etc.
+                    const lockedExits = Object.entries(currentRoomUnlock.lockedExits);
+                    const matchingExit = lockedExits.find(([dir, lock]) => {
+                        const lockName = lock.name || lock.description || '';
+                        return lockName.toLowerCase().includes(target.toLowerCase());
+                    });
+                    
+                    if (matchingExit) {
+                        directionToUnlock = matchingExit[0];
+                    } else {
+                        logToTerminal(`There's no "${target}" to unlock here.`, 'error');
+                        break;
+                    }
+                }
+                
+                // Check if that direction is locked
+                const lockToOpen = currentRoomUnlock.lockedExits[directionToUnlock];
+                if (!lockToOpen) {
+                    logToTerminal(`The way ${directionToUnlock} isn't locked.`, 'error');
+                    break;
+                }
+                
+                // Find the correct key in inventory
+                const requiredKeyId = lockToOpen.keyId || lockToOpen.key;
+                const keyToUse = inventoryUnlock.find(item => 
+                    item.id === requiredKeyId || 
+                    (gameItems[item.id]?.itemType === 'key' && 
+                     gameItems[item.id]?.specialData?.unlocks === directionToUnlock)
+                );
+                
+                if (!keyToUse) {
+                    logToTerminal(`You don't have the right key to unlock this.`, 'error');
+                    if (requiredKeyId) {
+                        const keyItem = gameItems[requiredKeyId];
+                        logToTerminal(`You need: ${keyItem?.name || requiredKeyId}`, 'system');
+                    }
+                    break;
+                }
+                
+                // Use the key
+                const keyData = gameItems[keyToUse.id];
+                await handleSpecialItem('key', keyData, keyToUse, playerDataUnlock);
+                break;
+
+            case 'lock':
+                // Lock command - re-locks a previously unlocked door
+                if (!target) {
+                    logToTerminal("Lock what? Try 'lock door' or 'lock north'", 'error');
+                    break;
+                }
+                
+                // Get player's current inventory
+                const playerDocLock = await getDoc(playerRef);
+                const playerDataLock = playerDocLock.data();
+                const inventoryLock = playerDataLock.inventory || [];
+                
+                // Get current room
+                const currentRoomLock = gameWorld[playerDataLock.roomId];
+                if (!currentRoomLock || !currentRoomLock.lockedExits) {
+                    logToTerminal("There's nothing to lock here.", 'error');
+                    break;
+                }
+                
+                // Determine which direction to lock
+                let directionToLock = target.toLowerCase();
+                
+                // Check if it's a valid direction
+                const validDirectionsLock = ['north', 'south', 'east', 'west', 'northeast', 'northwest', 'southeast', 'southwest', 'up', 'down'];
+                if (!validDirectionsLock.includes(directionToLock)) {
+                    // Try to find a lockable exit that matches keywords
+                    const lockedExitsLock = Object.entries(currentRoomLock.lockedExits);
+                    const matchingExitLock = lockedExitsLock.find(([dir, lock]) => {
+                        const lockName = lock.name || lock.description || '';
+                        return lockName.toLowerCase().includes(target.toLowerCase());
+                    });
+                    
+                    if (matchingExitLock) {
+                        directionToLock = matchingExitLock[0];
+                    } else {
+                        logToTerminal(`There's no "${target}" to lock here.`, 'error');
+                        break;
+                    }
+                }
+                
+                // Check if that direction has a lockable exit
+                const lockToClose = currentRoomLock.lockedExits[directionToLock];
+                if (!lockToClose) {
+                    logToTerminal(`The way ${directionToLock} can't be locked.`, 'error');
+                    break;
+                }
+                
+                // Check if it's not already locked
+                const exitKeyLock = `${playerDataLock.roomId}:${directionToLock}`;
+                const currentUnlockedExitsLock = playerDataLock.unlockedExits || [];
+                
+                if (!currentUnlockedExitsLock.includes(exitKeyLock)) {
+                    logToTerminal(`The way ${directionToLock} is already locked.`, 'game');
+                    break;
+                }
+                
+                // Check if lock allows re-locking
+                const allowRelocking = lockToClose.relockable !== false; // Default: true
+                if (!allowRelocking) {
+                    logToTerminal(`Once unlocked, this cannot be locked again.`, 'error');
+                    break;
+                }
+                
+                // Find the correct key in inventory
+                const requiredKeyIdLock = lockToClose.keyId || lockToClose.key;
+                const keyToUseLock = inventoryLock.find(item => 
+                    item.id === requiredKeyIdLock || 
+                    (gameItems[item.id]?.itemType === 'key' && 
+                     gameItems[item.id]?.specialData?.unlocks === directionToLock)
+                );
+                
+                if (!keyToUseLock) {
+                    logToTerminal(`You don't have the right key to lock this.`, 'error');
+                    if (requiredKeyIdLock) {
+                        const keyItemLock = gameItems[requiredKeyIdLock];
+                        logToTerminal(`You need: ${keyItemLock?.name || requiredKeyIdLock}`, 'system');
+                    }
+                    break;
+                }
+                
+                // Re-lock the exit by removing from unlocked list
+                const updatedUnlockedExits = currentUnlockedExitsLock.filter(key => key !== exitKeyLock);
+                await updateDoc(playerRef, {
+                    unlockedExits: updatedUnlockedExits
+                });
+                
+                // Show lock message
+                const lockMessage = lockToClose.lockMessage || 
+                                  lockToClose.relock || 
+                                  `You use ${gameItems[keyToUseLock.id]?.name || 'the key'} to lock the way ${directionToLock}. *Click*`;
+                logToTerminal(lockMessage, 'success');
+                
+                break;
+
+            case 'put':
+                // Put item in container: "put sword in backpack"
+                if (!cmdText.includes(' in ')) {
+                    logToTerminal("Usage: put [item] in [container]", 'error');
+                    break;
+                }
+                
+                const [itemPart, containerPart] = cmdText.split(' in ').map(s => s.trim());
+                const itemToPut = itemPart.replace(/^put\s+/i, '').trim().toLowerCase();
+                const containerTarget = containerPart.toLowerCase();
+                
+                // Find item in inventory
+                const playerDocPut = await getDoc(playerRef);
+                const inventoryPut = playerDocPut.data().inventory || [];
+                const foundItemToPut = inventoryPut.find(i => 
+                    i && i.id && i.name && 
+                    (i.id.toLowerCase() === itemToPut || i.name.toLowerCase().includes(itemToPut))
+                );
+                
+                if (!foundItemToPut) {
+                    logToTerminal("You aren't carrying that item.", 'error');
+                    break;
+                }
+                
+                // Find container in inventory
+                const foundContainer = inventoryPut.find(i => 
+                    i && i.id && i.name && 
+                    (i.id.toLowerCase() === containerTarget || i.name.toLowerCase().includes(containerTarget))
+                );
+                
+                if (!foundContainer) {
+                    logToTerminal("You aren't carrying that container.", 'error');
+                    break;
+                }
+                
+                const containerData = gameItems[foundContainer.id];
+                if (!containerData || containerData.itemType !== 'container') {
+                    logToTerminal("That's not a container.", 'error');
+                    break;
+                }
+                
+                // Check if trying to put container in itself
+                if (foundItemToPut.id === foundContainer.id) {
+                    logToTerminal("You can't put a container inside itself!", 'error');
+                    break;
+                }
+                
+                // Initialize contents array if needed
+                if (!foundContainer.contents) {
+                    foundContainer.contents = [];
+                }
+                
+                // Check container capacity
+                const maxCapacity = containerData.specialData?.capacity || 50;
+                const itemData = gameItems[foundItemToPut.id];
+                const itemWeight = itemData?.weight || 0;
+                
+                let currentContentsWeight = 0;
+                for (const item of foundContainer.contents) {
+                    const itemData = gameItems[item.id];
+                    if (itemData) {
+                        currentContentsWeight += (itemData.weight || 0) * (item.quantity || 1);
+                    }
+                }
+                
+                if (currentContentsWeight + itemWeight > maxCapacity) {
+                    logToTerminal(`The ${containerData.name} is too full! (${currentContentsWeight.toFixed(1)}/${maxCapacity} lbs)`, 'error');
+                    break;
+                }
+                
+                // Add item to container contents
+                foundContainer.contents.push(foundItemToPut);
+                
+                // Remove from main inventory and update container
+                const updatedInventoryPut = inventoryPut.filter(i => i !== foundItemToPut);
+                const containerIndex = updatedInventoryPut.findIndex(i => i === foundContainer);
+                if (containerIndex >= 0) {
+                    updatedInventoryPut[containerIndex] = foundContainer;
+                }
+                
+                await updateDoc(playerRef, { inventory: updatedInventoryPut });
+                logToTerminal(`You put ${addArticle(itemData?.name || 'the item')} in ${addArticle(containerData.name)}.`, 'game');
+                break;
+
+            case 'take':
+                // Take item from container: "take sword from backpack"
+                // If no "from" keyword, treat as "get" command from room
+                if (!cmdText.includes(' from ')) {
+                    // Redirect to get command for picking up from ground
+                    const roomItemIdsTake = currentRoom.items || [];
+                    const itemEntryToTake = roomItemIdsTake.find(itemEntry => {
+                        // Support both old format (string) and new format ({id, quantity})
+                        const itemId = typeof itemEntry === 'string' ? itemEntry : itemEntry.id;
+                        const item = gameItems[itemId];
+                        if (!item) return false;
+                        
+                        // Check ID match
+                        if (itemId.toLowerCase() === target) return true;
+                        
+                        // Check name match
+                        if (item.name.toLowerCase().includes(target)) return true;
+                        
+                        // Check aliases
+                        if (item.aliases && Array.isArray(item.aliases)) {
+                            return item.aliases.some(alias => alias.toLowerCase().includes(target));
+                        }
+                        
+                        return false;
+                    });
+                    
+                    if (itemEntryToTake) {
+                        // Handle both formats
+                        const itemIdToTake = typeof itemEntryToTake === 'string' ? itemEntryToTake : itemEntryToTake.id;
+                        const itemQuantityInRoom = typeof itemEntryToTake === 'string' ? 1 : (itemEntryToTake.quantity || 1);
+                        
+                        const item = gameItems[itemIdToTake];
+                        if (item.movable === false) {
+                            logToTerminal("You can't take that.", "error");
+                            break;
+                        }
+                        
+                        // Check weight limit
+                        const playerDocTake2 = await getDoc(playerRef);
+                        const playerTakeData = playerDocTake2.data();
+                        if (!canCarryItem(playerTakeData, itemIdToTake, 1)) {
+                            const currentWeight = calculateInventoryWeight(playerTakeData.inventory || []);
+                            const maxWeight = calculateMaxCarryWeight(playerTakeData);
+                            const itemWeight = item.weight || 0;
+                            logToTerminal(`You can't carry that! (Current: ${currentWeight.toFixed(1)}/${maxWeight} lbs, item weighs ${itemWeight} lbs)`, "error");
+                            logToTerminal(`Try dropping some items first, or store items in a container.`, "hint");
+                            break;
+                        }
+                        
+                        const fullItemObject = { id: itemIdToTake, ...item };
+                        // Use manual array update instead of arrayUnion to allow duplicate items
+                        const currentInventoryTake = playerTakeData.inventory || [];
+                        await updateDoc(playerRef, { inventory: [...currentInventoryTake, fullItemObject] });
+                        
+                        // Update room: decrease quantity or remove item
+                        if (itemQuantityInRoom > 1) {
+                            // Decrease quantity
+                            const updatedItems = roomItemIdsTake.map(entry => {
+                                if (typeof entry === 'object' && entry.id === itemIdToTake) {
+                                    return { ...entry, quantity: entry.quantity - 1 };
+                                }
+                                return entry;
+                            });
+                            await updateDoc(roomRef, { items: updatedItems });
+                        } else {
+                            // Remove item completely (works for both formats)
+                            await updateDoc(roomRef, { items: arrayRemove(itemEntryToTake) });
+                        }
+                        
+                        logToTerminal(`You take ${addArticle(item.name)}.`, 'game');
+                        
+                        // Check quest progress for item collection
+                        const completedQuests = await updateQuestProgress(userId, 'collect', itemIdToTake, 1);
+                        for (const completed of completedQuests) {
+                            const quest = gameQuests[completed.questId];
+                            if (quest) {
+                                logToTerminal(`🎉 Quest Objectives Complete: ${quest.title}!`, 'quest');
+                                logToTerminal(`Return to ${quest.turninNpcId || quest.giverNpcId} to claim your reward.`, 'quest');
+                            }
+                        }
+                        
+                        // Log to news if item is newsworthy
+                        if (item.newsworthy) {
+                            await logNews('found', playerName, `found the ${item.name}!`);
+                        }
+                    } else { 
+                        logToTerminal("You don't see that here.", 'error'); 
+                    }
+                    break;
+                }
+                
+                const [itemPartTake, containerPartTake] = cmdText.split(' from ').map(s => s.trim());
+                const itemToTake = itemPartTake.replace(/^take\s+/i, '').trim().toLowerCase();
+                const containerTargetTake = containerPartTake.toLowerCase();
+                
+                // Find container in inventory
+                const playerDocTake = await getDoc(playerRef);
+                const inventoryTake = playerDocTake.data().inventory || [];
+                const foundContainerTake = inventoryTake.find(i => 
+                    i && i.id && i.name && 
+                    (i.id.toLowerCase() === containerTargetTake || i.name.toLowerCase().includes(containerTargetTake))
+                );
+                
+                if (!foundContainerTake) {
+                    logToTerminal("You aren't carrying that container.", 'error');
+                    break;
+                }
+                
+                const containerDataTake = gameItems[foundContainerTake.id];
+                if (!containerDataTake || containerDataTake.itemType !== 'container') {
+                    logToTerminal("That's not a container.", 'error');
+                    break;
+                }
+                
+                if (!foundContainerTake.contents || foundContainerTake.contents.length === 0) {
+                    logToTerminal(`The ${containerDataTake.name} is empty.`, 'error');
+                    break;
+                }
+                
+                // Find item in container contents
+                const foundItemToTake = foundContainerTake.contents.find(i => 
+                    i && i.id && i.name && 
+                    (i.id.toLowerCase() === itemToTake || i.name.toLowerCase().includes(itemToTake))
+                );
+                
+                if (!foundItemToTake) {
+                    logToTerminal(`There's no ${itemToTake} in the ${containerDataTake.name}.`, 'error');
+                    break;
+                }
+                
+                // Check weight limit for taking item out
+                const playerDataTake = playerDocTake.data();
+                const itemDataTake = gameItems[foundItemToTake.id];
+                if (!canCarryItem(playerDataTake, foundItemToTake.id, 1)) {
+                    const currentWeight = calculateInventoryWeight(playerDataTake.inventory || []);
+                    const maxWeight = calculateMaxCarryWeight(playerDataTake);
+                    const itemWeight = itemDataTake?.weight || 0;
+                    logToTerminal(`You can't carry that! (Current: ${currentWeight.toFixed(1)}/${maxWeight} lbs, item weighs ${itemWeight} lbs)`, "error");
+                    logToTerminal(`The ${containerDataTake.name} already reduces your carrying weight, but you're still at capacity.`, "hint");
+                    break;
+                }
+                
+                // Remove item from container contents
+                foundContainerTake.contents = foundContainerTake.contents.filter(i => i !== foundItemToTake);
+                
+                // Update container and add item to main inventory
+                const updatedInventoryTake = [...inventoryTake];
+                const containerIndexTake = updatedInventoryTake.findIndex(i => 
+                    i.id === foundContainerTake.id && i.name === foundContainerTake.name
+                );
+                if (containerIndexTake >= 0) {
+                    updatedInventoryTake[containerIndexTake] = foundContainerTake;
+                }
+                updatedInventoryTake.push(foundItemToTake);
+                
+                await updateDoc(playerRef, { inventory: updatedInventoryTake });
+                logToTerminal(`You take ${addArticle(itemDataTake?.name || 'the item')} from ${addArticle(containerDataTake.name)}.`, 'game');
                 break;
 
             case 'use':
@@ -4473,11 +5734,43 @@ Examples:
                             });
                         }
                         
+                        // Handle old single itemDrop field (backwards compatibility)
                         if (monsterTemplate.itemDrop && gameItems[monsterTemplate.itemDrop]) {
                             const item = gameItems[monsterTemplate.itemDrop];
                             const droppedItem = { id: monsterTemplate.itemDrop, ...item };
                             updates.inventory = arrayUnion(droppedItem);
                             combatMessages.push({ msg: `The ${monsterData.name} dropped ${item.name}!`, type: 'loot-log' });
+                        }
+                        
+                        // Handle new loot array with multiple items and quantities
+                        let loot = monsterTemplate.loot;
+                        if (typeof loot === 'string') {
+                            try {
+                                loot = JSON.parse(loot);
+                            } catch (e) {
+                                console.error('Failed to parse monster loot:', e);
+                                loot = null;
+                            }
+                        }
+                        
+                        if (loot && Array.isArray(loot)) {
+                            for (const lootEntry of loot) {
+                                const { itemId, quantity = 1, dropRate = 100 } = lootEntry;
+                                
+                                // Check drop rate (0-100)
+                                if (Math.random() * 100 <= dropRate && gameItems[itemId]) {
+                                    const item = gameItems[itemId];
+                                    
+                                    // Add multiple copies if quantity > 1
+                                    for (let i = 0; i < quantity; i++) {
+                                        const droppedItem = { id: itemId, ...item };
+                                        updates.inventory = arrayUnion(droppedItem);
+                                    }
+                                    
+                                    const qtyText = quantity > 1 ? ` x${quantity}` : '';
+                                    combatMessages.push({ msg: `The ${monsterData.name} dropped ${item.name}${qtyText}!`, type: 'loot-log' });
+                                }
+                            }
                         }
                         
                         // Mark spawn as defeated with timestamp - prevents immediate respawn
@@ -4978,12 +6271,43 @@ Examples:
                                     });
                                 }
                                 
-                                // Item drop
+                                // Handle old single itemDrop field (backwards compatibility)
                                 if (monsterTemplate.itemDrop && gameItems[monsterTemplate.itemDrop]) {
                                     const item = gameItems[monsterTemplate.itemDrop];
                                     const droppedItem = { id: monsterTemplate.itemDrop, ...item };
                                     updates.inventory = arrayUnion(droppedItem);
                                     shootMonsterMessages.push({ msg: `The ${currentMonsterData.name} dropped ${item.name}!`, type: 'loot-log' });
+                                }
+                                
+                                // Handle new loot array with multiple items and quantities
+                                let loot = monsterTemplate.loot;
+                                if (typeof loot === 'string') {
+                                    try {
+                                        loot = JSON.parse(loot);
+                                    } catch (e) {
+                                        console.error('Failed to parse monster loot:', e);
+                                        loot = null;
+                                    }
+                                }
+                                
+                                if (loot && Array.isArray(loot)) {
+                                    for (const lootEntry of loot) {
+                                        const { itemId, quantity = 1, dropRate = 100 } = lootEntry;
+                                        
+                                        // Check drop rate (0-100)
+                                        if (Math.random() * 100 <= dropRate && gameItems[itemId]) {
+                                            const item = gameItems[itemId];
+                                            
+                                            // Add multiple copies if quantity > 1
+                                            for (let i = 0; i < quantity; i++) {
+                                                const droppedItem = { id: itemId, ...item };
+                                                updates.inventory = arrayUnion(droppedItem);
+                                            }
+                                            
+                                            const qtyText = quantity > 1 ? ` x${quantity}` : '';
+                                            shootMonsterMessages.push({ msg: `The ${currentMonsterData.name} dropped ${item.name}${qtyText}!`, type: 'loot-log' });
+                                        }
+                                    }
                                 }
                                 
                                 // Update spawn
@@ -5413,12 +6737,43 @@ Examples:
                                     });
                                 }
                                 
-                                // Item drop
+                                // Handle old single itemDrop field (backwards compatibility)
                                 if (monsterTemplate.itemDrop && gameItems[monsterTemplate.itemDrop]) {
                                     const item = gameItems[monsterTemplate.itemDrop];
                                     const droppedItem = { id: monsterTemplate.itemDrop, ...item };
                                     updates.inventory = arrayUnion(droppedItem);
                                     throwMonsterMessages.push({ msg: `The ${currentMonsterData.name} dropped ${item.name}!`, type: 'loot-log' });
+                                }
+                                
+                                // Handle new loot array with multiple items and quantities
+                                let loot = monsterTemplate.loot;
+                                if (typeof loot === 'string') {
+                                    try {
+                                        loot = JSON.parse(loot);
+                                    } catch (e) {
+                                        console.error('Failed to parse monster loot:', e);
+                                        loot = null;
+                                    }
+                                }
+                                
+                                if (loot && Array.isArray(loot)) {
+                                    for (const lootEntry of loot) {
+                                        const { itemId, quantity = 1, dropRate = 100 } = lootEntry;
+                                        
+                                        // Check drop rate (0-100)
+                                        if (Math.random() * 100 <= dropRate && gameItems[itemId]) {
+                                            const item = gameItems[itemId];
+                                            
+                                            // Add multiple copies if quantity > 1
+                                            for (let i = 0; i < quantity; i++) {
+                                                const droppedItem = { id: itemId, ...item };
+                                                updates.inventory = arrayUnion(droppedItem);
+                                            }
+                                            
+                                            const qtyText = quantity > 1 ? ` x${quantity}` : '';
+                                            throwMonsterMessages.push({ msg: `The ${currentMonsterData.name} dropped ${item.name}${qtyText}!`, type: 'loot-log' });
+                                        }
+                                    }
                                 }
                                 
                                 transaction.update(playerRef, updates);
@@ -5481,22 +6836,98 @@ Examples:
                     const activeQuests = playerData.activeQuests || [];
                     const completedQuests = playerData.completedQuests || [];
                     
+                    console.log(`[QUEST DEBUG] Talking to NPC:`, npcToTalkTo.id, `Active quests:`, activeQuests.length);
+                    
                     // Find quests that are ready to turn in to this NPC
                     const readyToTurnIn = activeQuests.filter(aq => {
                         const quest = gameQuests[aq.questId];
-                        if (!quest) return false;
+                        if (!quest) {
+                            console.log(`[QUEST DEBUG] Quest ${aq.questId} not found in gameQuests`);
+                            return false;
+                        }
+                        
+                        console.log(`[QUEST DEBUG] Checking quest ${quest.title}:`);
+                        console.log(`  - Quest giver: ${quest.giverNpcId}, Turn-in: ${quest.turninNpcId || quest.giverNpcId}`);
+                        console.log(`  - Current NPC: ${npcToTalkTo.id}`);
+                        console.log(`  - Objectives:`, aq.objectives);
                         
                         // Check if this is the turn-in NPC
                         const turninNpc = quest.turninNpcId || quest.giverNpcId;
-                        if (turninNpc !== npcToTalkTo.id) return false;
+                        if (turninNpc !== npcToTalkTo.id) {
+                            console.log(`  - NPC mismatch: ${turninNpc} !== ${npcToTalkTo.id}`);
+                            return false;
+                        }
                         
-                        // Check if all objectives are complete
-                        return aq.objectives.every(obj => obj.current >= obj.count);
+                        // Check if all objectives are complete - COUNT items for collect quests
+                        const allComplete = aq.objectives.every(obj => {
+                            if (obj.type === 'collect' && obj.itemId) {
+                                // For collect quests, COUNT actual items in inventory AND inside containers
+                                const playerInv = playerData.inventory || [];
+                                let actualCount = playerInv.filter(i => i.id === obj.itemId).length;
+                                
+                                // Also count items inside containers
+                                for (const invItem of playerInv) {
+                                    if (invItem.contents && Array.isArray(invItem.contents)) {
+                                        actualCount += invItem.contents.filter(i => i.id === obj.itemId).length;
+                                    }
+                                }
+                                
+                                console.log(`  - Collect objective: Need ${obj.count} ${obj.itemId}, have ${actualCount} in inventory`);
+                                return actualCount >= obj.count;
+                            } else {
+                                // For other quest types, use stored progress
+                                return obj.current >= obj.count;
+                            }
+                        });
+                        console.log(`  - All objectives complete: ${allComplete}`);
+                        return allComplete;
                     });
                     
                     // Auto turn-in completed quests
                     for (const questToTurnIn of readyToTurnIn) {
                         const quest = gameQuests[questToTurnIn.questId];
+                        
+                        // Remove collected items from player's inventory for collect objectives
+                        for (const obj of questToTurnIn.objectives) {
+                            if (obj.type === 'collect' && obj.itemId) {
+                                const playerInv = playerData.inventory || [];
+                                let itemsToRemove = obj.count;
+                                const updatedInventory = [];
+                                
+                                // Remove items from main inventory and containers
+                                for (const invItem of playerInv) {
+                                    if (invItem.id === obj.itemId && itemsToRemove > 0) {
+                                        // Skip this item (remove it)
+                                        itemsToRemove--;
+                                        continue;
+                                    }
+                                    
+                                    // Check if item is a container with the quest items inside
+                                    if (invItem.contents && Array.isArray(invItem.contents) && itemsToRemove > 0) {
+                                        const updatedContents = [];
+                                        for (const containedItem of invItem.contents) {
+                                            if (containedItem.id === obj.itemId && itemsToRemove > 0) {
+                                                // Skip this item (remove it from container)
+                                                itemsToRemove--;
+                                                continue;
+                                            }
+                                            updatedContents.push(containedItem);
+                                        }
+                                        // Keep the container with updated contents
+                                        updatedInventory.push({ ...invItem, contents: updatedContents });
+                                    } else {
+                                        // Keep this item
+                                        updatedInventory.push(invItem);
+                                    }
+                                }
+                                
+                                // Update player's inventory with items removed
+                                const playerRefRemove = doc(db, `/artifacts/${appId}/public/data/mud-players/${userId}`);
+                                await updateDoc(playerRefRemove, { inventory: updatedInventory });
+                                
+                                console.log(`[QUEST] Removed ${obj.count} ${obj.itemId} from inventory`);
+                            }
+                        }
                         
                         // Check if this is a party quest
                         const playerParty = Object.values(gameParties).find(p => 
@@ -5524,8 +6955,16 @@ Examples:
                                 ? recipientCompletedQuests 
                                 : [...recipientCompletedQuests, quest.id];
                             
-                            // Award rewards
-                            const rewards = quest.rewards || {};
+                            // Award rewards - parse if string
+                            let rewards = quest.rewards || {};
+                            if (typeof rewards === 'string') {
+                                try {
+                                    rewards = JSON.parse(rewards);
+                                } catch (e) {
+                                    console.error('Failed to parse quest rewards:', e);
+                                    rewards = {};
+                                }
+                            }
                             const updates = {
                                 activeQuests: newActiveQuests,
                                 completedQuests: newCompletedQuests
@@ -5540,14 +6979,20 @@ Examples:
                                 updates.money = (recipientData.money || 0) + rewards.gold;
                             }
                             
+                            // Handle reward items - add them to inventory properly
                             if (rewards.items && Array.isArray(rewards.items)) {
+                                const currentInventory = recipientData.inventory || [];
+                                const newInventory = [...currentInventory];
+                                
                                 for (const itemId of rewards.items) {
                                     const item = gameItems[itemId];
                                     if (item) {
                                         const fullItemObject = { id: itemId, ...item };
-                                        updates.inventory = arrayUnion(fullItemObject);
+                                        newInventory.push(fullItemObject);
                                     }
                                 }
+                                
+                                updates.inventory = newInventory;
                             }
                             
                             const recipientRef = doc(db, `/artifacts/${appId}/public/data/mud-players/${recipientId}`);
@@ -5578,7 +7023,16 @@ Examples:
                         }
                         logToTerminal(`${npcToTalkTo.shortName || npcToTalkTo.name} thanks you for your help.`, 'npc');
                         
-                        const rewards = quest.rewards || {};
+                        // Parse rewards if it's a JSON string
+                        let rewards = quest.rewards || {};
+                        if (typeof rewards === 'string') {
+                            try {
+                                rewards = JSON.parse(rewards);
+                            } catch (e) {
+                                console.error('Failed to parse quest rewards:', e);
+                                rewards = {};
+                            }
+                        }
                         if (rewards.xp) logToTerminal(`  Reward: +${rewards.xp} XP`, 'success');
                         if (rewards.gold) logToTerminal(`  Reward: +${rewards.gold} gold`, 'success');
                         if (rewards.items && rewards.items.length > 0) {
@@ -5599,8 +7053,42 @@ Examples:
                         }
                     }
                     
+                    // Check for available quests from this NPC
+                    const activeQuestsCheck = playerData.activeQuests || [];
+                    const completedQuestsCheck = playerData.completedQuests || [];
+                    const availableQuestsFromNpc = Object.values(gameQuests).filter(quest => {
+                        if (quest.giverNpcId !== npcToTalkTo.id) return false;
+                        if (quest.levelRequired && playerData.level < quest.levelRequired) return false;
+                        if (activeQuestsCheck.some(aq => aq.questId === quest.id)) return false;
+                        if (completedQuestsCheck.includes(quest.id) && !quest.isRepeatable) return false;
+                        
+                        // Check prerequisites
+                        let prerequisites = quest.prerequisites;
+                        if (typeof prerequisites === 'string') {
+                            try {
+                                prerequisites = JSON.parse(prerequisites);
+                            } catch (e) {
+                                prerequisites = [];
+                            }
+                        }
+                        if (prerequisites && prerequisites.length > 0) {
+                            if (!prerequisites.every(prereq => completedQuestsCheck.includes(prereq))) return false;
+                        }
+                        return true;
+                    });
+                    
+                    // Show quest info for non-AI NPCs only
+                    if (availableQuestsFromNpc.length > 0 && !npcToTalkTo.useAI) {
+                        logToTerminal(`\n${npcToTalkTo.shortName || npcToTalkTo.name} has a quest for you!`, 'quest');
+                        for (const quest of availableQuestsFromNpc) {
+                            logToTerminal(`📜 ${quest.title}`, 'quest');
+                            logToTerminal(`  ${quest.description}`, 'system');
+                            logToTerminal(`  Type 'quest accept ${quest.title.toLowerCase()}' to accept this quest.`, 'hint');
+                        }
+                    }
+                    
                     if (npcToTalkTo.useAI) {
-                        await handleAiNpcInteraction(npcToTalkTo, 'talk', currentRoom);
+                        await handleAiNpcInteraction(npcToTalkTo, 'talk', currentRoom, null, availableQuestsFromNpc);
                     } else {
                         lastNpcInteraction = null;
                         if (npcToTalkTo.dialogue && npcToTalkTo.dialogue.length > 0) {
@@ -6815,10 +8303,14 @@ Examples:
 
             case 'quest':
             case 'quests':
+                // Fetch current player data
+                const playerDocQuest = await getDoc(playerRef);
+                const playerDataQuest = playerDocQuest.data();
+                
                 if (!parsedCommand.target) {
                     // List available quests from NPCs in current room or show active quests
-                    const activeQuests = playerData.activeQuests || [];
-                    const completedQuests = playerData.completedQuests || [];
+                    const activeQuests = playerDataQuest.activeQuests || [];
+                    const completedQuests = playerDataQuest.completedQuests || [];
                     
                     if (activeQuests.length > 0) {
                         logToTerminal("=== Your Active Quests ===", "system");
@@ -6832,8 +8324,42 @@ Examples:
                                 if (activeQuest.objectives) {
                                     logToTerminal("  Objectives:", "system");
                                     for (const obj of activeQuest.objectives) {
-                                        const done = obj.current >= obj.count ? "✓" : " ";
-                                        logToTerminal(`  [${done}] ${obj.description || obj.type}: ${obj.current}/${obj.count}`, "system");
+                                        let displayCurrent = obj.current;
+                                        
+                                        // Build objective description - always look up for collect/kill/visit
+                                        let objDesc;
+                                        if (obj.type === 'collect' && obj.itemId) {
+                                            const item = gameItems[obj.itemId];
+                                            const itemName = item?.name || `[missing item: ${obj.itemId}]`;
+                                            objDesc = `Collect ${obj.count} ${itemName}`;
+                                            
+                                            // For collect quests, COUNT actual items in inventory AND inside containers
+                                            const playerInv = playerDataQuest.inventory || [];
+                                            let actualCount = playerInv.filter(i => i.id === obj.itemId).length;
+                                            
+                                            // Also count items inside containers
+                                            for (const invItem of playerInv) {
+                                                if (invItem.contents && Array.isArray(invItem.contents)) {
+                                                    actualCount += invItem.contents.filter(i => i.id === obj.itemId).length;
+                                                }
+                                            }
+                                            
+                                            displayCurrent = actualCount;
+                                        } else if (obj.type === 'kill' && obj.monsterId) {
+                                            const monster = gameMonsters[obj.monsterId];
+                                            const monsterName = monster?.name || `[missing monster: ${obj.monsterId}]`;
+                                            objDesc = `Kill ${obj.count} ${monsterName}`;
+                                        } else if (obj.type === 'visit' && obj.roomId) {
+                                            const room = gameWorld[obj.roomId];
+                                            const roomName = room?.name || `[missing room: ${obj.roomId}]`;
+                                            objDesc = `Visit ${roomName}`;
+                                        } else {
+                                            // Fall back to description or type
+                                            objDesc = obj.description || obj.type;
+                                        }
+                                        
+                                        const done = displayCurrent >= obj.count ? "✓" : " ";
+                                        logToTerminal(`  [${done}] ${objDesc}: ${displayCurrent}/${obj.count}`, "system");
                                     }
                                 }
                             }
@@ -6843,19 +8369,32 @@ Examples:
                     }
                     
                     // Show available quests from NPCs in the room
-                    const npcsInRoom = Object.values(gameNpcs).filter(npc => npc.roomId === playerData.currentRoom);
+                    const currentRoom = gameWorld[playerDataQuest.roomId];
+                    const npcIdsInRoom = currentRoom?.npcs || [];
+                    console.log(`[QUESTS DEBUG] NPCs in room:`, npcIdsInRoom);
+                    console.log(`[QUESTS DEBUG] All quests:`, Object.keys(gameQuests));
                     const availableQuests = Object.values(gameQuests).filter(quest => {
+                        console.log(`[QUESTS DEBUG] Checking quest ${quest.title}, giverNpcId: ${quest.giverNpcId}, in room: ${npcIdsInRoom.includes(quest.giverNpcId)}`);
                         // Check if NPC is in room
-                        if (!npcsInRoom.some(npc => npc.id === quest.giverNpcId)) return false;
+                        if (!npcIdsInRoom.includes(quest.giverNpcId)) return false;
                         // Check level requirement
-                        if (quest.levelRequired && playerData.level < quest.levelRequired) return false;
+                        if (quest.levelRequired && playerDataQuest.level < quest.levelRequired) return false;
                         // Check if already active
                         if (activeQuests.some(aq => aq.questId === quest.id)) return false;
                         // Check if already completed and not repeatable
                         if (completedQuests.includes(quest.id) && !quest.isRepeatable) return false;
-                        // Check prerequisites
-                        if (quest.prerequisites && quest.prerequisites.length > 0) {
-                            if (!quest.prerequisites.every(prereq => completedQuests.includes(prereq))) return false;
+                        // Check prerequisites - parse if string
+                        let prerequisites = quest.prerequisites;
+                        if (typeof prerequisites === 'string') {
+                            try {
+                                prerequisites = JSON.parse(prerequisites);
+                            } catch (e) {
+                                console.error('Failed to parse quest prerequisites:', e);
+                                prerequisites = [];
+                            }
+                        }
+                        if (prerequisites && prerequisites.length > 0) {
+                            if (!prerequisites.every(prereq => completedQuests.includes(prereq))) return false;
                         }
                         return true;
                     });
@@ -6870,13 +8409,18 @@ Examples:
                     }
                 } else {
                     // Handle quest subcommands
-                    const subcommand = parsedCommand.target.toLowerCase();
+                    const subcommand = parsedCommand.target?.toLowerCase() || '';
                     const questName = parsedCommand.topic || '';
                     
                     if (subcommand === 'accept') {
+                        if (!questName) {
+                            logToTerminal("Please specify a quest name: quest accept [quest name]", "error");
+                            break;
+                        }
+                        
                         // Find quest by name
                         const quest = Object.values(gameQuests).find(q => 
-                            q.title.toLowerCase().includes(questName.toLowerCase())
+                            q.title && q.title.toLowerCase().includes(questName.toLowerCase())
                         );
                         
                         if (!quest) {
@@ -6885,29 +8429,41 @@ Examples:
                         }
                         
                         // Check if quest giver NPC is in room
+                        const currentRoomAccept = gameWorld[playerDataQuest.roomId];
+                        const npcIdsInRoomAccept = currentRoomAccept?.npcs || [];
                         const npc = gameNpcs[quest.giverNpcId];
-                        if (!npc || npc.roomId !== playerData.currentRoom) {
+                        
+                        if (!npc || !npcIdsInRoomAccept.includes(quest.giverNpcId)) {
                             logToTerminal(`You need to talk to ${npc?.name || quest.giverNpcId} to accept this quest.`, "error");
                             break;
                         }
                         
                         // Check level requirement
-                        if (quest.levelRequired && playerData.level < quest.levelRequired) {
+                        if (quest.levelRequired && playerDataQuest.level < quest.levelRequired) {
                             logToTerminal(`You must be level ${quest.levelRequired} to accept this quest.`, "error");
                             break;
                         }
                         
-                        // Check prerequisites
-                        const completedQuests = playerData.completedQuests || [];
-                        if (quest.prerequisites && quest.prerequisites.length > 0) {
-                            if (!quest.prerequisites.every(prereq => completedQuests.includes(prereq))) {
+                        // Check prerequisites - parse if string
+                        const completedQuests = playerDataQuest.completedQuests || [];
+                        let prerequisitesAccept = quest.prerequisites;
+                        if (typeof prerequisitesAccept === 'string') {
+                            try {
+                                prerequisitesAccept = JSON.parse(prerequisitesAccept);
+                            } catch (e) {
+                                console.error('Failed to parse quest prerequisites:', e);
+                                prerequisitesAccept = [];
+                            }
+                        }
+                        if (prerequisitesAccept && prerequisitesAccept.length > 0) {
+                            if (!prerequisitesAccept.every(prereq => completedQuests.includes(prereq))) {
                                 logToTerminal("You must complete prerequisite quests first.", "error");
                                 break;
                             }
                         }
                         
                         // Check if already active
-                        const activeQuests = playerData.activeQuests || [];
+                        const activeQuests = playerDataQuest.activeQuests || [];
                         if (activeQuests.some(aq => aq.questId === quest.id)) {
                             logToTerminal("You already have this quest active.", "error");
                             break;
@@ -6919,8 +8475,33 @@ Examples:
                             break;
                         }
                         
+                        // Parse objectives if it's a JSON string
+                        let objectives = quest.objectives;
+                        
+                        if (typeof objectives === 'string') {
+                            try {
+                                objectives = JSON.parse(objectives);
+                            } catch (e) {
+                                logToTerminal("This quest has invalid objectives data. Please contact an administrator.", "error");
+                                console.error('Failed to parse quest objectives:', e, quest);
+                                break;
+                            }
+                        }
+                        
+                        // If objectives is an object but not an array, wrap it in an array
+                        if (objectives && typeof objectives === 'object' && !Array.isArray(objectives)) {
+                            objectives = [objectives];
+                        }
+                        
+                        // Check if objectives is properly formatted
+                        if (!objectives || !Array.isArray(objectives) || objectives.length === 0) {
+                            logToTerminal("This quest has no objectives configured. Please contact an administrator.", "error");
+                            console.error('Quest objectives not properly configured:', quest);
+                            break;
+                        }
+                        
                         // Initialize quest objectives
-                        const questObjectives = quest.objectives.map(obj => ({
+                        const questObjectives = objectives.map(obj => ({
                             ...obj,
                             current: 0,
                             description: getObjectiveDescription(obj)
@@ -6946,7 +8527,7 @@ Examples:
                         
                     } else if (subcommand === 'abandon') {
                         // Find and remove quest from active quests
-                        const activeQuests = playerData.activeQuests || [];
+                        const activeQuests = playerDataQuest.activeQuests || [];
                         const questIndex = activeQuests.findIndex(aq => {
                             const quest = gameQuests[aq.questId];
                             return quest && quest.title.toLowerCase().includes(questName.toLowerCase());
@@ -6968,7 +8549,7 @@ Examples:
                         
                     } else if (subcommand === 'progress' || subcommand === 'log') {
                         // Show detailed progress for all active quests
-                        const activeQuests = playerData.activeQuests || [];
+                        const activeQuests = playerDataQuest.activeQuests || [];
                         
                         if (activeQuests.length === 0) {
                             logToTerminal("You have no active quests.", "system");
@@ -6985,9 +8566,43 @@ Examples:
                                 if (activeQuest.objectives) {
                                     logToTerminal("  Progress:", "system");
                                     for (const obj of activeQuest.objectives) {
-                                        const progress = Math.min(100, Math.floor((obj.current / obj.count) * 100));
+                                        // Build objective description - same logic as main quest display
+                                        let objDesc;
+                                        let displayCurrent = obj.current;
+                                        
+                                        if (obj.type === 'collect' && obj.itemId) {
+                                            const item = gameItems[obj.itemId];
+                                            const itemName = item?.name || `[missing item: ${obj.itemId}]`;
+                                            objDesc = `Collect ${obj.count} ${itemName}`;
+                                            
+                                            // For collect quests, COUNT actual items in inventory AND inside containers
+                                            const playerInv = playerDataQuest.inventory || [];
+                                            let actualCount = playerInv.filter(i => i.id === obj.itemId).length;
+                                            
+                                            // Also count items inside containers
+                                            for (const invItem of playerInv) {
+                                                if (invItem.contents && Array.isArray(invItem.contents)) {
+                                                    actualCount += invItem.contents.filter(i => i.id === obj.itemId).length;
+                                                }
+                                            }
+                                            
+                                            displayCurrent = actualCount;
+                                            console.log(`Quest tracking: Need ${obj.count} ${obj.itemId}, have ${actualCount} in inventory (including containers), quest shows ${obj.current}`);
+                                        } else if (obj.type === 'kill' && obj.monsterId) {
+                                            const monster = gameMonsters[obj.monsterId];
+                                            const monsterName = monster?.name || `[missing monster: ${obj.monsterId}]`;
+                                            objDesc = `Kill ${obj.count} ${monsterName}`;
+                                        } else if (obj.type === 'visit' && obj.roomId) {
+                                            const room = gameWorld[obj.roomId];
+                                            const roomName = room?.name || `[missing room: ${obj.roomId}]`;
+                                            objDesc = `Visit ${roomName}`;
+                                        } else {
+                                            objDesc = obj.description || obj.type;
+                                        }
+                                        
+                                        const progress = Math.min(100, Math.floor((displayCurrent / obj.count) * 100));
                                         const bar = '█'.repeat(Math.floor(progress / 10)) + '░'.repeat(10 - Math.floor(progress / 10));
-                                        logToTerminal(`  ${obj.description}: [${bar}] ${obj.current}/${obj.count}`, "system");
+                                        logToTerminal(`  ${objDesc}: [${bar}] ${displayCurrent}/${obj.count}`, "system");
                                     }
                                 }
                             }

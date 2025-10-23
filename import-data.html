@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MUD Game - Import Data</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #1a1a1a;
+            color: #00ff00;
+        }
+        h1 { color: #00ff00; margin-bottom: 10px; }
+        .subtitle { color: #888; margin-bottom: 30px; }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #333;
+        }
+        .tab {
+            background-color: #2a2a2a;
+            color: #00ff00;
+            border: none;
+            padding: 12px 24px;
+            cursor: pointer;
+            border-radius: 5px 5px 0 0;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+        .tab:hover { background-color: #3a3a3a; }
+        .tab.active {
+            background-color: #00ff00;
+            color: #000;
+            font-weight: bold;
+        }
+        
+        .tab-content {
+            display: none;
+            background-color: #2a2a2a;
+            padding: 20px;
+            border-radius: 0 5px 5px 5px;
+        }
+        .tab-content.active { display: block; }
+        
+        textarea {
+            width: 100%;
+            min-height: 300px;
+            background-color: #1a1a1a;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            border-radius: 5px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            resize: vertical;
+        }
+        
+        .button-group {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        button {
+            background-color: #00ff00;
+            color: #000;
+            border: none;
+            padding: 12px 24px;
+            font-size: 14px;
+            cursor: pointer;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        button:hover { background-color: #00cc00; }
+        button.secondary {
+            background-color: #555;
+            color: #fff;
+        }
+        button.secondary:hover { background-color: #666; }
+        button.danger {
+            background-color: #ff3333;
+            color: #fff;
+        }
+        button.danger:hover { background-color: #cc0000; }
+        
+        #output {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #000;
+            border: 1px solid #00ff00;
+            border-radius: 5px;
+            min-height: 150px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+        }
+        .success { color: #00ff00; }
+        .error { color: #ff3333; }
+        .warning { color: #ffaa00; }
+        .info { color: #00aaff; }
+        
+        .info-box {
+            background-color: #003300;
+            border-left: 4px solid #00ff00;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 3px;
+        }
+        .info-box h3 {
+            margin-top: 0;
+            color: #00ff00;
+        }
+        .info-box code {
+            background-color: #001a00;
+            padding: 2px 6px;
+            border-radius: 3px;
+            color: #00ff00;
+        }
+        
+        .stats {
+            display: flex;
+            gap: 20px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+        .stat {
+            background-color: #1a1a1a;
+            padding: 10px 15px;
+            border-radius: 5px;
+            border: 1px solid #333;
+        }
+        .stat-label {
+            color: #888;
+            font-size: 12px;
+        }
+        .stat-value {
+            color: #00ff00;
+            font-size: 20px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>🗂️ MUD Game - Bulk Data Importer</h1>
+    <p class="subtitle">Import rooms, NPCs, items, monsters, classes, and quests from JSON files</p>
+
+    <div id="auth-section" style="background-color: #2a2a2a; padding: 20px; margin-bottom: 20px; border-radius: 5px; text-align: center;">
+        <div id="logged-out" style="display: block;">
+            <p style="color: #ffaa00;">⚠️ You must be logged in as an admin to import data</p>
+            <button onclick="signInWithGoogle()" style="background-color: #4285f4; color: white;">
+                🔐 Sign in with Google
+            </button>
+        </div>
+        <div id="logged-in" style="display: none;">
+            <p style="color: #00ff00;">✅ Signed in as: <span id="user-email"></span></p>
+            <button class="secondary" onclick="signOut()">Sign Out</button>
+        </div>
+    </div>
+
+    <div id="importer-content" style="display: none;">
+    <div class="tabs">
+        <button class="tab active" onclick="switchTab('rooms')">Rooms</button>
+        <button class="tab" onclick="switchTab('items')">Items</button>
+        <button class="tab" onclick="switchTab('npcs')">NPCs</button>
+        <button class="tab" onclick="switchTab('monsters')">Monsters</button>
+        <button class="tab" onclick="switchTab('classes')">Classes</button>
+        <button class="tab" onclick="switchTab('quests')">Quests</button>
+    </div>
+
+    <!-- ROOMS TAB -->
+    <div id="rooms-content" class="tab-content active">
+        <div class="info-box">
+            <h3>📍 Rooms Format</h3>
+            <p>Paste JSON object with room IDs as keys. Each room must have: <code>name</code>, <code>description</code></p>
+            <p>Optional: <code>exits</code> (object), <code>details</code> (object), <code>monsters</code> (array), <code>items</code> (array)</p>
+        </div>
+        <textarea id="rooms-input" placeholder='{"room-id": {"name": "Room Name", "description": "Room description...", "exits": {"north": "other-room-id"}}}'></textarea>
+        <div class="button-group">
+            <button onclick="validateData('rooms')">✓ Validate JSON</button>
+            <button onclick="importData('rooms')">⬆️ Import to Firebase</button>
+            <button class="secondary" onclick="loadTemplate('rooms')">📋 Load Template</button>
+            <button class="secondary" onclick="clearInput('rooms')">🗑️ Clear</button>
+        </div>
+    </div>
+
+    <!-- ITEMS TAB -->
+    <div id="items-content" class="tab-content">
+        <div class="info-box">
+            <h3>🎒 Items Format</h3>
+            <p>Paste JSON object with item IDs as keys. Each item must have: <code>name</code>, <code>description</code></p>
+            <p>Optional: <code>type</code>, <code>value</code>, <code>cost</code>, <code>damage</code>, <code>defense</code>, <code>healing</code>, <code>weight</code>, <code>movable</code>, <code>aliases</code></p>
+        </div>
+        <textarea id="items-input" placeholder='{"item-id": {"name": "Item Name", "description": "Item description...", "value": 10}}'></textarea>
+        <div class="button-group">
+            <button onclick="validateData('items')">✓ Validate JSON</button>
+            <button onclick="importData('items')">⬆️ Import to Firebase</button>
+            <button class="secondary" onclick="loadTemplate('items')">📋 Load Template</button>
+            <button class="secondary" onclick="clearInput('items')">🗑️ Clear</button>
+        </div>
+    </div>
+
+    <!-- NPCS TAB -->
+    <div id="npcs-content" class="tab-content">
+        <div class="info-box">
+            <h3>🧙 NPCs Format</h3>
+            <p>Paste JSON object with NPC IDs as keys. Each NPC must have: <code>name</code>, <code>description</code></p>
+            <p>Optional: <code>roomId</code>, <code>shortName</code>, <code>dialogue</code> (array), <code>sells</code> (array), <code>buys</code> (array), <code>isTrader</code>, <code>aiEnabled</code></p>
+        </div>
+        <textarea id="npcs-input" placeholder='{"npc-id": {"name": "NPC Name", "description": "NPC description...", "roomId": "room-id"}}'></textarea>
+        <div class="button-group">
+            <button onclick="validateData('npcs')">✓ Validate JSON</button>
+            <button onclick="importData('npcs')">⬆️ Import to Firebase</button>
+            <button class="secondary" onclick="loadTemplate('npcs')">📋 Load Template</button>
+            <button class="secondary" onclick="clearInput('npcs')">🗑️ Clear</button>
+        </div>
+    </div>
+
+    <!-- MONSTERS TAB -->
+    <div id="monsters-content" class="tab-content">
+        <div class="info-box">
+            <h3>👹 Monsters Format</h3>
+            <p>Paste JSON object with monster IDs as keys. Each monster must have: <code>name</code>, <code>description</code>, <code>hp</code>, <code>damage</code></p>
+            <p>Optional: <code>maxHp</code>, <code>xpReward</code>, <code>loot</code> (array), <code>aggressive</code>, <code>respawnTime</code></p>
+        </div>
+        <textarea id="monsters-input" placeholder='{"monster-id": {"name": "Monster Name", "description": "Monster description...", "hp": 30, "damage": 5}}'></textarea>
+        <div class="button-group">
+            <button onclick="validateData('monsters')">✓ Validate JSON</button>
+            <button onclick="importData('monsters')">⬆️ Import to Firebase</button>
+            <button class="secondary" onclick="loadTemplate('monsters')">📋 Load Template</button>
+            <button class="secondary" onclick="clearInput('monsters')">🗑️ Clear</button>
+        </div>
+    </div>
+
+    <!-- CLASSES TAB -->
+    <div id="classes-content" class="tab-content">
+        <div class="info-box">
+            <h3>⚔️ Classes Format</h3>
+            <p>Paste JSON object with class IDs as keys. Each class must have: <code>name</code>, <code>description</code></p>
+            <p>Optional: <code>statBonuses</code> (object), <code>hpBonus</code>, <code>mpBonus</code>, <code>abilities</code> (array)</p>
+        </div>
+        <textarea id="classes-input" placeholder='{"class-id": {"name": "Class Name", "description": "Class description...", "hpBonus": 10}}'></textarea>
+        <div class="button-group">
+            <button onclick="validateData('classes')">✓ Validate JSON</button>
+            <button onclick="importData('classes')">⬆️ Import to Firebase</button>
+            <button class="secondary" onclick="loadTemplate('classes')">📋 Load Template</button>
+            <button class="secondary" onclick="clearInput('classes')">🗑️ Clear</button>
+        </div>
+    </div>
+
+    <!-- QUESTS TAB -->
+    <div id="quests-content" class="tab-content">
+        <div class="info-box">
+            <h3>📜 Quests Format</h3>
+            <p>Paste JSON object with quest IDs as keys. Each quest must have: <code>name</code>, <code>description</code>, <code>type</code></p>
+            <p>Optional: <code>objectives</code> (array), <code>rewards</code> (object), <code>requiredLevel</code>, <code>giver</code></p>
+        </div>
+        <textarea id="quests-input" placeholder='{"quest-id": {"name": "Quest Name", "description": "Quest description...", "type": "kill"}}'></textarea>
+        <div class="button-group">
+            <button onclick="validateData('quests')">✓ Validate JSON</button>
+            <button onclick="importData('quests')">⬆️ Import to Firebase</button>
+            <button class="secondary" onclick="loadTemplate('quests')">📋 Load Template</button>
+            <button class="secondary" onclick="clearInput('quests')">🗑️ Clear</button>
+        </div>
+    </div>
+
+    <div id="output"></div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getAuth, signInWithPopup, GoogleAuthProvider, signOut as firebaseSignOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+        import { getFirestore, doc, setDoc, writeBatch } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCscVJaLJV1FoOulHQBateoRh1UYhEE5gg",
+            authDomain: "mudgame-3cbb1.firebaseapp.com",
+            projectId: "mudgame-3cbb1",
+            storageBucket: "mudgame-3cbb1.firebasestorage.app",
+            messagingSenderId: "643707919940",
+            appId: "1:643707919940:web:f1e51802b2e86a7c5dd2f9"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        const APP_ID = 'mudgame-3cbb1';
+
+        // Authentication state
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                document.getElementById('logged-out').style.display = 'none';
+                document.getElementById('logged-in').style.display = 'block';
+                document.getElementById('importer-content').style.display = 'block';
+                document.getElementById('user-email').textContent = user.email;
+                log(`✅ Authenticated as ${user.email}`, 'success');
+            } else {
+                document.getElementById('logged-out').style.display = 'block';
+                document.getElementById('logged-in').style.display = 'none';
+                document.getElementById('importer-content').style.display = 'none';
+            }
+        });
+
+        window.signInWithGoogle = async function() {
+            const provider = new GoogleAuthProvider();
+            try {
+                await signInWithPopup(auth, provider);
+            } catch (error) {
+                log(`❌ Sign in failed: ${error.message}`, 'error');
+            }
+        };
+
+        window.signOut = async function() {
+            try {
+                await firebaseSignOut(auth);
+                clearLog();
+                log('👋 Signed out', 'info');
+            } catch (error) {
+                log(`❌ Sign out failed: ${error.message}`, 'error');
+            }
+        };
+
+        const COLLECTION_NAMES = {
+            rooms: 'mud-rooms',
+            items: 'mud-items',
+            npcs: 'mud-npcs',
+            monsters: 'mud-monsters',
+            classes: 'mud-classes',
+            quests: 'mud-quests'
+        };
+
+        function log(message, type = 'info') {
+            const output = document.getElementById('output');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.innerHTML = `<strong>[${new Date().toLocaleTimeString()}]</strong> ${message}`;
+            output.appendChild(entry);
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('output').innerHTML = '';
+        }
+
+        window.switchTab = function(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.getElementById(`${tabName}-content`).classList.add('active');
+        };
+
+        window.clearInput = function(type) {
+            document.getElementById(`${type}-input`).value = '';
+            log(`Cleared ${type} input`, 'info');
+        };
+
+        window.validateData = function(type) {
+            clearLog();
+            const input = document.getElementById(`${type}-input`).value.trim();
+            
+            if (!input) {
+                log('⚠️ No data to validate', 'warning');
+                return null;
+            }
+
+            try {
+                const data = JSON.parse(input);
+                
+                if (typeof data !== 'object' || Array.isArray(data)) {
+                    log('❌ Data must be a JSON object (not an array)', 'error');
+                    return null;
+                }
+
+                const entries = Object.entries(data);
+                log(`✓ Valid JSON with ${entries.length} entries`, 'success');
+                
+                // Validate each entry
+                let validCount = 0;
+                let errorCount = 0;
+                
+                entries.forEach(([id, item]) => {
+                    const errors = validateItem(type, id, item);
+                    if (errors.length === 0) {
+                        validCount++;
+                    } else {
+                        errorCount++;
+                        errors.forEach(err => log(`  ⚠️ ${id}: ${err}`, 'warning'));
+                    }
+                });
+
+                log(`<div class="stats">
+                    <div class="stat">
+                        <div class="stat-label">Valid Entries</div>
+                        <div class="stat-value">${validCount}</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">Warnings</div>
+                        <div class="stat-value">${errorCount}</div>
+                    </div>
+                </div>`, 'info');
+
+                if (validCount > 0) {
+                    log(`✓ Ready to import ${validCount} ${type}`, 'success');
+                }
+
+                return data;
+            } catch (error) {
+                log(`❌ Invalid JSON: ${error.message}`, 'error');
+                return null;
+            }
+        };
+
+        function validateItem(type, id, item) {
+            const errors = [];
+
+            switch (type) {
+                case 'rooms':
+                    if (!item.name) errors.push('Missing required field: name');
+                    if (!item.description) errors.push('Missing required field: description');
+                    break;
+                case 'items':
+                    if (!item.name) errors.push('Missing required field: name');
+                    if (!item.description) errors.push('Missing required field: description');
+                    break;
+                case 'npcs':
+                    if (!item.name) errors.push('Missing required field: name');
+                    if (!item.description) errors.push('Missing required field: description');
+                    break;
+                case 'monsters':
+                    if (!item.name) errors.push('Missing required field: name');
+                    if (!item.description) errors.push('Missing required field: description');
+                    if (!item.hp) errors.push('Missing required field: hp');
+                    if (!item.damage) errors.push('Missing required field: damage');
+                    break;
+                case 'classes':
+                    if (!item.name) errors.push('Missing required field: name');
+                    if (!item.description) errors.push('Missing required field: description');
+                    break;
+                case 'quests':
+                    if (!item.name) errors.push('Missing required field: name');
+                    if (!item.description) errors.push('Missing required field: description');
+                    if (!item.type) errors.push('Missing required field: type');
+                    break;
+            }
+
+            return errors;
+        }
+
+        window.importData = async function(type) {
+            const data = validateData(type);
+            if (!data) return;
+
+            const entries = Object.entries(data);
+            if (entries.length === 0) {
+                log('⚠️ No data to import', 'warning');
+                return;
+            }
+
+            try {
+                log(`🚀 Starting import of ${entries.length} ${type}...`, 'info');
+                const collectionName = COLLECTION_NAMES[type];
+                
+                // Use batched writes for efficiency (max 500 per batch)
+                const batches = [];
+                let currentBatch = writeBatch(db);
+                let batchCount = 0;
+
+                for (const [id, itemData] of entries) {
+                    const docRef = doc(db, `/artifacts/${APP_ID}/public/data/${collectionName}/${id}`);
+                    currentBatch.set(docRef, itemData);
+                    batchCount++;
+
+                    if (batchCount === 500) {
+                        batches.push(currentBatch);
+                        currentBatch = writeBatch(db);
+                        batchCount = 0;
+                    }
+                }
+
+                if (batchCount > 0) {
+                    batches.push(currentBatch);
+                }
+
+                // Commit all batches
+                for (let i = 0; i < batches.length; i++) {
+                    await batches[i].commit();
+                    log(`✓ Committed batch ${i + 1}/${batches.length}`, 'success');
+                }
+
+                log(`<strong>✅ Successfully imported ${entries.length} ${type}!</strong>`, 'success');
+                log(`📊 Total batches: ${batches.length}`, 'info');
+                
+            } catch (error) {
+                log(`❌ Import failed: ${error.message}`, 'error');
+                console.error('Import error:', error);
+            }
+        };
+
+        window.loadTemplate = function(type) {
+            const templates = {
+                rooms: {
+                    "example-room": {
+                        "name": "Example Room",
+                        "description": "A simple room with exits to the north and south.",
+                        "exits": {
+                            "north": "another-room",
+                            "south": "start"
+                        },
+                        "details": {
+                            "walls": "Stone walls covered in moss.",
+                            "floor": "Dusty wooden floorboards."
+                        }
+                    }
+                },
+                items: {
+                    "example-sword": {
+                        "name": "Example Sword",
+                        "description": "A basic iron sword.",
+                        "type": "weapon",
+                        "value": 25,
+                        "cost": 30,
+                        "damage": 8,
+                        "weight": 3,
+                        "movable": true
+                    }
+                },
+                npcs: {
+                    "example-merchant": {
+                        "name": "Friendly Merchant",
+                        "shortName": "merchant",
+                        "description": "A cheerful merchant selling basic goods.",
+                        "roomId": "shop",
+                        "dialogue": ["Hello there!", "Looking to buy something?"],
+                        "sells": ["example-sword", "health-potion"],
+                        "buys": ["junk"],
+                        "aiEnabled": false
+                    }
+                },
+                monsters: {
+                    "example-rat": {
+                        "name": "Giant Rat",
+                        "description": "A large, aggressive rat.",
+                        "hp": 15,
+                        "maxHp": 15,
+                        "damage": 3,
+                        "xpReward": 10,
+                        "loot": ["cheese"],
+                        "aggressive": true
+                    }
+                },
+                classes: {
+                    "example-fighter": {
+                        "name": "Fighter",
+                        "description": "A strong warrior class.",
+                        "statBonuses": { "str": 3, "dex": 1, "con": 2, "int": 0, "wis": 0, "cha": 0 },
+                        "hpBonus": 15,
+                        "mpBonus": 0,
+                        "abilities": ["Power Strike"]
+                    }
+                },
+                quests: {
+                    "example-quest": {
+                        "name": "Rat Extermination",
+                        "description": "Kill 5 rats in the cellar.",
+                        "type": "kill",
+                        "objectives": [
+                            { "type": "kill", "target": "giant-rat", "count": 5 }
+                        ],
+                        "rewards": {
+                            "xp": 100,
+                            "gold": 50,
+                            "items": ["health-potion"]
+                        },
+                        "requiredLevel": 1
+                    }
+                }
+            };
+
+            const template = templates[type];
+            if (template) {
+                document.getElementById(`${type}-input`).value = JSON.stringify(template, null, 2);
+                log(`📋 Loaded ${type} template`, 'info');
+            }
+        };
+    </script>
+</body>
+</html>

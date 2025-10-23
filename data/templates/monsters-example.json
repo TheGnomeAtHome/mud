@@ -1,0 +1,57 @@
+[
+  {
+    "id": "goblin",
+    "name": "Goblin Warrior",
+    "description": "A small green creature with sharp teeth and a crude weapon.",
+    "hp": 25,
+    "maxHp": 25,
+    "damage": 6,
+    "xpReward": 30,
+    "loot": ["copper-coins", "goblin-ear"],
+    "aggressive": true
+  },
+  {
+    "id": "dire-wolf",
+    "name": "Dire Wolf",
+    "description": "A massive wolf with glowing red eyes and razor-sharp fangs.",
+    "hp": 40,
+    "maxHp": 40,
+    "damage": 10,
+    "xpReward": 50,
+    "loot": ["wolf-pelt", "wolf-tooth"],
+    "aggressive": true
+  },
+  {
+    "id": "skeleton-archer",
+    "name": "Skeleton Archer",
+    "description": "An undead skeleton wielding a weathered bow.",
+    "hp": 30,
+    "maxHp": 30,
+    "damage": 8,
+    "xpReward": 40,
+    "loot": ["bone", "old-bow", "arrow"],
+    "aggressive": true
+  },
+  {
+    "id": "giant-spider",
+    "name": "Giant Spider",
+    "description": "A huge spider with venomous fangs and eight glowing eyes.",
+    "hp": 35,
+    "maxHp": 35,
+    "damage": 9,
+    "xpReward": 45,
+    "loot": ["spider-silk", "venom-sac"],
+    "aggressive": true
+  },
+  {
+    "id": "orc-chieftain",
+    "name": "Orc Chieftain",
+    "description": "A massive orc covered in battle scars, wielding a huge axe.",
+    "hp": 80,
+    "maxHp": 80,
+    "damage": 15,
+    "xpReward": 150,
+    "loot": ["chieftain-axe", "orc-armor", "gold-coins"],
+    "aggressive": true
+  }
+]

@@ -9,7 +9,7 @@ import { gameItems, gameNpcs, gamePlayers } from './data-loader.js';
 import { callGeminiForText } from './ai.js';
 
 // ===== CONFIGURATION =====
-export const TRADE_SETTINGS = {
+const TRADE_SETTINGS = {
     DEFAULT_BUY_RATE: 0.40,        // NPCs pay 40% of item value by default
     HAGGLE_ATTEMPTS: 3,             // Max haggle attempts per transaction
     TRADE_TIMEOUT: 60000,           // Trade timeout in ms (60 seconds)
@@ -22,7 +22,7 @@ export const TRADE_SETTINGS = {
 };
 
 // Reputation thresholds
-export const REP_LEVELS = {
+const REP_LEVELS = {
     STRANGER: { min: 0, max: 99, discount: 0, name: "Stranger" },
     ACQUAINTANCE: { min: 100, max: 299, discount: 0.05, name: "Acquaintance" },
     FRIEND: { min: 300, max: 599, discount: 0.10, name: "Friend" },
@@ -31,7 +31,7 @@ export const REP_LEVELS = {
 };
 
 // Active trade sessions (player-to-player)
-export const activeTrades = new Map();
+const activeTrades = new Map();
 
 // Haggle session data (player haggling with NPC)
 const haggleSessions = new Map();
@@ -182,7 +182,13 @@ export function calculateHaggleChance(options = {}) {
 /**
  * List items an NPC is selling
  */
-export function listMerchantInventory(npc, playerId) {
+export function listMerchantInventory(npc, playerId, itemsData = null) {
+    console.log('listMerchantInventory called:', { npc, sells: npc.sells });
+    
+    // Use passed itemsData or fall back to imported gameItems
+    const items = itemsData || gameItems;
+    console.log('Using items data:', items, 'Keys:', Object.keys(items));
+    
     if (!npc.sells || npc.sells.length === 0) {
         logToTerminal(`${npc.shortName || npc.name} isn't selling anything.`, 'error');
         return;
@@ -195,11 +201,19 @@ export function listMerchantInventory(npc, playerId) {
         logToTerminal(`Your status: ${repLevel.name} (${repLevel.discount * 100}% discount)`, 'system');
         logToTerminal('', 'system');
         
+        console.log('Processing sells array:', npc.sells);
+        console.log('Available items:', Object.keys(items));
+        
         npc.sells.forEach(itemId => {
-            const item = gameItems[itemId];
-            if (!item) return;
+            console.log('Looking for item:', itemId);
+            const item = items[itemId];
+            if (!item) {
+                console.warn('Item not found:', itemId);
+                return;
+            }
             
-            const basePrice = item.cost || 0;
+            console.log('Found item:', item);
+            const basePrice = item.cost || item.value || 0;
             const finalPrice = calculatePrice(basePrice, {
                 reputation,
                 merchantGreed: npc.greed || 0,
@@ -245,7 +259,7 @@ export async function buyFromNPC(playerId, npc, item, quantity = 1) {
         
         // Calculate final price
         const reputation = await getMerchantReputation(playerId, npc.id);
-        const pricePerItem = calculatePrice(item.cost, {
+        const pricePerItem = calculatePrice(item.cost || item.value || 0, {
             reputation,
             merchantGreed: npc.greed || 0,
             priceModifier: npc.priceModifiers?.[item.id] || 1.0,
@@ -321,7 +335,7 @@ export async function haggleWithNPC(playerId, npc, item, offeredPrice, playerDat
         // Initialize session if new
         if (!session) {
             const reputation = await getMerchantReputation(playerId, npc.id);
-            const basePrice = item.cost;
+            const basePrice = item.cost || item.value || 0;
             const listPrice = calculatePrice(basePrice, {
                 reputation,
                 merchantGreed: npc.greed || 0,
@@ -403,8 +417,23 @@ export async function haggleWithNPC(playerId, npc, item, offeredPrice, playerDat
                 // Use AI for dynamic counteroffer
                 const prompt = `You are ${npc.shortName}, a merchant. A customer offered ${offeredPrice} gold for ${item.name}, which you're selling for ${session.currentPrice} gold. Make a counteroffer of ${counterPrice} gold in character. Be brief (1-2 sentences).`;
                 
-                const aiResponse = await callGeminiForText(prompt);
-                logToTerminal(`${npc.shortName || npc.name}: ${aiResponse}`, 'npc');
+                try {
+                    const aiResponse = await Promise.race([
+                        callGeminiForText(prompt),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('AI timeout')), 5000))
+                    ]);
+                    logToTerminal(`${npc.shortName || npc.name}: ${aiResponse}`, 'npc');
+                } catch (aiError) {
+                    console.warn('AI counteroffer failed, using fallback:', aiError);
+                    const counterResponses = [
+                        `"I can't go that low, but how about ${counterPrice} gold?"`,
+                        `"You're killing me here... ${counterPrice} gold, and that's my final offer."`,
+                        `"I tell you what, meet me halfway at ${counterPrice} gold?"`,
+                        `"${offeredPrice}? No way. But I could do ${counterPrice} gold."`
+                    ];
+                    const response = counterResponses[Math.floor(Math.random() * counterResponses.length)];
+                    logToTerminal(`${npc.shortName || npc.name} ${response}`, 'npc');
+                }
             } else {
                 const counterResponses = [
                     `"I can't go that low, but how about ${counterPrice} gold?"`,

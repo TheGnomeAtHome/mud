@@ -1,0 +1,66 @@
+[
+  {
+    "id": "berserker",
+    "name": "Berserker",
+    "description": "A fierce warrior who gains power from rage.",
+    "statBonuses": {
+      "str": 4,
+      "dex": 1,
+      "con": 3,
+      "int": -1,
+      "wis": 0,
+      "cha": 0
+    },
+    "hpBonus": 25,
+    "mpBonus": -5,
+    "abilities": ["Rage", "Reckless Attack", "Intimidate"]
+  },
+  {
+    "id": "cleric",
+    "name": "Cleric",
+    "description": "A holy warrior with divine healing powers.",
+    "statBonuses": {
+      "str": 1,
+      "dex": 0,
+      "con": 2,
+      "int": 0,
+      "wis": 4,
+      "cha": 2
+    },
+    "hpBonus": 10,
+    "mpBonus": 20,
+    "abilities": ["Heal", "Turn Undead", "Bless", "Divine Shield"]
+  },
+  {
+    "id": "monk",
+    "name": "Monk",
+    "description": "A disciplined martial artist with lightning-fast strikes.",
+    "statBonuses": {
+      "str": 1,
+      "dex": 4,
+      "con": 1,
+      "int": 0,
+      "wis": 3,
+      "cha": 0
+    },
+    "hpBonus": 5,
+    "mpBonus": 10,
+    "abilities": ["Flurry of Blows", "Dodge", "Meditation"]
+  },
+  {
+    "id": "necromancer",
+    "name": "Necromancer",
+    "description": "A dark mage who commands undead minions.",
+    "statBonuses": {
+      "str": -1,
+      "dex": 0,
+      "con": 0,
+      "int": 4,
+      "wis": 2,
+      "cha": 1
+    },
+    "hpBonus": -5,
+    "mpBonus": 30,
+    "abilities": ["Raise Dead", "Drain Life", "Death Bolt", "Summon Skeleton"]
+  }
+]

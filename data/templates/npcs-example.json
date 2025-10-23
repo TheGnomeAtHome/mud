@@ -1,0 +1,47 @@
+[
+  {
+    "id": "blacksmith",
+    "name": "Grom the Blacksmith",
+    "shortName": "Grom",
+    "description": "A burly dwarf with soot-covered hands and a friendly smile.",
+    "roomId": "smithy",
+    "dialogue": [
+      "Welcome to my forge!",
+      "I make the finest weapons in town.",
+      "Looking for quality steel?"
+    ],
+    "sells": ["iron-longsword", "steel-dagger", "iron-shield"],
+    "buys": ["iron-ore", "scrap-metal"],
+    "aiEnabled": false
+  },
+  {
+    "id": "mysterious-wizard",
+    "name": "Aldric the Mysterious",
+    "shortName": "Aldric",
+    "description": "An elderly wizard in flowing purple robes.",
+    "roomId": "wizard-tower",
+    "dialogue": [
+      "You are a powerful wizard who speaks in riddles and offers cryptic advice. You sell magical items but are selective about your customers."
+    ],
+    "sells": ["magic-ring", "spellbook", "mana-potion"],
+    "buys": ["rare-gems", "ancient-artifacts"],
+    "aiEnabled": true,
+    "triggers": {
+      "ancient": "ancient-scroll"
+    }
+  },
+  {
+    "id": "tavern-keeper",
+    "name": "Martha the Innkeeper",
+    "shortName": "Martha",
+    "description": "A cheerful woman who runs the local tavern.",
+    "roomId": "tavern",
+    "dialogue": [
+      "Welcome to the Rusty Tankard!",
+      "Can I get you something to drink?",
+      "Adventurers are always welcome here."
+    ],
+    "sells": ["ale", "bread", "cheese"],
+    "aiEnabled": false
+  }
+]
