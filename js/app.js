@@ -757,6 +757,130 @@ export async function initializeApp() {
             console.log('[Accessibility] Screen reader mode auto-enabled');
         }
         
+        // Set up real-time room change listener for admin edits
+        console.log('[Init] Setting up room change listener for admin edits...');
+        const roomsCollection = collection(db, `/artifacts/${APP_ID}/public/data/mud-rooms`);
+        const roomsUnsub = onSnapshot(roomsCollection, (snapshot) => {
+            snapshot.docChanges().forEach((change) => {
+                if (change.type === 'modified') {
+                    const roomId = change.doc.id;
+                    const newRoomData = change.doc.data();
+                    
+                    // Preserve existing item entries from local cache when updating
+                    const oldRoomData = gameWorld[roomId];
+                    if (oldRoomData && oldRoomData.items && newRoomData.items) {
+                        newRoomData.items = newRoomData.items.map((item, index) => {
+                            // If item is an object with entries, preserve them
+                            if (typeof item === 'object' && item.entries) {
+                                return item;
+                            }
+                            // If old data had entries for this item, preserve them
+                            const oldItem = oldRoomData.items[index];
+                            if (oldItem && typeof oldItem === 'object' && oldItem.entries) {
+                                // Merge: keep ID from new data, preserve entries from old data
+                                const itemId = typeof item === 'string' ? item : item.id;
+                                if (oldItem.id === itemId) {
+                                    return { ...item, entries: oldItem.entries };
+                                }
+                            }
+                            return item;
+                        });
+                    }
+                    
+                    // Update local cache
+                    gameWorld[roomId] = { id: roomId, ...newRoomData };
+                    
+                    // If this is the current room, refresh the display
+                    const currentRoom = gameLogic.getCurrentRoom();
+                    if (currentRoom && currentRoom.id === roomId) {
+                        logToTerminal("✨ The room shimmers as reality shifts around you...", "system");
+                        setTimeout(() => {
+                            gameLogic.showRoom();
+                        }, 300);
+                    }
+                }
+            });
+        });
+        unsubscribers.push(roomsUnsub);
+        console.log('[Init] Room change listener active');
+        
+        // Set up real-time item change listener for admin edits
+        console.log('[Init] Setting up item change listener for admin edits...');
+        const itemsCollection = collection(db, `/artifacts/${APP_ID}/public/data/mud-items`);
+        const itemsUnsub = onSnapshot(itemsCollection, (snapshot) => {
+            snapshot.docChanges().forEach((change) => {
+                if (change.type === 'modified') {
+                    const itemId = change.doc.id;
+                    const newItemData = change.doc.data();
+                    
+                    // Update local cache
+                    gameItems[itemId] = { id: itemId, ...newItemData };
+                    
+                    // If item is in current room or player has it, refresh display
+                    const currentRoom = gameLogic.getCurrentRoom();
+                    if (currentRoom) {
+                        const itemInRoom = currentRoom.items?.some(item => {
+                            return (typeof item === 'string' ? item === itemId : item?.id === itemId);
+                        });
+                        
+                        if (itemInRoom) {
+                            logToTerminal(`✨ ${newItemData.name} glows briefly as it transforms...`, "system");
+                            setTimeout(() => {
+                                gameLogic.showRoom();
+                            }, 300);
+                        }
+                    }
+                }
+            });
+        });
+        unsubscribers.push(itemsUnsub);
+        console.log('[Init] Item change listener active');
+        
+        // Set up real-time NPC change listener for admin edits
+        console.log('[Init] Setting up NPC change listener for admin edits...');
+        const npcsCollection = collection(db, `/artifacts/${APP_ID}/public/data/mud-npcs`);
+        const npcsUnsub = onSnapshot(npcsCollection, (snapshot) => {
+            snapshot.docChanges().forEach((change) => {
+                if (change.type === 'modified') {
+                    const npcId = change.doc.id;
+                    const newNpcData = change.doc.data();
+                    
+                    // Update local cache
+                    gameNpcs[npcId] = { id: npcId, ...newNpcData };
+                    
+                    // If NPC is in current room, refresh display
+                    const currentRoom = gameLogic.getCurrentRoom();
+                    if (currentRoom && currentRoom.npcs?.includes(npcId)) {
+                        logToTerminal(`✨ ${newNpcData.name} flickers momentarily...`, "system");
+                        setTimeout(() => {
+                            gameLogic.showRoom();
+                        }, 300);
+                    }
+                }
+            });
+        });
+        unsubscribers.push(npcsUnsub);
+        console.log('[Init] NPC change listener active');
+        
+        // Set up real-time Monster change listener for admin edits
+        console.log('[Init] Setting up monster change listener for admin edits...');
+        const monstersCollection = collection(db, `/artifacts/${APP_ID}/public/data/mud-monsters`);
+        const monstersUnsub = onSnapshot(monstersCollection, (snapshot) => {
+            snapshot.docChanges().forEach((change) => {
+                if (change.type === 'modified') {
+                    const monsterId = change.doc.id;
+                    const newMonsterData = change.doc.data();
+                    
+                    // Update local cache
+                    gameMonsters[monsterId] = { id: monsterId, ...newMonsterData };
+                    
+                    logToTerminal(`✨ The ${newMonsterData.name} template has been updated...`, "system");
+                }
+            });
+        });
+        unsubscribers.push(monstersUnsub);
+        console.log('[Init] Monster change listener active');
+        
         console.log('[Init] Showing initial room...');
         await gameLogic.showRoom();
         console.log('[Init] Initialization complete!');

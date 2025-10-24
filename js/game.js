@@ -690,12 +690,30 @@ export function initializeGameLogic(dependencies) {
         try {
             const { query, collection, orderBy, limit, getDocs } = firestoreFunctions;
             
-            // Query top 20 players by XP
+            // Query top players by XP (get more than 20 to account for admins being filtered)
             const playersCollection = collection(db, `/artifacts/${appId}/public/data/mud-players`);
-            const leaderboardQuery = query(playersCollection, orderBy('xp', 'desc'), limit(20));
+            const leaderboardQuery = query(playersCollection, orderBy('xp', 'desc'), limit(50));
             const querySnapshot = await getDocs(leaderboardQuery);
             
             if (querySnapshot.empty) {
+                logToTerminal("The leaderboard is empty.", 'game');
+                return;
+            }
+            
+            // Filter out admins and limit to top 20 non-admin players
+            const nonAdminPlayers = [];
+            querySnapshot.forEach((doc) => {
+                const player = doc.data();
+                // Exclude admins from the leaderboard
+                if (!player.isAdmin) {
+                    nonAdminPlayers.push(player);
+                }
+            });
+            
+            // Limit to top 20
+            const topPlayers = nonAdminPlayers.slice(0, 20);
+            
+            if (topPlayers.length === 0) {
                 logToTerminal("The leaderboard is empty.", 'game');
                 return;
             }
@@ -706,8 +724,7 @@ export function initializeGameLogic(dependencies) {
             logToTerminal("", 'game');
             
             let rank = 1;
-            querySnapshot.forEach((doc) => {
-                const player = doc.data();
+            topPlayers.forEach((player) => {
                 const playerLevel = player.level || 1;
                 const playerXp = player.xp || 0;
                 const playerName = player.name || "Unknown";
@@ -787,6 +804,28 @@ export function initializeGameLogic(dependencies) {
                 logToTerminal("You are lost in the void. Returning to Nexus...", "error");
                 await updateDoc(doc(db, `/artifacts/${appId}/public/data/mud-players/${userId}`), { roomId: 'start' });
                 return;
+            }
+        }
+        
+        // Load room item entries from Firebase (for writable items in rooms)
+        // This ensures entries persist even when rooms are loaded from MySQL
+        const roomRef = doc(db, `/artifacts/${appId}/public/data/mud-rooms/${roomId}`);
+        const roomSnapshot = await getDoc(roomRef);
+        if (roomSnapshot.exists()) {
+            const firebaseRoomData = roomSnapshot.data();
+            if (firebaseRoomData.items && room.items) {
+                // Merge Firebase item data (with entries) into local room data
+                room.items = room.items.map((localItem, index) => {
+                    const firebaseItem = firebaseRoomData.items[index];
+                    if (firebaseItem && typeof firebaseItem === 'object' && firebaseItem.entries) {
+                        // Merge: preserve entries from Firebase
+                        const localItemId = typeof localItem === 'string' ? localItem : localItem.id;
+                        if (firebaseItem.id === localItemId) {
+                            return firebaseItem; // Use Firebase version with entries
+                        }
+                    }
+                    return localItem; // Use local version
+                });
             }
         }
 
@@ -3721,8 +3760,11 @@ Examples:
                     const fullItemObject = { id: itemIdToGet, ...item };
                     // Use manual array update instead of arrayUnion to allow duplicate items
                     const currentInventory = playerGetData.inventory || [];
-                    // Phase 3: Inventory is permanent data
-                    await playerPersistence.syncToMySQL(userId, { inventory: [...currentInventory, fullItemObject] });
+                    const newInventory = [...currentInventory, fullItemObject];
+                    
+                    // Phase 3: Inventory is permanent data - save to both MySQL and Firebase
+                    await playerPersistence.syncToMySQL(userId, { inventory: newInventory });
+                    await updateDoc(playerRef, { inventory: newInventory });
                     
                     // Update room: decrease quantity or remove item
                     if (itemQuantityInRoom > 1) {
@@ -3770,9 +3812,10 @@ Examples:
                 );
 
                 if (itemToDrop) {
-                    // Phase 3: Inventory is permanent data
+                    // Phase 3: Inventory is permanent data - save to both MySQL and Firebase
                     const newInventory = inventoryDrop.filter(i => i !== itemToDrop);
                     await playerPersistence.syncToMySQL(userId, { inventory: newInventory });
+                    await updateDoc(playerRef, { inventory: newInventory });
                     
                     // Add to room using new format with quantity
                     const currentRoomItems = currentRoom.items || [];
@@ -5648,7 +5691,7 @@ Examples:
                 break;
 
             case 'read':
-                // Check if reading an item in inventory
+                // Check if reading an item in inventory or room
                 const playerDocRead = await getDoc(playerRef);
                 if (!playerDocRead.exists()) {
                     logToTerminal(`Player data not found!`, 'error');
@@ -5667,22 +5710,31 @@ Examples:
                 // Check if item is in inventory
                 const itemInInventoryRead = inventoryRead.find(item => item && item.id === itemToRead.id);
                 
-                if (itemInInventoryRead) {
-                    // Reading an item from inventory
+                // Check if item is in the room
+                const roomItemsRead = currentRoom.items || [];
+                const itemInRoomRead = roomItemsRead.find(item => {
+                    if (typeof item === 'string') return item === itemToRead.id;
+                    return item?.id === itemToRead.id;
+                });
+                
+                if (itemInInventoryRead || itemInRoomRead) {
+                    // Reading an item from inventory or room
                     const fullItemData = gameItems[itemToRead.id];
                     if (!fullItemData || !fullItemData.isReadable) {
                         logToTerminal(`There is nothing to read on ${itemToRead.name}.`, 'error');
                         break;
                     }
                     
+                    const itemData = itemInInventoryRead || (typeof itemInRoomRead === 'object' ? itemInRoomRead : null);
+                    
                     logToTerminal(`You read ${itemToRead.name}:`, 'system');
                     
                     // Check if item has custom entries (writable items)
-                    if (itemInInventoryRead.entries && itemInInventoryRead.entries.length > 0) {
+                    if (itemData?.entries && itemData.entries.length > 0) {
                         logToTerminal(`\n=== Entries in ${itemToRead.name} ===`, 'system');
                         
-                        for (let i = 0; i < itemInInventoryRead.entries.length; i++) {
-                            const entry = itemInInventoryRead.entries[i];
+                        for (let i = 0; i < itemData.entries.length; i++) {
+                            const entry = itemData.entries[i];
                             const date = new Date(entry.timestamp);
                             const dateStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
                             
@@ -5706,13 +5758,13 @@ Examples:
                         logToTerminal(`You read the ${target}:`, 'system');
                         logToTerminal(detailText, 'game');
                     } else {
-                        logToTerminal(`You don't have "${target}" to read. You need to pick it up first.`, 'error');
+                        logToTerminal(`You don't see "${target}" here.`, 'error');
                     }
                 }
                 break;
             
             case 'write':
-                // Write on an item (book, scroll, sign, etc.)
+                // Write on an item (book, scroll, sign, etc.) in inventory or room
                 if (!target) {
                     logToTerminal("What do you want to write on?", 'error');
                     break;
@@ -5734,27 +5786,20 @@ Examples:
                 const itemToWrite = findItemByName(target);
                 
                 if (!itemToWrite) {
-                    logToTerminal(`You don't have "${target}".`, 'error');
-                    break;
-                }
-                
-                // Check if item is in inventory
-                const itemInInventoryWrite = inventoryWrite.find(item => item && item.id === itemToWrite.id);
-                
-                if (!itemInInventoryWrite) {
-                    logToTerminal(`You need to pick up the ${itemToWrite.name} first.`, 'error');
+                    logToTerminal(`You don't see "${target}" here.`, 'error');
                     break;
                 }
                 
                 // Check if item is writable
                 const fullItemDataWrite = gameItems[itemToWrite.id];
-                if (!fullItemDataWrite || !fullItemDataWrite.isWritable) {
+                const isWritable = fullItemDataWrite?.isWritable || fullItemDataWrite?.specialData?.isWritable;
+                if (!fullItemDataWrite || !isWritable) {
                     logToTerminal(`You can't write on ${itemToWrite.name}.`, 'error');
                     break;
                 }
                 
                 // Check character limit
-                const maxLength = fullItemDataWrite.maxWriteLength || 500;
+                const maxLength = fullItemDataWrite.maxWriteLength || fullItemDataWrite?.specialData?.maxWriteLength || 500;
                 const messageToWrite = parsedCommand.topic.substring(0, maxLength);
                 
                 if (parsedCommand.topic.length > maxLength) {
@@ -5769,34 +5814,77 @@ Examples:
                     timestamp: Date.now()
                 };
                 
-                // Update the item in inventory with new entry
-                const updatedInventoryWrite = inventoryWrite.map(item => {
-                    if (item && item.id === itemToWrite.id) {
-                        // Initialize entries array if it doesn't exist
-                        const entries = item.entries || [];
+                // Check if item is in inventory
+                const itemInInventoryWrite = inventoryWrite.find(item => item && item.id === itemToWrite.id);
+                
+                if (itemInInventoryWrite) {
+                    // Writing to item in inventory
+                    const updatedInventoryWrite = inventoryWrite.map(item => {
+                        if (item && item.id === itemToWrite.id) {
+                            const entries = item.entries || [];
+                            const maxEntries = fullItemDataWrite.maxEntries || fullItemDataWrite?.specialData?.maxEntries || 50;
+                            const updatedEntries = [...entries, entry];
+                            
+                            if (updatedEntries.length > maxEntries) {
+                                updatedEntries.shift();
+                                logToTerminal(`The oldest entry has been removed to make room.`, 'system');
+                            }
+                            
+                            return { ...item, entries: updatedEntries };
+                        }
+                        return item;
+                    });
+                    
+                    await updateDoc(playerRef, { inventory: updatedInventoryWrite });
+                    logToTerminal(`You write in ${itemToWrite.name}: "${messageToWrite}"`, 'game');
+                    logToTerminal(`Your message has been recorded.`, 'success');
+                } else {
+                    // Check if item is in the room
+                    const roomItemsWrite = currentRoom.items || [];
+                    const itemIndexInRoom = roomItemsWrite.findIndex(item => {
+                        if (typeof item === 'string') return item === itemToWrite.id;
+                        return item?.id === itemToWrite.id;
+                    });
+                    
+                    if (itemIndexInRoom >= 0) {
+                        // Writing to item in room
+                        const roomItem = roomItemsWrite[itemIndexInRoom];
+                        const itemData = typeof roomItem === 'object' ? roomItem : { id: roomItem };
                         
-                        // Check if there's a max entry limit
-                        const maxEntries = fullItemDataWrite.maxEntries || 50;
+                        const entries = itemData.entries || [];
+                        const maxEntries = fullItemDataWrite.maxEntries || fullItemDataWrite?.specialData?.maxEntries || 50;
                         const updatedEntries = [...entries, entry];
                         
-                        // Trim to max entries (remove oldest)
                         if (updatedEntries.length > maxEntries) {
                             updatedEntries.shift();
                             logToTerminal(`The oldest entry has been removed to make room.`, 'system');
                         }
                         
-                        return {
-                            ...item,
+                        // Update the room item with new entry
+                        const updatedRoomItems = [...roomItemsWrite];
+                        updatedRoomItems[itemIndexInRoom] = {
+                            ...itemData,
+                            id: itemToWrite.id,
                             entries: updatedEntries
                         };
+                        
+                        // Update room in Firebase
+                        const currentRoomId = currentRoom.id;
+                        const roomRef = doc(db, `/artifacts/${appId}/public/data/mud-rooms/${currentRoomId}`);
+                        await updateDoc(roomRef, { items: updatedRoomItems });
+                        
+                        // Update local room state immediately so changes appear without refresh
+                        currentRoom.items = updatedRoomItems;
+                        if (gameWorld[currentRoomId]) {
+                            gameWorld[currentRoomId].items = updatedRoomItems;
+                        }
+                        
+                        logToTerminal(`You write in ${itemToWrite.name}: "${messageToWrite}"`, 'game');
+                        logToTerminal(`Your message has been recorded.`, 'success');
+                    } else {
+                        logToTerminal(`You don't see "${target}" here.`, 'error');
                     }
-                    return item;
-                });
-                
-                await updateDoc(playerRef, { inventory: updatedInventoryWrite });
-                
-                logToTerminal(`You write in ${itemToWrite.name}: "${messageToWrite}"`, 'game');
-                logToTerminal(`Your message has been recorded.`, 'success');
+                }
                 break;
 
              case 'attack':
@@ -10342,8 +10430,18 @@ Examples:
                 }
                 
                 // Special case for 'emote' command with custom text
-                if (action === 'emote' && target) {
-                    const emoteText = `${playerName} ${target}`;
+                if (action === 'emote' && (target || topic)) {
+                    // Combine target and topic for full emote text
+                    // Example: "emote looks at Barbarelle thoughtfully" 
+                    // might parse as target="Barbarelle" topic="looks at Barbarelle thoughtfully"
+                    // We want the full original text after "emote"
+                    let emoteAction = target || '';
+                    if (topic && topic !== target) {
+                        // If topic is different from target, use topic (it usually has the full text)
+                        emoteAction = topic;
+                    }
+                    
+                    const emoteText = `${playerName} ${emoteAction}`;
                     logToTerminal(emoteText, 'action');
                     
                     await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {

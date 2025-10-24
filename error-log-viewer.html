@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error Log Viewer - MUD Admin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: #4a9eff;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #333;
+        }
+        
+        .controls {
+            background: #2a2a2a;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        
+        .controls label {
+            color: #b0b0b0;
+        }
+        
+        .controls select, .controls input {
+            background: #333;
+            color: #e0e0e0;
+            border: 1px solid #444;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .controls button {
+            background: #4a9eff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .controls button:hover {
+            background: #3a8eef;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: #2a2a2a;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #4a9eff;
+        }
+        
+        .stat-card.error {
+            border-left-color: #ff4444;
+        }
+        
+        .stat-card.warning {
+            border-left-color: #ffaa00;
+        }
+        
+        .stat-card.critical {
+            border-left-color: #ff0066;
+        }
+        
+        .stat-card h3 {
+            font-size: 14px;
+            color: #888;
+            margin-bottom: 8px;
+        }
+        
+        .stat-card .value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #4a9eff;
+        }
+        
+        .stat-card.error .value {
+            color: #ff4444;
+        }
+        
+        .stat-card.warning .value {
+            color: #ffaa00;
+        }
+        
+        .stat-card.critical .value {
+            color: #ff0066;
+        }
+        
+        .logs-table {
+            background: #2a2a2a;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        thead {
+            background: #333;
+        }
+        
+        th {
+            padding: 12px;
+            text-align: left;
+            color: #b0b0b0;
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+        }
+        
+        tbody tr {
+            border-bottom: 1px solid #333;
+            transition: background 0.2s;
+        }
+        
+        tbody tr:hover {
+            background: #333;
+            cursor: pointer;
+        }
+        
+        td {
+            padding: 12px;
+            font-size: 14px;
+        }
+        
+        .severity {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        
+        .severity.error {
+            background: #ff4444;
+            color: white;
+        }
+        
+        .severity.warning {
+            background: #ffaa00;
+            color: #1a1a1a;
+        }
+        
+        .severity.info {
+            background: #4a9eff;
+            color: white;
+        }
+        
+        .severity.critical {
+            background: #ff0066;
+            color: white;
+        }
+        
+        .timestamp {
+            color: #888;
+            font-size: 13px;
+        }
+        
+        .category {
+            color: #4a9eff;
+            font-weight: 500;
+        }
+        
+        .message {
+            color: #e0e0e0;
+            max-width: 400px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            overflow-y: auto;
+        }
+        
+        .modal-content {
+            background: #2a2a2a;
+            margin: 50px auto;
+            padding: 30px;
+            border-radius: 8px;
+            max-width: 900px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #333;
+        }
+        
+        .modal-header h2 {
+            color: #4a9eff;
+        }
+        
+        .close {
+            font-size: 32px;
+            color: #888;
+            cursor: pointer;
+            line-height: 1;
+        }
+        
+        .close:hover {
+            color: #e0e0e0;
+        }
+        
+        .detail-section {
+            margin-bottom: 20px;
+        }
+        
+        .detail-section h3 {
+            color: #4a9eff;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+        
+        .detail-section pre {
+            background: #1a1a1a;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            color: #e0e0e0;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 150px 1fr;
+            gap: 10px;
+            background: #1a1a1a;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        
+        .detail-grid .label {
+            color: #888;
+            font-weight: 600;
+        }
+        
+        .detail-grid .value {
+            color: #e0e0e0;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #888;
+            font-size: 18px;
+        }
+        
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #888;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Error Log Viewer</h1>
+        
+        <div class="controls">
+            <div>
+                <label for="severityFilter">Severity:</label>
+                <select id="severityFilter">
+                    <option value="">All</option>
+                    <option value="critical">Critical</option>
+                    <option value="error">Error</option>
+                    <option value="warning">Warning</option>
+                    <option value="info">Info</option>
+                </select>
+            </div>
+            
+            <div>
+                <label for="categoryFilter">Category:</label>
+                <select id="categoryFilter">
+                    <option value="">All</option>
+                    <option value="command">Command</option>
+                    <option value="combat">Combat</option>
+                    <option value="inventory">Inventory</option>
+                    <option value="npc">NPC</option>
+                    <option value="ai">AI</option>
+                    <option value="database">Database</option>
+                    <option value="game-state">Game State</option>
+                    <option value="uncaught">Uncaught</option>
+                    <option value="promise">Promise</option>
+                    <option value="general">General</option>
+                </select>
+            </div>
+            
+            <div>
+                <label for="playerFilter">Player:</label>
+                <input type="text" id="playerFilter" placeholder="Player name...">
+            </div>
+            
+            <div>
+                <label for="limitFilter">Limit:</label>
+                <select id="limitFilter">
+                    <option value="50">50</option>
+                    <option value="100" selected>100</option>
+                    <option value="200">200</option>
+                    <option value="500">500</option>
+                </select>
+            </div>
+            
+            <button onclick="loadLogs()">🔄 Refresh</button>
+            <button onclick="clearOldLogs()">🗑️ Clear Old Logs</button>
+        </div>
+        
+        <div class="stats" id="stats">
+            <div class="stat-card">
+                <h3>Total Logs</h3>
+                <div class="value" id="totalLogs">-</div>
+            </div>
+            <div class="stat-card critical">
+                <h3>Critical</h3>
+                <div class="value" id="criticalCount">-</div>
+            </div>
+            <div class="stat-card error">
+                <h3>Errors</h3>
+                <div class="value" id="errorCount">-</div>
+            </div>
+            <div class="stat-card warning">
+                <h3>Warnings</h3>
+                <div class="value" id="warningCount">-</div>
+            </div>
+        </div>
+        
+        <div class="logs-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Severity</th>
+                        <th>Category</th>
+                        <th>Player</th>
+                        <th>Message</th>
+                        <th>Room</th>
+                    </tr>
+                </thead>
+                <tbody id="logsTableBody">
+                    <tr><td colspan="6" class="loading">Loading logs...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <!-- Modal for log details -->
+    <div id="logModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Log Details</h2>
+                <span class="close" onclick="closeModal()">&times;</span>
+            </div>
+            <div id="modalBody"></div>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE = 'https://jphsoftware.com/api';
+        
+        async function loadLogs() {
+            const severity = document.getElementById('severityFilter').value;
+            const category = document.getElementById('categoryFilter').value;
+            const player = document.getElementById('playerFilter').value;
+            const limit = document.getElementById('limitFilter').value;
+            
+            // Build query string
+            const params = new URLSearchParams();
+            if (severity) params.append('severity', severity);
+            if (category) params.append('category', category);
+            if (player) params.append('player', player);
+            if (limit) params.append('limit', limit);
+            
+            try {
+                const response = await fetch(`${API_BASE}/get-error-logs.php?${params}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    updateStats(data.stats);
+                    displayLogs(data.logs);
+                } else {
+                    console.error('Failed to load logs:', data.error);
+                }
+            } catch (error) {
+                console.error('Error loading logs:', error);
+                document.getElementById('logsTableBody').innerHTML = 
+                    '<tr><td colspan="6" class="no-data">Failed to load logs</td></tr>';
+            }
+        }
+        
+        function updateStats(stats) {
+            document.getElementById('totalLogs').textContent = stats.total || 0;
+            document.getElementById('criticalCount').textContent = stats.critical || 0;
+            document.getElementById('errorCount').textContent = stats.error || 0;
+            document.getElementById('warningCount').textContent = stats.warning || 0;
+        }
+        
+        function displayLogs(logs) {
+            const tbody = document.getElementById('logsTableBody');
+            
+            if (logs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="no-data">No logs found</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = logs.map(log => `
+                <tr onclick="showLogDetails(${log.id})">
+                    <td class="timestamp">${formatTimestamp(log.timestamp)}</td>
+                    <td><span class="severity ${log.severity}">${log.severity}</span></td>
+                    <td class="category">${log.category}</td>
+                    <td>${log.player_name || '-'}</td>
+                    <td class="message">${escapeHtml(log.message)}</td>
+                    <td>${log.room_id || '-'}</td>
+                </tr>
+            `).join('');
+        }
+        
+        async function showLogDetails(logId) {
+            try {
+                const response = await fetch(`${API_BASE}/get-error-logs.php?id=${logId}`);
+                const data = await response.json();
+                
+                if (data.success && data.log) {
+                    displayLogDetails(data.log);
+                    document.getElementById('logModal').style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Error loading log details:', error);
+            }
+        }
+        
+        function displayLogDetails(log) {
+            const modalBody = document.getElementById('modalBody');
+            
+            let html = `
+                <div class="detail-section">
+                    <h3>Basic Information</h3>
+                    <div class="detail-grid">
+                        <div class="label">ID:</div>
+                        <div class="value">${log.id}</div>
+                        <div class="label">Timestamp:</div>
+                        <div class="value">${formatTimestamp(log.timestamp)}</div>
+                        <div class="label">Severity:</div>
+                        <div class="value"><span class="severity ${log.severity}">${log.severity}</span></div>
+                        <div class="label">Category:</div>
+                        <div class="value">${log.category}</div>
+                    </div>
+                </div>
+                
+                <div class="detail-section">
+                    <h3>Message</h3>
+                    <pre>${escapeHtml(log.message)}</pre>
+                </div>
+            `;
+            
+            if (log.player_name) {
+                html += `
+                    <div class="detail-section">
+                        <h3>Player Context</h3>
+                        <div class="detail-grid">
+                            <div class="label">Player ID:</div>
+                            <div class="value">${log.player_id || '-'}</div>
+                            <div class="label">Player Name:</div>
+                            <div class="value">${log.player_name || '-'}</div>
+                            <div class="label">Room ID:</div>
+                            <div class="value">${log.room_id || '-'}</div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            if (log.command_input) {
+                html += `
+                    <div class="detail-section">
+                        <h3>Command Input</h3>
+                        <pre>${escapeHtml(log.command_input)}</pre>
+                    </div>
+                `;
+            }
+            
+            if (log.parsed_command) {
+                html += `
+                    <div class="detail-section">
+                        <h3>Parsed Command</h3>
+                        <pre>${JSON.stringify(JSON.parse(log.parsed_command), null, 2)}</pre>
+                    </div>
+                `;
+            }
+            
+            if (log.stack_trace) {
+                html += `
+                    <div class="detail-section">
+                        <h3>Stack Trace</h3>
+                        <pre>${escapeHtml(log.stack_trace)}</pre>
+                    </div>
+                `;
+            }
+            
+            if (log.metadata) {
+                html += `
+                    <div class="detail-section">
+                        <h3>Additional Data</h3>
+                        <pre>${JSON.stringify(JSON.parse(log.metadata), null, 2)}</pre>
+                    </div>
+                `;
+            }
+            
+            html += `
+                <div class="detail-section">
+                    <h3>System Context</h3>
+                    <div class="detail-grid">
+                        <div class="label">Browser:</div>
+                        <div class="value">${log.browser_version || '-'}</div>
+                        <div class="label">Screen:</div>
+                        <div class="value">${log.screen_resolution || '-'}</div>
+                        <div class="label">User Agent:</div>
+                        <div class="value" style="font-size: 11px; word-break: break-all;">${log.user_agent || '-'}</div>
+                    </div>
+                </div>
+            `;
+            
+            modalBody.innerHTML = html;
+        }
+        
+        function closeModal() {
+            document.getElementById('logModal').style.display = 'none';
+        }
+        
+        async function clearOldLogs() {
+            if (!confirm('Clear logs older than 30 days?')) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}/clear-old-logs.php`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert(`Deleted ${data.deleted} old logs`);
+                    loadLogs();
+                } else {
+                    alert('Failed to clear logs: ' + data.error);
+                }
+            } catch (error) {
+                alert('Error clearing logs: ' + error.message);
+            }
+        }
+        
+        function formatTimestamp(timestamp) {
+            const date = new Date(timestamp);
+            return date.toLocaleString();
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('logModal');
+            if (event.target === modal) {
+                closeModal();
+            }
+        }
+        
+        // Load logs on page load
+        loadLogs();
+        
+        // Auto-refresh every 30 seconds
+        setInterval(loadLogs, 30000);
+    </script>
+</body>
+</html>
