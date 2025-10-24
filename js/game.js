@@ -8282,7 +8282,16 @@ Examples:
                     const playerGuildId = pDataGuild.guildId;
                     
                     if (playerGuildId) {
-                        const guild = gameGuilds[playerGuildId];
+                        // Get guild data - fetch from Firebase if not in cache
+                        let guild = gameGuilds[playerGuildId];
+                        if (!guild) {
+                            const guildRef = doc(db, `/artifacts/${appId}/public/data/mud-guilds/${playerGuildId}`);
+                            const guildSnap = await getDoc(guildRef);
+                            if (guildSnap.exists()) {
+                                guild = guildSnap.data();
+                            }
+                        }
+                        
                         if (guild) {
                             logToTerminal(`=== ${guild.name} ===`, 'system');
                             logToTerminal(`${guild.description || 'A mighty guild'}`, 'game');
@@ -8400,8 +8409,19 @@ Examples:
                                 break;
                             }
                             
-                            const inviterGuild = gameGuilds[inviterGuildId];
-                            const inviterMember = inviterGuild.members[userId];
+                            // Get guild data - fetch from Firebase if not in cache
+                            let inviterGuild = gameGuilds[inviterGuildId];
+                            if (!inviterGuild) {
+                                const guildRef = doc(db, `/artifacts/${appId}/public/data/mud-guilds/${inviterGuildId}`);
+                                const guildSnap = await getDoc(guildRef);
+                                if (!guildSnap.exists()) {
+                                    logToTerminal("Your guild no longer exists.", 'error');
+                                    break;
+                                }
+                                inviterGuild = guildSnap.data();
+                            }
+                            
+                            const inviterMember = inviterGuild.members?.[userId];
                             
                             if (!inviterMember || (inviterMember.rank !== 'leader' && inviterMember.rank !== 'officer')) {
                                 logToTerminal("Only guild leaders and officers can invite members.", 'error');
@@ -8502,7 +8522,17 @@ Examples:
                                 break;
                             }
                             
-                            const leaveGuild = gameGuilds[leaveGuildId];
+                            // Get guild data - fetch from Firebase if not in cache
+                            let leaveGuild = gameGuilds[leaveGuildId];
+                            if (!leaveGuild) {
+                                const guildRef = doc(db, `/artifacts/${appId}/public/data/mud-guilds/${leaveGuildId}`);
+                                const guildSnap = await getDoc(guildRef);
+                                if (!guildSnap.exists()) {
+                                    logToTerminal("Your guild no longer exists.", 'error');
+                                    break;
+                                }
+                                leaveGuild = guildSnap.data();
+                            }
                             
                             if (leaveGuild.leaderId === userId) {
                                 logToTerminal("You're the guild leader. Use 'guild disband' to disband the guild, or promote another member first.", 'error');
@@ -8538,7 +8568,17 @@ Examples:
                                 break;
                             }
                             
-                            const chatGuild = gameGuilds[chatGuildId];
+                            // Get guild data - fetch from Firebase if not in cache
+                            let chatGuild = gameGuilds[chatGuildId];
+                            if (!chatGuild) {
+                                const guildRef = doc(db, `/artifacts/${appId}/public/data/mud-guilds/${chatGuildId}`);
+                                const guildSnap = await getDoc(guildRef);
+                                if (!guildSnap.exists()) {
+                                    logToTerminal("Your guild no longer exists.", 'error');
+                                    break;
+                                }
+                                chatGuild = guildSnap.data();
+                            }
                             
                             // Send message to all guild members
                             const guildMemberIds = Object.keys(chatGuild.members || {});
@@ -9089,6 +9129,10 @@ Examples:
                             for (const roomId of quest.resetsRoomStates) {
                                 const roomStateRef = doc(db, `/artifacts/${appId}/public/data/mud-room-states/${roomId}`);
                                 const roomStateSnap = await getDoc(roomStateRef);
+                                const hadPreviousState = roomStateSnap.exists() && 
+                                    (Object.keys(roomStateSnap.data().pushableStates || {}).length > 0 || 
+                                     (roomStateSnap.data().revealedItems || []).length > 0);
+                                
                                 if (roomStateSnap.exists()) {
                                     const oldState = roomStateSnap.data();
                                     console.log(`[QUEST] Old room state for ${roomId}:`, oldState);
@@ -9098,7 +9142,6 @@ Examples:
                                         revealedItems: []
                                     });
                                     console.log(`[QUEST] Reset room state for ${roomId} upon re-accepting repeatable quest`);
-                                    logToTerminal(`The puzzle in the ${gameWorld[roomId]?.name || 'area'} has been reset for a fresh attempt.`, 'game');
                                 } else {
                                     console.log(`[QUEST] Room state document doesn't exist for ${roomId}, creating empty state`);
                                     // Create the document with empty states
@@ -9106,7 +9149,12 @@ Examples:
                                         pushableStates: {},
                                         revealedItems: []
                                     });
-                                    logToTerminal(`The puzzle in the ${gameWorld[roomId]?.name || 'area'} has been reset for a fresh attempt.`, 'game');
+                                }
+                                
+                                // Only show reset message if there was actually something to reset
+                                if (hadPreviousState) {
+                                    const roomName = gameWorld[roomId]?.name || 'area';
+                                    logToTerminal(`✨ The ${roomName} has been reset - all puzzles and objects have returned to their original state.`, 'success');
                                 }
                             }
                         }
@@ -9128,6 +9176,9 @@ Examples:
                         for (const obj of questObjectives) {
                             logToTerminal(`  - ${obj.description}: 0/${obj.count}`, "system");
                         }
+                        
+                        // Refresh room display to show any changes from reset states
+                        await showRoom(currentPlayerRoomId);
                         
                     } else if (subcommand === 'abandon') {
                         // Find and remove quest from active quests
@@ -10453,6 +10504,25 @@ Examples:
                         timestamp: serverTimestamp()
                     });
                     return; // Exit early after handling custom emote
+                }
+                
+                // Fallback: Check if original command starts with "emote" but wasn't parsed correctly
+                if (action === 'unknown' && cmdText.toLowerCase().trim().startsWith('emote ')) {
+                    const emoteAction = cmdText.substring(6).trim(); // Remove "emote " prefix
+                    if (emoteAction) {
+                        const emoteText = `${playerName} ${emoteAction}`;
+                        logToTerminal(emoteText, 'action');
+                        
+                        await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                            senderId: userId,
+                            senderName: playerName,
+                            roomId: currentPlayerRoomId,
+                            text: emoteText,
+                            isEmote: true,
+                            timestamp: serverTimestamp()
+                        });
+                        return; // Exit early after handling emote
+                    }
                 }
                 
                 // If the AI couldn't parse it, check if we're in a conversation with an AI NPC

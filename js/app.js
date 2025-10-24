@@ -885,6 +885,15 @@ export async function initializeApp() {
         await gameLogic.showRoom();
         console.log('[Init] Initialization complete!');
         logToTerminal("Ready to play! Game fully loaded.", "success");
+        
+        // Check for pending guild invites
+        if (playerData.guildInvites && playerData.guildInvites.length > 0) {
+            logToTerminal("\n📨 You have pending guild invitations!", "system");
+            playerData.guildInvites.forEach(invite => {
+                logToTerminal(`  • ${invite.guildName} (invited by ${invite.invitedBy})`, "game");
+            });
+            logToTerminal("Use 'guild accept [guild name]' to join a guild.", "system");
+        }
     }
     
     // Command input handler
