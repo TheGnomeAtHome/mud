@@ -2762,6 +2762,7 @@ export function initializeAdminPanel({
         populateMonsterSelector,
         populatePlayerSelector,
         populateSpellSelector,
+        populateGuildSelector,
         populateRoomItemsSelector,
         populateRoomNpcsSelector,
         populateRoomMonsterSelector,

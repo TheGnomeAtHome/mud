@@ -366,13 +366,18 @@ export function initializeDataLoader(firebase, appId) {
                         checkComplete('quests');
                     }
                     
-                    // Still load guilds from Firebase (changes more frequently)
-                    const guildsSnapshot = await getDocs(collection(db, `/artifacts/${appId}/public/data/mud-guilds`));
-                    gameData.gameGuilds = {};
-                    guildsSnapshot.forEach(doc => {
-                        gameData.gameGuilds[doc.id] = { id: doc.id, ...doc.data() };
+                    // Load guilds from Firebase with real-time listener (changes when players create/modify guilds)
+                    const guildsUnsub = onSnapshot(collection(db, `/artifacts/${appId}/public/data/mud-guilds`), (snapshot) => {
+                        gameData.gameGuilds = {};
+                        snapshot.forEach(doc => {
+                            gameData.gameGuilds[doc.id] = { id: doc.id, ...doc.data() };
+                        });
+                        checkComplete('guilds');
+                    }, error => {
+                        console.error('[Firestore] Error loading guilds:', error);
+                        reject(error);
                     });
-                    checkComplete('guilds');
+                    unsubscribers.push(guildsUnsub);
                     
                 } else {
                     // Original Firebase loading (fallback/compatibility mode)
@@ -458,13 +463,18 @@ export function initializeDataLoader(firebase, appId) {
                     });
                     checkComplete('spells');
                     
-                    // Load guilds from Firebase
-                    const guildsSnapshot = await getDocs(collection(db, `/artifacts/${appId}/public/data/mud-guilds`));
-                    gameData.gameGuilds = {};
-                    guildsSnapshot.forEach(doc => {
-                        gameData.gameGuilds[doc.id] = { id: doc.id, ...doc.data() };
+                    // Load guilds from Firebase with real-time listener
+                    const guildsUnsub = onSnapshot(collection(db, `/artifacts/${appId}/public/data/mud-guilds`), (snapshot) => {
+                        gameData.gameGuilds = {};
+                        snapshot.forEach(doc => {
+                            gameData.gameGuilds[doc.id] = { id: doc.id, ...doc.data() };
+                        });
+                        checkComplete('guilds');
+                    }, error => {
+                        console.error('[Firestore] Error loading guilds:', error);
+                        reject(error);
                     });
-                    checkComplete('guilds');
+                    unsubscribers.push(guildsUnsub);
                     
                     // Load quests from Firebase
                     const questsSnapshot = await getDocs(collection(db, `/artifacts/${appId}/public/data/mud-quests`));

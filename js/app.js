@@ -881,6 +881,28 @@ export async function initializeApp() {
         unsubscribers.push(monstersUnsub);
         console.log('[Init] Monster change listener active');
         
+        // Set up real-time Guild change listener for new guilds and updates
+        console.log('[Init] Setting up guild change listener...');
+        const guildsCollection = collection(db, `/artifacts/${APP_ID}/public/data/mud-guilds`);
+        const guildsUnsub = onSnapshot(guildsCollection, (snapshot) => {
+            snapshot.docChanges().forEach((change) => {
+                if (change.type === 'added' || change.type === 'modified') {
+                    const guildId = change.doc.id;
+                    const newGuildData = change.doc.data();
+                    
+                    // Update local cache
+                    gameGuilds[guildId] = { id: guildId, ...newGuildData };
+                    
+                    // Refresh admin panel guild selector if available
+                    if (adminPanelFunctions && adminPanelFunctions.populateGuildSelector) {
+                        adminPanelFunctions.populateGuildSelector();
+                    }
+                }
+            });
+        });
+        unsubscribers.push(guildsUnsub);
+        console.log('[Init] Guild change listener active');
+        
         console.log('[Init] Showing initial room...');
         await gameLogic.showRoom();
         console.log('[Init] Initialization complete!');
