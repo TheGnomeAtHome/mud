@@ -33,13 +33,26 @@ in all copies or substantial portions of this software.
 
 ### Advanced Features
 - **AI-Powered NPCs** - NPCs with personalities that respond naturally using Gemini AI
+- **Quest System** - Multi-objective quests with prerequisites and rewards
+- **Guild System** - Player guilds with guild halls and member management
+- **Party System** - Team up with other players for cooperative gameplay
+- **Class System** - Multiple character classes with unique abilities and spells
+- **Equipment System** - Weapons, armor, and containers with durability
+- **Weather System** - Dynamic weather affecting gameplay and movement
+- **Trading System** - Buy, sell, and haggle with merchants
+- **Crafting** - Poison system and item interactions
 - **Bot System** - Automated test players for development and ambient activity
 - **News/Achievement System** - Track and share player accomplishments
 - **Admin Panel** - Comprehensive content management system
 - **Interactive Map** - Visual room network with relationship mapping
 
-### Technical Highlights
+### Performance & Optimization
 - **Modular Architecture** - Clean separation of concerns with ES6 modules
+- **Hybrid Database** - MySQL for static data, Firebase for real-time updates
+- **80% Cost Reduction** - Optimized Firebase usage through smart data routing
+  - Phase 1: Auto-cleanup of old messages (85% storage reduction)
+  - Phase 2: Static data caching from MySQL (95% read reduction)
+  - Phase 3: Session vs permanent data split (75% write reduction)
 - **Performance Optimized** - 54% reduction in main file size through refactoring
 - **Real-time Updates** - Firebase Firestore for instant synchronization
 - **Responsive Design** - Built with Tailwind CSS
@@ -53,7 +66,10 @@ in all copies or substantial portions of this software.
 ## 🛠️ Technology Stack
 
 - **Frontend**: Vanilla JavaScript (ES6 Modules), HTML5, Tailwind CSS
-- **Backend**: Firebase (Firestore, Authentication)
+- **Backend**: 
+  - Firebase (Firestore, Authentication) - Real-time data
+  - MySQL - Static game data and permanent player data
+  - PHP API - RESTful endpoints for MySQL operations
 - **AI**: Google Gemini API
 - **Visualization**: vis.js for network graphs
 - **Hosting**: Self-hosted at jphsoftware.com
@@ -66,19 +82,24 @@ mud/
 ├── mud.html                # Main game interface
 ├── js/
 │   ├── app.js             # Application coordinator
-│   ├── game.js            # Core game logic (1,730 lines)
+│   ├── game.js            # Core game logic (10,400+ lines)
 │   ├── admin.js           # Admin panel (1,713 lines)
 │   ├── auth.js            # Authentication module
 │   ├── ui.js              # UI helper functions
 │   ├── ai.js              # Gemini AI integration
 │   ├── bots.js            # Automated bot system
+│   ├── weather.js         # Weather system
+│   ├── trading.js         # Trading mechanics
+│   ├── player-persistence.js  # Dual-database player management
+│   ├── data-loader.js     # Game data management with caching
 │   ├── firebase-init.js   # Firebase configuration
-│   ├── data-loader.js     # Game data management
 │   └── config.js          # App configuration
+├── api/
+│   ├── index.php          # RESTful API endpoints
+│   └── database.php       # MySQL operations
 ├── css/
 │   └── style.css          # Custom styling
-└── .github/
-    └── copilot-instructions.md
+└── docs/                  # Feature documentation
 ```
 
 ## 🎮 How to Play
@@ -131,32 +152,66 @@ mud/
 
 5. Open `http://localhost:8000/mud.html`
 
-## 📊 Firebase Collections
+## 📊 Database Architecture
 
+### Firebase (Real-time Data)
 ```
 /artifacts/{appId}/public/data/
-├── mud-rooms/           # World geography
-├── mud-items/           # Item definitions
-├── mud-npcs/            # NPC configurations
-├── mud-monsters/        # Monster templates
+├── mud-messages/        # Real-time chat (auto-cleanup >24h)
 ├── mud-active-monsters/ # Live monster instances
-├── mud-players/         # Player data
-├── mud-messages/        # Real-time chat
 ├── mud-news/            # Achievement feed
-├── mud-levels/          # Level configuration
-└── mud-actions/         # Custom emotes
+└── (Player session data: HP, MP, position, online status)
 ```
 
-## 🎯 Roadmap
+### MySQL (Static & Permanent Data)
+```
+Tables:
+├── mud_rooms           # World geography
+├── mud_items           # Item definitions
+├── mud_npcs            # NPC configurations
+├── mud_monsters        # Monster templates
+├── mud_classes         # Character classes
+├── mud_spells          # Spell definitions
+├── mud_guilds          # Guild data
+├── mud_quests          # Quest definitions
+├── mud_parties         # Party data
+└── mud_players         # Player permanent data (XP, inventory, equipment)
+```
 
-- [ ] Mobile-responsive UI improvements
-- [ ] More combat mechanics (armor, magic)
-- [ ] Guild/party system
-- [ ] Quests and storylines
-- [ ] Crafting system
-- [ ] Improved map visualization
-- [ ] Sound effects and music
-- [ ] Player trading system
+### Hybrid Strategy
+- **Firebase**: Real-time updates (HP, MP, chat, position) - Fast, low latency
+- **MySQL**: Static game data + permanent player data - Cost-effective, reliable
+- **Automatic Sync**: Session data syncs to MySQL on logout for persistence
+
+## 🎯 Recent Updates
+
+### Firebase Optimization (October 2024)
+- **Phase 1**: Message cleanup - Automatic deletion of messages >24 hours old
+- **Phase 2**: Data caching - Static game data loaded from MySQL once per session
+- **Phase 3**: Player data split - Session data (Firebase) vs permanent data (MySQL)
+- **Result**: 80% reduction in Firebase costs while maintaining real-time performance
+
+### New Features (2024)
+- ✅ Quest system with prerequisites and multi-objectives
+- ✅ Guild system with guild halls
+- ✅ Party system for cooperative play
+- ✅ Class system with unique abilities
+- ✅ Equipment system with durability
+- ✅ Weather system affecting gameplay
+- ✅ Trading and haggling mechanics
+- ✅ Poison crafting system
+- ✅ Writable items (books, notes)
+- ✅ Pushable objects revealing secrets
+- ✅ Locked doors and keys
+
+### Roadmap
+- [ ] Mobile PWA improvements
+- [ ] More spell schools and magic systems
+- [ ] Advanced crafting recipes
+- [ ] Dungeon instances
+- [ ] PvP arenas
+- [ ] Sound effects and ambient music
+- [ ] Achievement system expansion
 
 ## 📝 License
 

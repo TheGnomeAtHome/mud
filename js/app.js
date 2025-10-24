@@ -30,6 +30,7 @@ import { initializeGameLogic } from './game.js';
 import { initializeAdminPanel, setGameLogicForSettings } from './admin.js';
 import { initializeBotSystem } from './bots.js';
 import { initializeWeatherSystem } from './weather.js';
+import { initializePlayerPersistence } from './player-persistence.js';
 import { 
     callGeminiForText, 
     parseCommandWithGemini,
@@ -38,6 +39,74 @@ import {
     callGeminiForItem,
     callGeminiForNpc 
 } from './ai.js';
+
+/**
+ * Start periodic cleanup of old chat messages from Firebase
+ * This is part of the Firebase optimization strategy to reduce storage costs
+ * Messages older than 24 hours are automatically deleted
+ */
+function startMessageCleanup(db, appId, firestoreFunctions) {
+    const { collection, query, where, getDocs, deleteDoc, doc, Timestamp } = firestoreFunctions;
+    
+    async function cleanupOldMessages() {
+        try {
+            console.log('[Message Cleanup] Starting cleanup of old messages...');
+            
+            // Calculate cutoff time (24 hours ago)
+            const cutoffTime = Timestamp.fromMillis(Date.now() - (24 * 60 * 60 * 1000));
+            
+            // Query messages older than cutoff
+            const messagesRef = collection(db, `/artifacts/${appId}/public/data/mud-messages`);
+            const oldMessagesQuery = query(messagesRef, where('timestamp', '<', cutoffTime));
+            
+            const snapshot = await getDocs(oldMessagesQuery);
+            console.log(`[Message Cleanup] Found ${snapshot.size} old messages to delete`);
+            
+            if (snapshot.size === 0) {
+                console.log('[Message Cleanup] No old messages to clean up');
+                return;
+            }
+            
+            // Delete messages in batches to avoid overwhelming Firebase
+            let deletedCount = 0;
+            const deletePromises = [];
+            
+            snapshot.forEach((docSnapshot) => {
+                const docRef = doc(db, `/artifacts/${appId}/public/data/mud-messages/${docSnapshot.id}`);
+                deletePromises.push(
+                    deleteDoc(docRef)
+                        .then(() => {
+                            deletedCount++;
+                        })
+                        .catch(err => {
+                            console.error(`[Message Cleanup] Error deleting message ${docSnapshot.id}:`, err);
+                        })
+                );
+            });
+            
+            // Wait for all deletions to complete
+            await Promise.all(deletePromises);
+            
+            console.log(`[Message Cleanup] Successfully deleted ${deletedCount} old messages`);
+        } catch (error) {
+            console.error('[Message Cleanup] Error during cleanup:', error);
+        }
+    }
+    
+    // Run cleanup immediately on startup
+    cleanupOldMessages();
+    
+    // Run cleanup every hour (3600000ms)
+    const cleanupInterval = setInterval(cleanupOldMessages, 3600000);
+    
+    console.log('[Message Cleanup] Automatic cleanup scheduled (runs every hour)');
+    
+    // Return cleanup function in case we need to stop it
+    return () => {
+        clearInterval(cleanupInterval);
+        console.log('[Message Cleanup] Automatic cleanup stopped');
+    };
+}
 
 // Setup auth form switching immediately
 function setupAuthFormSwitching() {
@@ -135,6 +204,15 @@ export async function initializeApp() {
     // Initialize Data Loader
     const dataLoader = initializeDataLoader(firebase, APP_ID);
     
+    // Expose data loader globally for cache refresh command
+    window.gameDataLoader = dataLoader;
+    
+    // Initialize Player Persistence (Phase 3 optimization)
+    const playerPersistence = initializePlayerPersistence(firebase, APP_ID);
+    
+    // Expose player persistence globally
+    window.playerPersistence = playerPersistence;
+    
     // Start loading game data immediately (needed for class selection during character creation)
     dataLoader.loadGameData().catch(error => {
         console.error('Error preloading game data:', error);
@@ -198,21 +276,20 @@ export async function initializeApp() {
                     
                     const myCurrentRoom = gameLogic ? gameLogic.getCurrentRoom() : null;
                     
-                    // Special handling for NPC conversations - always show if in same room
-                    // (timestamp might be 0 due to serverTimestamp() being null initially)
-                    if (msg.isNpcConversation && msg.roomId === myCurrentRoom) {
+                    // Special handling for NPC conversations - always show if in same room and new
+                    if (msg.isNpcConversation && msg.roomId === myCurrentRoom && messageTime >= sessionStartTime) {
                         logToTerminal(`<span class="text-lime-300">${msg.username}</span> says, "${msg.text}"`, 'game');
                         return; // Skip the normal message processing
                     }
                     
-                    // Special handling for proactive NPC greetings - always show if in same room
-                    if (msg.isNpcGreeting && msg.roomId === myCurrentRoom) {
+                    // Special handling for proactive NPC greetings - always show if in same room and new
+                    if (msg.isNpcGreeting && msg.roomId === myCurrentRoom && messageTime >= sessionStartTime) {
                         logToTerminal(`<span class="text-lime-300">${msg.text}</span>`, 'game');
                         return; // Skip the normal message processing
                     }
                     
-                    // Special handling for NPC responses to room chat - always show if in same room
-                    if (msg.isNpcResponse && msg.roomId === myCurrentRoom) {
+                    // Special handling for NPC responses to room chat - always show if in same room and new
+                    if (msg.isNpcResponse && msg.roomId === myCurrentRoom && messageTime >= sessionStartTime) {
                         logToTerminal(`<span class="text-lime-300">${msg.username}</span> says, "${msg.text}"`, 'game');
                         return; // Skip the normal message processing
                     }
@@ -389,7 +466,10 @@ export async function initializeApp() {
             description: description || 'A mysterious adventurer.',
             roomId: 'start',
             inventory: [],
+            equipment: {},
             knownSpells: [], // Player starts with no spells
+            completedQuests: [],
+            activeQuests: [],
             money: 100,
             hp: maxHp,
             maxHp: maxHp,
@@ -398,15 +478,31 @@ export async function initializeApp() {
             xp: 0,
             level: 1,
             score: 0,
-            attributes: finalStats,
+            str: finalStats.str,
+            dex: finalStats.dex,
+            con: finalStats.con,
+            int: finalStats.int,
+            wis: finalStats.wis,
+            cha: finalStats.cha,
             isAdmin: isFirstPlayer, // First player becomes admin
+            monstersKilled: 0,
+            deaths: 0,
             online: true,
             lastSeen: serverTimestamp(),
-            createdAt: serverTimestamp()
+            createdAt: Date.now()
         };
         
         try {
-            await firestoreFunctions.setDoc(firestoreFunctions.doc(db, `/artifacts/${APP_ID}/public/data/mud-players/${userId}`), playerData);
+            console.log('[CharCreate] Creating new character...');
+            
+            // Phase 3: Save permanent data to MySQL
+            await playerPersistence.savePlayerCharacter(userId, playerData);
+            
+            // Create Firebase session (real-time data only)
+            await playerPersistence.createSession(userId, playerData);
+            
+            console.log('[CharCreate] ✓ Character created in MySQL + Firebase session');
+            
             charCreateModal.classList.add('hidden');
             playerName = characterName;
             await initializePlayerGame(playerData);
@@ -510,6 +606,16 @@ export async function initializeApp() {
         gameLogic.startCorpseCleanup();
         console.log('[Init] Corpse cleanup system started');
         
+        console.log('[Init] Starting poison tick system...');
+        // Start poison damage over time system
+        gameLogic.startPoisonTicks();
+        console.log('[Init] Poison tick system started');
+        
+        console.log('[Init] Starting message cleanup system...');
+        // Start periodic cleanup of old chat messages (Firebase optimization)
+        startMessageCleanup(db, APP_ID, firestoreFunctions);
+        console.log('[Init] Message cleanup system started');
+        
         console.log('[Init] Initializing weather system...');
         // Initialize weather system
         window.weatherSystem = initializeWeatherSystem({
@@ -586,20 +692,36 @@ export async function initializeApp() {
         const playerRef = doc(db, `/artifacts/${APP_ID}/public/data/mud-players/${userId}`);
         
         // Set player as online immediately
-        await firestoreFunctions.updateDoc(playerRef, {
-            online: true,
-            lastSeen: serverTimestamp()
-        });
+        try {
+            await firestoreFunctions.setDoc(playerRef, {
+                online: true,
+                lastSeen: serverTimestamp()
+            }, { merge: true });
+            console.log('[Init] Player set to online');
+        } catch (error) {
+            console.error('[Init] Error setting online status:', error.message);
+        }
         
         // Heartbeat - update lastSeen every 30 seconds
         const heartbeatInterval = setInterval(async () => {
             try {
                 await firestoreFunctions.updateDoc(playerRef, {
-                    lastSeen: serverTimestamp()
+                    lastSeen: serverTimestamp(),
+                    online: true // Also update online status in case it was set to false
                 });
                 console.log('[Heartbeat] Player presence updated');
             } catch (error) {
-                console.error('[Heartbeat] Error updating presence:', error);
+                // If update fails due to permissions, try to set the document instead
+                console.warn('[Heartbeat] Update failed, attempting setDoc with merge:', error.message);
+                try {
+                    await firestoreFunctions.setDoc(playerRef, {
+                        lastSeen: serverTimestamp(),
+                        online: true
+                    }, { merge: true });
+                    console.log('[Heartbeat] Player presence set via merge');
+                } catch (setError) {
+                    console.error('[Heartbeat] Both update and setDoc failed. Check Firebase security rules:', setError.message);
+                }
             }
         }, 30000); // 30 seconds
         
@@ -732,6 +854,15 @@ export async function initializeApp() {
     const logoutBtn = document.getElementById('logout-btn');
     logoutBtn.addEventListener('click', async () => {
         if (confirm('Are you sure you want to logout?')) {
+            // Phase 3: End session and save final state to MySQL
+            if (userId && gameLogic?.getPlayerData) {
+                console.log('[Logout] Saving final player state...');
+                const finalPlayerData = gameLogic.getPlayerData();
+                if (finalPlayerData) {
+                    await playerPersistence.endSession(userId, finalPlayerData);
+                    console.log('[Logout] ✓ Player data saved to MySQL');
+                }
+            }
             await authFunctions.signOut(auth);
             location.reload();
         }
@@ -744,17 +875,23 @@ export async function initializeApp() {
             sessionStartTime = Date.now();
             logoutBtn.classList.remove('hidden');
             
-            const playerDoc = await firestoreFunctions.getDoc(firestoreFunctions.doc(db, `/artifacts/${APP_ID}/public/data/mud-players/${userId}`));
+            console.log('[Auth] User logged in, loading character data...');
             
-            if (!playerDoc.exists()) {
-                // Show character creation
+            // Phase 3: Load character from MySQL first, fallback to Firebase
+            const playerData = await playerPersistence.loadPlayerCharacter(userId);
+            
+            if (!playerData) {
+                // No character found, show character creation
+                console.log('[Auth] No character found, showing creation screen');
                 charCreateModal.classList.remove('hidden');
                 currentStats = rollRandomStats();
                 displayRolledStats(currentStats);
                 populateClassSelector(); // Load available classes
             } else {
-                // Player exists, load game
-                const playerData = playerDoc.data();
+                // Player exists, create/update Firebase session and load game
+                console.log('[Auth] ✓ Character loaded from MySQL');
+                await playerPersistence.createSession(userId, playerData);
+                console.log('[Auth] ✓ Firebase session created');
                 playerName = playerData.name;
                 await initializePlayerGame(playerData);
             }

@@ -118,6 +118,40 @@ try {
         exit;
     }
     
+    // PATCH /api/{collection}/{id} - Partial update document (admin only)
+    if ($method === 'PATCH' && count($pathParts) === 2) {
+        // Check authentication
+        $apiKey = $_SERVER['HTTP_X_API_KEY'] ?? '';
+        if ($apiKey !== ADMIN_API_KEY) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Unauthorized']);
+            exit;
+        }
+        
+        $collection = $pathParts[0];
+        $id = $pathParts[1];
+        $tableName = 'mud_' . $collection;
+        
+        $input = json_decode(file_get_contents('php://input'), true);
+        
+        if ($input === null) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid JSON']);
+            exit;
+        }
+        
+        $result = $db->patch($tableName, $id, $input);
+        
+        if ($result === null) {
+            http_response_code(404);
+            echo json_encode(['error' => 'Document not found']);
+            exit;
+        }
+        
+        echo json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+    
     // DELETE /api/{collection}/{id} - Delete document (admin only)
     if ($method === 'DELETE' && count($pathParts) === 2) {
         // Check authentication

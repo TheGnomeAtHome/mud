@@ -95,6 +95,7 @@
             <button id="levels-tab-btn" class="admin-tab px-2 sm:px-4 py-1 sm:py-2 text-sm sm:text-base md:text-lg whitespace-nowrap">⬆️ Levels</button>
             <button id="actions-tab-btn" class="admin-tab px-2 sm:px-4 py-1 sm:py-2 text-sm sm:text-base md:text-lg whitespace-nowrap">🎭 Actions</button>
             <button id="map-tab-btn" class="admin-tab px-2 sm:px-4 py-1 sm:py-2 text-sm sm:text-base md:text-lg whitespace-nowrap">🗺️ Map</button>
+            <button id="stats-tab-btn" class="admin-tab px-2 sm:px-4 py-1 sm:py-2 text-sm sm:text-base md:text-lg whitespace-nowrap">📊 Statistics</button>
             <button id="settings-tab-btn" class="admin-tab px-2 sm:px-4 py-1 sm:py-2 text-sm sm:text-base md:text-lg whitespace-nowrap">⚙️ Settings</button>
             <button id="export-tab-btn" class="admin-tab px-2 sm:px-4 py-1 sm:py-2 text-sm sm:text-base md:text-lg whitespace-nowrap">💾 Export</button>
         </div>
@@ -207,6 +208,9 @@
                 <div>
                     <label for="room-details" class="block mb-1 mt-2">Details (JSON: {"target": "desc"})</label>
                     <textarea id="room-details" class="admin-input" rows="1"></textarea>
+                    
+                    <label for="room-pushables" class="block mb-1 mt-2">Pushables (JSON: {"object": {...config}})</label>
+                    <textarea id="room-pushables" class="admin-input" rows="1" placeholder='{"tomb": {"requiredPeople": 2, "revealsItems": ["item-id"]}}'></textarea>
                 </div>
                 <div class="flex justify-between mt-4">
                     <div>
@@ -1106,6 +1110,12 @@
                     <small class="text-gray-400">Players must complete these quests first</small>
                 </div>
 
+                <div class="mt-2">
+                    <label for="quest-resets-rooms" class="block mb-1">Resets Room States (JSON array - optional)</label>
+                    <textarea id="quest-resets-rooms" class="admin-input" rows="2" placeholder='["city-025","dungeon-entrance"]'></textarea>
+                    <small class="text-gray-400">For repeatable quests: room IDs to reset (clears pushables, revealed items). Use for tomb/puzzle quests.</small>
+                </div>
+
                 <div class="flex justify-between mt-4">
                     <div>
                         <button id="save-quest-btn" class="bg-green-500 text-white px-4 py-2 rounded">💾 Save Quest</button>
@@ -1321,6 +1331,182 @@
 
                 <div class="text-center text-sm text-gray-500 mt-6">
                     <p>More settings will be added in future updates</p>
+                </div>
+            </div>
+
+            <!-- Statistics Panel -->
+            <div id="stats-panel" class="hidden">
+                <h2 class="text-2xl text-yellow-400 text-center text-shadow mb-4">📊 Game Statistics</h2>
+                
+                <div class="text-center mb-4">
+                    <button id="refresh-stats-btn" class="bg-cyan-500 hover:bg-cyan-600 text-white px-6 py-2 rounded font-bold transition-colors">
+                        🔄 Refresh Statistics
+                    </button>
+                    <span id="stats-loading" class="ml-4 text-yellow-400 hidden">Loading...</span>
+                    <span id="stats-updated" class="ml-4 text-gray-400 text-sm"></span>
+                </div>
+
+                <!-- Game Content Stats -->
+                <div class="border border-cyan-500 rounded p-4 bg-black bg-opacity-50 mb-4">
+                    <h3 class="text-xl text-cyan-400 mb-3">🌍 Game Content</h3>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="text-center p-3 border border-gray-600 rounded">
+                            <div class="text-3xl font-bold text-blue-400" id="stat-total-rooms">-</div>
+                            <div class="text-sm text-gray-400">Rooms</div>
+                        </div>
+                        <div class="text-center p-3 border border-gray-600 rounded">
+                            <div class="text-3xl font-bold text-green-400" id="stat-total-items">-</div>
+                            <div class="text-sm text-gray-400">Items</div>
+                        </div>
+                        <div class="text-center p-3 border border-gray-600 rounded">
+                            <div class="text-3xl font-bold text-yellow-400" id="stat-total-npcs">-</div>
+                            <div class="text-sm text-gray-400">NPCs</div>
+                        </div>
+                        <div class="text-center p-3 border border-gray-600 rounded">
+                            <div class="text-3xl font-bold text-red-400" id="stat-total-monsters">-</div>
+                            <div class="text-sm text-gray-400">Monsters</div>
+                        </div>
+                        <div class="text-center p-3 border border-gray-600 rounded">
+                            <div class="text-3xl font-bold text-purple-400" id="stat-total-spells">-</div>
+                            <div class="text-sm text-gray-400">Spells</div>
+                        </div>
+                        <div class="text-center p-3 border border-gray-600 rounded">
+                            <div class="text-3xl font-bold text-orange-400" id="stat-total-classes">-</div>
+                            <div class="text-sm text-gray-400">Classes</div>
+                        </div>
+                        <div class="text-center p-3 border border-gray-600 rounded">
+                            <div class="text-3xl font-bold text-cyan-400" id="stat-total-quests">-</div>
+                            <div class="text-sm text-gray-400">Quests</div>
+                        </div>
+                        <div class="text-center p-3 border border-gray-600 rounded">
+                            <div class="text-3xl font-bold text-pink-400" id="stat-total-guilds">-</div>
+                            <div class="text-sm text-gray-400">Guilds</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Player Stats -->
+                <div class="border border-green-500 rounded p-4 bg-black bg-opacity-50 mb-4">
+                    <h3 class="text-xl text-green-400 mb-3">👥 Players</h3>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        <div class="text-center p-3 border border-gray-600 rounded">
+                            <div class="text-3xl font-bold text-green-400" id="stat-total-players">-</div>
+                            <div class="text-sm text-gray-400">Total Players</div>
+                        </div>
+                        <div class="text-center p-3 border border-gray-600 rounded">
+                            <div class="text-3xl font-bold text-cyan-400" id="stat-online-players">-</div>
+                            <div class="text-sm text-gray-400">Currently Online</div>
+                        </div>
+                        <div class="text-center p-3 border border-gray-600 rounded">
+                            <div class="text-3xl font-bold text-yellow-400" id="stat-highest-level">-</div>
+                            <div class="text-sm text-gray-400">Highest Level</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Top Players -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div class="border border-yellow-500 rounded p-4 bg-black bg-opacity-50">
+                        <h3 class="text-lg text-yellow-400 mb-3">🏆 Top Players by Level</h3>
+                        <div id="top-levels-list" class="space-y-2 max-h-60 overflow-y-auto">
+                            <div class="text-center text-gray-400 py-4">Loading...</div>
+                        </div>
+                    </div>
+
+                    <div class="border border-orange-500 rounded p-4 bg-black bg-opacity-50">
+                        <h3 class="text-lg text-orange-400 mb-3">💰 Wealthiest Players</h3>
+                        <div id="top-gold-list" class="space-y-2 max-h-60 overflow-y-auto">
+                            <div class="text-center text-gray-400 py-4">Loading...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Combat Stats -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div class="border border-red-500 rounded p-4 bg-black bg-opacity-50">
+                        <h3 class="text-lg text-red-400 mb-3">⚔️ Most Monster Kills</h3>
+                        <div id="top-kills-list" class="space-y-2 max-h-60 overflow-y-auto">
+                            <div class="text-center text-gray-400 py-4">Loading...</div>
+                        </div>
+                    </div>
+
+                    <div class="border border-purple-500 rounded p-4 bg-black bg-opacity-50">
+                        <h3 class="text-lg text-purple-400 mb-3">💀 Most Deaths</h3>
+                        <div id="top-deaths-list" class="space-y-2 max-h-60 overflow-y-auto">
+                            <div class="text-center text-gray-400 py-4">Loading...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quest Stats -->
+                <div class="border border-cyan-500 rounded p-4 bg-black bg-opacity-50 mb-4">
+                    <h3 class="text-lg text-cyan-400 mb-3">📜 Quest Statistics</h3>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-3">
+                        <div class="text-center p-3 border border-gray-600 rounded">
+                            <div class="text-2xl font-bold text-cyan-400" id="stat-total-quest-completions">-</div>
+                            <div class="text-sm text-gray-400">Total Completions</div>
+                        </div>
+                        <div class="text-center p-3 border border-gray-600 rounded">
+                            <div class="text-2xl font-bold text-green-400" id="stat-avg-quests-per-player">-</div>
+                            <div class="text-sm text-gray-400">Avg Per Player</div>
+                        </div>
+                        <div class="text-center p-3 border border-gray-600 rounded">
+                            <div class="text-2xl font-bold text-yellow-400" id="stat-most-popular-quest">-</div>
+                            <div class="text-sm text-gray-400">Most Popular</div>
+                        </div>
+                    </div>
+                    <div class="border-t border-gray-600 pt-3">
+                        <h4 class="text-md text-cyan-300 mb-2">🏅 Top Quest Completers</h4>
+                        <div id="top-quests-list" class="space-y-2 max-h-48 overflow-y-auto">
+                            <div class="text-center text-gray-400 py-4">Loading...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Class Distribution -->
+                <div class="border border-purple-500 rounded p-4 bg-black bg-opacity-50 mb-4">
+                    <h3 class="text-lg text-purple-400 mb-3">⚔️ Class Distribution</h3>
+                    <div id="class-distribution" class="space-y-2">
+                        <div class="text-center text-gray-400 py-4">Loading...</div>
+                    </div>
+                </div>
+
+                <!-- Active Monsters -->
+                <div class="border border-red-500 rounded p-4 bg-black bg-opacity-50 mb-4">
+                    <h3 class="text-lg text-red-400 mb-3">👹 Active Monsters</h3>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        <div class="text-center p-3 border border-gray-600 rounded">
+                            <div class="text-3xl font-bold text-red-400" id="stat-active-monsters">-</div>
+                            <div class="text-sm text-gray-400">Currently Spawned</div>
+                        </div>
+                        <div class="text-center p-3 border border-gray-600 rounded">
+                            <div class="text-3xl font-bold text-orange-400" id="stat-total-monster-kills">-</div>
+                            <div class="text-sm text-gray-400">Total Kills (All Time)</div>
+                        </div>
+                        <div class="text-center p-3 border border-gray-600 rounded">
+                            <div class="text-3xl font-bold text-yellow-400" id="stat-total-player-deaths">-</div>
+                            <div class="text-sm text-gray-400">Player Deaths</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Miscellaneous Stats -->
+                <div class="border border-gray-500 rounded p-4 bg-black bg-opacity-50">
+                    <h3 class="text-lg text-gray-400 mb-3">📊 Miscellaneous</h3>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        <div class="text-center p-3 border border-gray-600 rounded">
+                            <div class="text-2xl font-bold text-blue-400" id="stat-total-parties">-</div>
+                            <div class="text-sm text-gray-400">Active Parties</div>
+                        </div>
+                        <div class="text-center p-3 border border-gray-600 rounded">
+                            <div class="text-2xl font-bold text-pink-400" id="stat-total-guild-members">-</div>
+                            <div class="text-sm text-gray-400">Guild Members</div>
+                        </div>
+                        <div class="text-center p-3 border border-gray-600 rounded">
+                            <div class="text-2xl font-bold text-cyan-400" id="stat-total-items-in-world">-</div>
+                            <div class="text-sm text-gray-400">Items in World</div>
+                        </div>
+                    </div>
                 </div>
             </div>
 

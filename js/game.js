@@ -54,6 +54,7 @@ export function initializeGameLogic(dependencies) {
         addDoc,
         collection,
         query,
+        where,
         orderBy,
         limit,
         getDocs,
@@ -64,6 +65,9 @@ export function initializeGameLogic(dependencies) {
     } = firestoreFunctions;
     
     const { signOut } = authFunctions;
+
+    // Phase 3: Access to player persistence system
+    const playerPersistence = window.playerPersistence;
 
     let userId = null;
     let playerName = null;
@@ -511,8 +515,8 @@ export function initializeGameLogic(dependencies) {
 
         // Update player's active quests if any changed
         if (completedQuests.length > 0 || updatedQuests.length !== playerData.activeQuests.length) {
-            const playerRef = doc(db, `/artifacts/${appId}/public/data/mud-players/${playerId}`);
-            await updateDoc(playerRef, {
+            // Phase 3: Active quests are permanent data
+            await playerPersistence.syncToMySQL(playerId, {
                 activeQuests: updatedQuests
             });
         }
@@ -797,8 +801,19 @@ export function initializeGameLogic(dependencies) {
             logToTerminal(`<span class="text-yellow-400">⛅ ${weather.description}</span>`, 'game');
         }
         
-        if (room.items && room.items.length > 0) {
-            const itemNames = room.items.map(itemEntry => {
+        // Collect all items: regular room items + revealed items from pushables
+        const allItemsInRoom = [...(room.items || [])];
+        
+        // Check for revealed items from room state
+        const roomStateRef = doc(db, `/artifacts/${appId}/public/data/mud-room-states/${roomId}`);
+        const roomStateSnap = await getDoc(roomStateRef);
+        if (roomStateSnap.exists()) {
+            const revealedItems = roomStateSnap.data().revealedItems || [];
+            allItemsInRoom.push(...revealedItems);
+        }
+        
+        if (allItemsInRoom.length > 0) {
+            const itemNames = allItemsInRoom.map(itemEntry => {
                 // Support both old format (string) and new format ({id, quantity})
                 let itemId, quantity;
                 if (typeof itemEntry === 'string') {
@@ -965,6 +980,104 @@ export function initializeGameLogic(dependencies) {
             clearInterval(corpseCleanupInterval);
             corpseCleanupInterval = null;
             console.log('[Corpse Cleanup] Stopped');
+        }
+    }
+    
+    // Poison tick system - damages poisoned players over time
+    let poisonTickInterval = null;
+    async function processPoisonTicks() {
+        const now = Date.now();
+        
+        for (const [playerId, playerData] of Object.entries(gamePlayers)) {
+            // Check if player is poisoned
+            if (!playerData.poisonedUntil || playerData.poisonedUntil <= now) {
+                // Poison expired, clean up
+                if (playerData.poisonedUntil) {
+                    try {
+                        const playerRef = doc(db, `/artifacts/${appId}/public/data/mud-players/${playerId}`);
+                        await updateDoc(playerRef, {
+                            poisonedUntil: null,
+                            poisonDamage: null,
+                            poisonInterval: null,
+                            lastPoisonTick: null
+                        });
+                        
+                        if (playerId === userId) {
+                            logToTerminal("The poison has worn off.", 'system');
+                        }
+                    } catch (error) {
+                        console.error('[Poison] Error clearing poison status:', error);
+                    }
+                }
+                continue;
+            }
+            
+            // Check if it's time for next poison tick
+            const lastTick = playerData.lastPoisonTick || 0;
+            const tickInterval = (playerData.poisonInterval || 10) * 1000; // Convert to ms
+            
+            if (now - lastTick >= tickInterval) {
+                const poisonDamage = playerData.poisonDamage || 5;
+                
+                try {
+                    const playerRef = doc(db, `/artifacts/${appId}/public/data/mud-players/${playerId}`);
+                    const playerDoc = await getDoc(playerRef);
+                    
+                    if (playerDoc.exists()) {
+                        const currentData = playerDoc.data();
+                        const newHp = Math.max(0, (currentData.hp || 10) - poisonDamage);
+                        
+                        await updateDoc(playerRef, {
+                            hp: newHp,
+                            lastPoisonTick: now
+                        });
+                        
+                        // Notify the poisoned player
+                        if (playerId === userId) {
+                            logToTerminal(`💀 The poison courses through your veins! You take ${poisonDamage} damage.`, 'error');
+                            logToTerminal(`HP: ${newHp}/${currentData.maxHp || 100}`, 'game');
+                        }
+                        
+                        // Check if player died from poison
+                        if (newHp <= 0) {
+                            if (playerId === userId) {
+                                logToTerminal("💀 You have died from poison!", 'error');
+                                await handlePlayerDeath(playerRef, currentData, "poison");
+                            } else {
+                                // Notify other players in the room
+                                const victimRoom = currentData.roomId;
+                                if (victimRoom) {
+                                    await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                                        senderId: 'system',
+                                        senderName: 'System',
+                                        roomId: victimRoom,
+                                        text: `${currentData.name} has succumbed to poison!`,
+                                        isSystem: true,
+                                        timestamp: serverTimestamp()
+                                    });
+                                }
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error('[Poison] Error processing poison tick:', error);
+                }
+            }
+        }
+    }
+    
+    function startPoisonTicks() {
+        if (poisonTickInterval) return; // Already running
+        
+        console.log('[Poison] Starting poison tick system (every 5 seconds)');
+        poisonTickInterval = setInterval(processPoisonTicks, 5000); // Check every 5 seconds
+    }
+    
+    function stopPoisonTicks() {
+        if (poisonTickInterval) {
+            clearInterval(poisonTickInterval);
+            poisonTickInterval = null;
+            console.log('[Poison] Stopped');
         }
     }
     
@@ -2757,7 +2870,8 @@ Examples:
                         const updatedInv = playerData.inventory.filter(item => 
                             item.id !== inventoryItem.id || item.name !== inventoryItem.name
                         );
-                        await updateDoc(playerRef, { inventory: updatedInv });
+                        // Phase 3: Inventory is permanent data
+                        await playerPersistence.syncToMySQL(userId, { inventory: updatedInv });
                         logToTerminal(`${itemData.name} crumbles to dust after use.`, 'system');
                     } else {
                         logToTerminal(`You can use ${itemData.name} again if needed.`, 'system');
@@ -2867,13 +2981,15 @@ Examples:
                         const updatedInv = playerData.inventory.filter(item => 
                             item.id !== inventoryItem.id || item.name !== inventoryItem.name
                         );
-                        await updateDoc(playerRef, { inventory: updatedInv });
+                        // Phase 3: Inventory is permanent data
+                        await playerPersistence.syncToMySQL(userId, { inventory: updatedInv });
                         break;
                     }
 
                     // Teach all new spells
                     const spellIdsToAdd = newSpells.map(s => s.id);
-                    await updateDoc(playerRef, {
+                    // Phase 3: Known spells and inventory are permanent data
+                    await playerPersistence.syncToMySQL(userId, {
                         knownSpells: [...currentKnownSpells, ...spellIdsToAdd],
                         inventory: playerData.inventory.filter(item => 
                             item.id !== inventoryItem.id || item.name !== inventoryItem.name
@@ -2922,7 +3038,8 @@ Examples:
                         const brokenInv = playerData.inventory.filter(item => 
                             item.id !== inventoryItem.id || item.name !== inventoryItem.name
                         );
-                        await updateDoc(playerRef, { inventory: brokenInv });
+                        // Phase 3: Inventory is permanent data
+                        await playerPersistence.syncToMySQL(userId, { inventory: brokenInv });
                         break;
                     }
 
@@ -2944,7 +3061,8 @@ Examples:
                                 const healAmount = newHp - currentHp;
                                 
                                 if (healAmount > 0) {
-                                    await updateDoc(playerRef, { hp: newHp });
+                                    // Phase 3: HP is session data
+                                    await playerPersistence.updateSession(userId, { hp: newHp });
                                     logToTerminal(`${spellToCast.name} heals you for ${healAmount} HP!`, 'success');
                                     logToTerminal(`Current HP: ${newHp}/${maxHp}`, 'game');
                                 } else {
@@ -2955,7 +3073,8 @@ Examples:
                             if (spellToCast.damage > 0) {
                                 logToTerminal(`The magic backfires! You take ${spellToCast.damage} damage!`, 'error');
                                 const newHp = Math.max(0, currentHp - spellToCast.damage);
-                                await updateDoc(playerRef, { hp: newHp });
+                                // Phase 3: HP is session data
+                                await playerPersistence.updateSession(userId, { hp: newHp });
                                 if (newHp <= 0) {
                                     logToTerminal("You have died from the magical backlash!", 'error');
                                 }
@@ -3047,7 +3166,8 @@ Examples:
                                     const newHp = Math.min(targetHp + spellToCast.healing, targetMax);
                                     
                                     if (newHp > targetHp) {
-                                        await updateDoc(targetRef, { hp: newHp });
+                                        // Phase 3: HP is session data
+                                        await playerPersistence.updateSession(targetId, { hp: newHp });
                                         await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
                                             senderId: userId,
                                             senderName: playerName,
@@ -3063,7 +3183,8 @@ Examples:
                                     const targetHp = targetData.hp || 0;
                                     const newHp = Math.max(0, targetHp - spellToCast.damage);
                                     
-                                    await updateDoc(targetRef, { hp: newHp });
+                                    // Phase 3: HP is session data
+                                    await playerPersistence.updateSession(targetId, { hp: newHp });
                                     await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
                                         senderId: userId,
                                         senderName: playerName,
@@ -3089,7 +3210,8 @@ Examples:
                         const consumedInv = playerData.inventory.filter(item => 
                             item.id !== inventoryItem.id || item.name !== inventoryItem.name
                         );
-                        await updateDoc(playerRef, { inventory: consumedInv });
+                        // Phase 3: Inventory is permanent data
+                        await playerPersistence.syncToMySQL(userId, { inventory: consumedInv });
                         
                         // Show a message based on item type
                         if (itemType === 'scroll') {
@@ -3296,7 +3418,7 @@ Examples:
                         const newLevel = getLevelFromXp(updates.score);
                         if (newLevel > (playerData.level || 1)) {
                             updates.level = newLevel;
-                            await checkLevelUp(playerData.score, playerData.level || 1);
+                            await checkLevelUp(playerRef, updates.score, playerData.level || 1);
                         }
                     }
                     
@@ -3381,24 +3503,41 @@ Examples:
                             }
                         }
                         
-                        const updates = { roomId: destinationRoomId };
                         const directionNames = {'north': 'the north', 'south': 'the south', 'east': 'the east', 'west': 'the west', 'up': 'above', 'down': 'below', 'northeast': 'the northeast', 'northwest': 'the northwest', 'southeast': 'the southeast', 'southwest': 'the southwest'};
                         const oppositeDirections = {'north': 'south', 'south': 'north', 'east': 'west', 'west': 'east', 'up': 'down', 'down': 'up', 'northeast': 'southwest', 'northwest': 'southeast', 'southeast': 'northwest', 'southwest': 'northeast'};
                         
                         await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {senderId: userId, senderName: playerName, roomId: currentPlayerRoomId, text: `${playerName} leaves ${directionNames[direction] || direction}.`, isEmote: true, timestamp: serverTimestamp()});
                         
+                        // Phase 3: Update roomId in session (fast, real-time)
+                        await playerPersistence.updateSession(userId, { roomId: destinationRoomId });
+                        
+                        // Check for new room discovery (permanent data)
                         if (!playerData.visitedRooms || !playerData.visitedRooms.includes(destinationRoomId)) {
-                            updates.score = (playerData.score || 0) + 25;
-                            updates.visitedRooms = arrayUnion(destinationRoomId);
+                            const newScore = (playerData.score || 0) + 25;
+                            const permanentUpdates = {
+                                score: newScore,
+                                visitedRooms: [...(playerData.visitedRooms || []), destinationRoomId]
+                            };
+                            
                             logToTerminal("You discovered a new area! +25 XP", "system");
-                            const newLevel = getLevelFromXp(updates.score);
+                            
+                            const newLevel = getLevelFromXp(newScore);
                             if (newLevel > (playerData.level || 1)) {
-                                updates.level = newLevel;
-                                await checkLevelUp(playerData.score, playerData.level || 1);
+                                permanentUpdates.level = newLevel;
+                                await checkLevelUp(playerRef, newScore, playerData.level || 1);
+                                
+                                // Update maxHp/maxMp in session when leveling up
+                                const levelConfig = await loadLevelConfig();
+                                const classData = gameClasses[playerData.class];
+                                const newMaxHp = calculateMaxHp(newLevel, playerData.con || 10, classData);
+                                const newMaxMp = calculateMaxMp(newLevel, playerData.int || 10, classData);
+                                await playerPersistence.updateSession(userId, { maxHp: newMaxHp, maxMp: newMaxMp });
                             }
+                            
+                            // Save permanent data to MySQL
+                            await playerPersistence.syncToMySQL(userId, permanentUpdates);
                         }
                         
-                        await updateDoc(playerRef, updates);
                         await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {senderId: userId, senderName: playerName, roomId: destinationRoomId, text: `${playerName} arrives from ${directionNames[oppositeDirections[direction]] || oppositeDirections[direction] || 'somewhere'}.`, isEmote: true, timestamp: serverTimestamp()});
                         
                         const completedQuests = await updateQuestProgress(userId, 'visit', destinationRoomId, 1);
@@ -3483,24 +3622,41 @@ Examples:
                             }
                         }
                         
-                        const updates = { roomId: destinationRoomId };
                         const directionNames = {'north': 'the north', 'south': 'the south', 'east': 'the east', 'west': 'the west', 'up': 'above', 'down': 'below', 'northeast': 'the northeast', 'northwest': 'the northwest', 'southeast': 'the southeast', 'southwest': 'the southwest'};
                         const oppositeDirections = {'north': 'south', 'south': 'north', 'east': 'west', 'west': 'east', 'up': 'down', 'down': 'up', 'northeast': 'southwest', 'northwest': 'southeast', 'southeast': 'northwest', 'southwest': 'northeast'};
                         
                         await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {senderId: userId, senderName: playerName, roomId: currentPlayerRoomId, text: `${playerName} leaves ${directionNames[direction] || direction}.`, isEmote: true, timestamp: serverTimestamp()});
                         
+                        // Phase 3: Update roomId in session (fast, real-time)
+                        await playerPersistence.updateSession(userId, { roomId: destinationRoomId });
+                        
+                        // Check for new room discovery (permanent data)
                         if (!playerData.visitedRooms || !playerData.visitedRooms.includes(destinationRoomId)) {
-                            updates.score = (playerData.score || 0) + 25;
-                            updates.visitedRooms = arrayUnion(destinationRoomId);
+                            const newScore = (playerData.score || 0) + 25;
+                            const permanentUpdates = {
+                                score: newScore,
+                                visitedRooms: [...(playerData.visitedRooms || []), destinationRoomId]
+                            };
+                            
                             logToTerminal("You discovered a new area! +25 XP", "system");
-                            const newLevel = getLevelFromXp(updates.score);
+                            
+                            const newLevel = getLevelFromXp(newScore);
                             if (newLevel > (playerData.level || 1)) {
-                                updates.level = newLevel;
-                                await checkLevelUp(playerData.score, playerData.level || 1);
+                                permanentUpdates.level = newLevel;
+                                await checkLevelUp(playerRef, newScore, playerData.level || 1);
+                                
+                                // Update maxHp/maxMp in session when leveling up
+                                const levelConfig = await loadLevelConfig();
+                                const classData = gameClasses[playerData.class];
+                                const newMaxHp = calculateMaxHp(newLevel, playerData.con || 10, classData);
+                                const newMaxMp = calculateMaxMp(newLevel, playerData.int || 10, classData);
+                                await playerPersistence.updateSession(userId, { maxHp: newMaxHp, maxMp: newMaxMp });
                             }
+                            
+                            // Save permanent data to MySQL
+                            await playerPersistence.syncToMySQL(userId, permanentUpdates);
                         }
                         
-                        await updateDoc(playerRef, updates);
                         await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {senderId: userId, senderName: playerName, roomId: destinationRoomId, text: `${playerName} arrives from ${directionNames[oppositeDirections[direction]] || oppositeDirections[direction] || 'somewhere'}.`, isEmote: true, timestamp: serverTimestamp()});
                         
                         const completedQuests = await updateQuestProgress(userId, 'visit', destinationRoomId, 1);
@@ -3565,7 +3721,8 @@ Examples:
                     const fullItemObject = { id: itemIdToGet, ...item };
                     // Use manual array update instead of arrayUnion to allow duplicate items
                     const currentInventory = playerGetData.inventory || [];
-                    await updateDoc(playerRef, { inventory: [...currentInventory, fullItemObject] });
+                    // Phase 3: Inventory is permanent data
+                    await playerPersistence.syncToMySQL(userId, { inventory: [...currentInventory, fullItemObject] });
                     
                     // Update room: decrease quantity or remove item
                     if (itemQuantityInRoom > 1) {
@@ -3583,6 +3740,9 @@ Examples:
                     }
                     
                     logToTerminal(`You take ${addArticle(item.name)}.`, 'game');
+                    
+                    // Refresh room display to show updated item quantities
+                    await showRoom(currentPlayerRoomId);
                     
                     // Check quest progress for item collection
                     console.log(`[GET] Calling updateQuestProgress for collect ${itemIdToGet}`);
@@ -3610,7 +3770,9 @@ Examples:
                 );
 
                 if (itemToDrop) {
-                    await updateDoc(playerRef, { inventory: arrayRemove(itemToDrop) });
+                    // Phase 3: Inventory is permanent data
+                    const newInventory = inventoryDrop.filter(i => i !== itemToDrop);
+                    await playerPersistence.syncToMySQL(userId, { inventory: newInventory });
                     
                     // Add to room using new format with quantity
                     const currentRoomItems = currentRoom.items || [];
@@ -3743,7 +3905,8 @@ Examples:
                 
                 updates.inventory = updatedInventoryEquip;
                 
-                await updateDoc(playerRef, updates);
+                // Phase 3: Equipment and inventory are permanent data
+                await playerPersistence.syncToMySQL(userId, updates);
                 
                 // Show success message with stats if applicable
                 let message = `You equip ${addArticle(itemDataEquip.name)}.`;
@@ -3816,7 +3979,8 @@ Examples:
                 
                 updatesUnequip.inventory = updatedInventoryUnequip;
                 
-                await updateDoc(playerRef, updatesUnequip);
+                // Phase 3: Equipment and inventory are permanent data
+                await playerPersistence.syncToMySQL(userId, updatesUnequip);
                 logToTerminal(`You unequip ${addArticle(itemDataUnequip?.name || itemToUnequip.name)}.`, 'game');
                 break;
             
@@ -4320,13 +4484,13 @@ Examples:
                             break;
                         }
                         
+                        // Phase 3: Money is permanent data
                         // Transfer money
-                        await updateDoc(playerRef, {
+                        await playerPersistence.syncToMySQL(userId, {
                             money: (playerDataGive.money || 0) - amount
                         });
                         
-                        const recipientRef = doc(db, `/artifacts/${appId}/public/data/mud-players/${recipientId}`);
-                        await updateDoc(recipientRef, {
+                        await playerPersistence.syncToMySQL(recipientId, {
                             money: (recipientData.money || 0) + amount
                         });
                         
@@ -4756,6 +4920,108 @@ Examples:
                 }
                 break;
             
+            case 'push':
+            case 'pull':
+            case 'move':
+                if (!target) {
+                    logToTerminal(`${action.charAt(0).toUpperCase() + action.slice(1)} what?`, "error");
+                    break;
+                }
+                
+                // Check if room has pushable objects defined
+                if (!currentRoom.pushables || typeof currentRoom.pushables !== 'object') {
+                    logToTerminal(`You can't ${action} that.`, "game");
+                    break;
+                }
+                
+                const pushableKey = target.toLowerCase();
+                const pushable = currentRoom.pushables[pushableKey];
+                
+                if (!pushable) {
+                    logToTerminal(`You can't ${action} that.`, "game");
+                    break;
+                }
+                
+                // Check if already pushed/activated
+                const roomStateRef = doc(db, `/artifacts/${appId}/public/data/mud-room-states/${currentPlayerRoomId}`);
+                const roomStateSnap = await getDoc(roomStateRef);
+                const roomState = roomStateSnap.exists() ? roomStateSnap.data() : {};
+                const pushableStates = roomState.pushableStates || {};
+                
+                if (pushableStates[pushableKey]) {
+                    logToTerminal(pushable.alreadyPushedMessage || `The ${target} has already been moved.`, "game");
+                    break;
+                }
+                
+                // Check if requires party members
+                const requiredPeople = pushable.requiredPeople || 1;
+                
+                if (requiredPeople > 1) {
+                    // Count party members in the same room
+                    const playerParty = Object.values(gameParties).find(p => 
+                        p.members && Object.keys(p.members).includes(userId)
+                    );
+                    
+                    if (!playerParty) {
+                        logToTerminal(pushable.needHelpMessage || `You need help to ${action} this. It's too heavy for one person.`, "error");
+                        break;
+                    }
+                    
+                    // Count how many party members are in the same room
+                    const partyMembersInRoom = Object.keys(playerParty.members).filter(memberId => {
+                        const member = gamePlayers[memberId];
+                        return member && member.roomId === currentPlayerRoomId;
+                    });
+                    
+                    if (partyMembersInRoom.length < requiredPeople) {
+                        logToTerminal(pushable.needHelpMessage || `You need at least ${requiredPeople} people to ${action} this. Currently ${partyMembersInRoom.length} party member(s) are here.`, "error");
+                        break;
+                    }
+                }
+                
+                // Success! Mark as pushed and apply effects
+                pushableStates[pushableKey] = true;
+                await setDoc(roomStateRef, { pushableStates }, { merge: true });
+                
+                // Show success message
+                logToTerminal(pushable.successMessage || `You ${action} the ${target}.`, "success");
+                
+                // Reveal items if specified
+                if (pushable.revealsItems && Array.isArray(pushable.revealsItems)) {
+                    const roomRef = doc(db, `/artifacts/${appId}/public/data/mud-room-states/${currentPlayerRoomId}`);
+                    const roomSnap = await getDoc(roomRef);
+                    const existingItems = roomSnap.exists() ? (roomSnap.data().revealedItems || []) : [];
+                    const newRevealedItems = [...existingItems, ...pushable.revealsItems];
+                    
+                    await setDoc(roomRef, { revealedItems: newRevealedItems }, { merge: true });
+                    
+                    logToTerminal(pushable.revealMessage || "You discover something hidden!", "game");
+                }
+                
+                // Update room description if specified
+                if (pushable.newRoomDescription) {
+                    logToTerminal(pushable.newRoomDescription, "game");
+                }
+                
+                // Broadcast to other players in room
+                const otherPlayersInRoom = Object.values(gamePlayers).filter(p => 
+                    p.roomId === currentPlayerRoomId && p.name !== playerName
+                );
+                
+                if (otherPlayersInRoom.length > 0) {
+                    const broadcastMessage = pushable.broadcastMessage || `${playerName} pushes the ${target}.`;
+                    await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                        text: broadcastMessage,
+                        roomId: currentPlayerRoomId,
+                        timestamp: Date.now(),
+                        isSystem: true
+                    });
+                }
+                
+                // Refresh room display for everyone
+                await showRoom(currentPlayerRoomId);
+                break;
+            
             case 'offer':
                 // NEW: Offer item or gold in trade
                 if (!target) {
@@ -5052,7 +5318,8 @@ Examples:
                     updatedInventoryPut[containerIndex] = foundContainer;
                 }
                 
-                await updateDoc(playerRef, { inventory: updatedInventoryPut });
+                // Phase 3: Inventory is permanent data
+                await playerPersistence.syncToMySQL(userId, { inventory: updatedInventoryPut });
                 logToTerminal(`You put ${addArticle(itemData?.name || 'the item')} in ${addArticle(containerData.name)}.`, 'game');
                 break;
 
@@ -5061,7 +5328,17 @@ Examples:
                 // If no "from" keyword, treat as "get" command from room
                 if (!cmdText.includes(' from ')) {
                     // Redirect to get command for picking up from ground
-                    const roomItemIdsTake = currentRoom.items || [];
+                    // Include both regular room items AND revealed items from pushables
+                    const roomItemIdsTake = [...(currentRoom.items || [])];
+                    
+                    // Add revealed items from room state
+                    const roomStateTakeRef = doc(db, `/artifacts/${appId}/public/data/mud-room-states/${currentPlayerRoomId}`);
+                    const roomStateTakeSnap = await getDoc(roomStateTakeRef);
+                    if (roomStateTakeSnap.exists()) {
+                        const revealedItemsTake = roomStateTakeSnap.data().revealedItems || [];
+                        roomItemIdsTake.push(...revealedItemsTake);
+                    }
+                    
                     const itemEntryToTake = roomItemIdsTake.find(itemEntry => {
                         // Support both old format (string) and new format ({id, quantity})
                         const itemId = typeof itemEntry === 'string' ? itemEntry : itemEntry.id;
@@ -5108,24 +5385,45 @@ Examples:
                         const fullItemObject = { id: itemIdToTake, ...item };
                         // Use manual array update instead of arrayUnion to allow duplicate items
                         const currentInventoryTake = playerTakeData.inventory || [];
-                        await updateDoc(playerRef, { inventory: [...currentInventoryTake, fullItemObject] });
+                        // Phase 3: Inventory is permanent data
+                        await playerPersistence.syncToMySQL(userId, { inventory: [...currentInventoryTake, fullItemObject] });
                         
-                        // Update room: decrease quantity or remove item
-                        if (itemQuantityInRoom > 1) {
-                            // Decrease quantity
-                            const updatedItems = roomItemIdsTake.map(entry => {
-                                if (typeof entry === 'object' && entry.id === itemIdToTake) {
-                                    return { ...entry, quantity: entry.quantity - 1 };
-                                }
-                                return entry;
+                        // Check if this item is in revealed items (from pushables)
+                        const isRevealedItem = roomStateTakeSnap.exists() && 
+                            (roomStateTakeSnap.data().revealedItems || []).some(entry => {
+                                const id = typeof entry === 'string' ? entry : entry.id;
+                                return id === itemIdToTake;
                             });
-                            await updateDoc(roomRef, { items: updatedItems });
+                        
+                        if (isRevealedItem) {
+                            // Remove from revealed items in room state
+                            const currentRevealedItems = roomStateTakeSnap.data().revealedItems || [];
+                            const updatedRevealedItems = currentRevealedItems.filter(entry => {
+                                const id = typeof entry === 'string' ? entry : entry.id;
+                                return id !== itemIdToTake;
+                            });
+                            await updateDoc(roomStateTakeRef, { revealedItems: updatedRevealedItems });
                         } else {
-                            // Remove item completely (works for both formats)
-                            await updateDoc(roomRef, { items: arrayRemove(itemEntryToTake) });
+                            // Update regular room items: decrease quantity or remove item
+                            if (itemQuantityInRoom > 1) {
+                                // Decrease quantity
+                                const updatedItems = (currentRoom.items || []).map(entry => {
+                                    if (typeof entry === 'object' && entry.id === itemIdToTake) {
+                                        return { ...entry, quantity: entry.quantity - 1 };
+                                    }
+                                    return entry;
+                                });
+                                await updateDoc(roomRef, { items: updatedItems });
+                            } else {
+                                // Remove item completely (works for both formats)
+                                await updateDoc(roomRef, { items: arrayRemove(itemEntryToTake) });
+                            }
                         }
                         
                         logToTerminal(`You take ${addArticle(item.name)}.`, 'game');
+                        
+                        // Refresh room display to show updated item quantities
+                        await showRoom(currentPlayerRoomId);
                         
                         // Check quest progress for item collection
                         const completedQuests = await updateQuestProgress(userId, 'collect', itemIdToTake, 1);
@@ -5269,32 +5567,83 @@ Examples:
                 // Remove the item from inventory
                 const updatedInventory = currentInventory.filter(item => item.id !== itemInInventory.id || item.name !== itemInInventory.name);
                 
-                // Calculate HP restoration
+                // Calculate HP restoration (can be negative for poison/damage)
                 let newHp = playerDataUse.hp || 10;
                 const maxHp = playerDataUse.maxHp || 100;
-                if (fullItemData.hpRestore > 0) {
-                    newHp = Math.min(maxHp, newHp + fullItemData.hpRestore);
+                const hpChange = fullItemData.hpRestore || 0;
+                
+                if (hpChange !== 0) {
+                    newHp = Math.max(0, Math.min(maxHp, newHp + hpChange));
+                }
+
+                // Check for special effects from special data
+                const specialData = fullItemData.specialData || {};
+                let parsedSpecialData = specialData;
+                if (typeof specialData === 'string') {
+                    try {
+                        parsedSpecialData = JSON.parse(specialData);
+                    } catch (e) {
+                        parsedSpecialData = {};
+                    }
+                }
+
+                const playerUpdates = {
+                    inventory: updatedInventory,
+                    hp: newHp
+                };
+
+                // Handle poison effects
+                if (parsedSpecialData.onUseEffect === 'poison' || parsedSpecialData.onUseEffect === 'damage') {
+                    const effectPower = parsedSpecialData.effectPower || 5;
+                    const buffDuration = parsedSpecialData.buffDuration || 60; // seconds
+                    const damagePerTick = parsedSpecialData.damagePerTick || effectPower;
+                    const tickInterval = parsedSpecialData.tickInterval || 10; // seconds
+                    
+                    if (parsedSpecialData.onUseEffect === 'poison') {
+                        // Apply poison status effect
+                        playerUpdates.poisonedUntil = Date.now() + (buffDuration * 1000);
+                        playerUpdates.poisonDamage = damagePerTick;
+                        playerUpdates.poisonInterval = tickInterval;
+                        playerUpdates.lastPoisonTick = Date.now();
+                    } else if (parsedSpecialData.onUseEffect === 'damage') {
+                        // Immediate damage
+                        playerUpdates.hp = Math.max(0, newHp - effectPower);
+                        newHp = playerUpdates.hp;
+                    }
                 }
 
                 // Update player data
-                await updateDoc(playerRef, {
-                    inventory: updatedInventory,
-                    hp: newHp
-                });
+                await updateDoc(playerRef, playerUpdates);
 
                 // Show consumption message
                 let consumeMessage = `You ${action} ${itemInInventory.name}.`;
-                if (fullItemData.hpRestore > 0) {
-                    consumeMessage += ` It restores ${fullItemData.hpRestore} HP!`;
+                
+                if (hpChange > 0) {
+                    consumeMessage += ` It restores ${hpChange} HP!`;
+                } else if (hpChange < 0) {
+                    consumeMessage += ` It damages you for ${Math.abs(hpChange)} HP!`;
                 }
+                
                 if (fullItemData.effect) {
                     consumeMessage += ` ${fullItemData.effect}`;
                 }
+                
+                // Add poison warning
+                if (parsedSpecialData.onUseEffect === 'poison') {
+                    consumeMessage += ` 💀 You've been poisoned!`;
+                }
+                
                 logToTerminal(consumeMessage, 'system');
                 
-                // Show current HP if it changed
-                if (fullItemData.hpRestore > 0) {
+                // Show current HP
+                if (hpChange !== 0 || parsedSpecialData.onUseEffect === 'damage') {
                     logToTerminal(`Current HP: ${newHp}/${maxHp}`, 'game');
+                }
+                
+                // Check if player died from consumption
+                if (newHp <= 0) {
+                    logToTerminal("💀 You have died from consuming a deadly item!", 'error');
+                    await handlePlayerDeath(playerRef, playerDataUse, "poisoning");
                 }
                 break;
 
@@ -5327,7 +5676,25 @@ Examples:
                     }
                     
                     logToTerminal(`You read ${itemToRead.name}:`, 'system');
-                    logToTerminal(fullItemData.readableText || "The text is too faded to read.", 'game');
+                    
+                    // Check if item has custom entries (writable items)
+                    if (itemInInventoryRead.entries && itemInInventoryRead.entries.length > 0) {
+                        logToTerminal(`\n=== Entries in ${itemToRead.name} ===`, 'system');
+                        
+                        for (let i = 0; i < itemInInventoryRead.entries.length; i++) {
+                            const entry = itemInInventoryRead.entries[i];
+                            const date = new Date(entry.timestamp);
+                            const dateStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+                            
+                            logToTerminal(`\nEntry ${i + 1} - ${entry.author} (${dateStr}):`, 'quest');
+                            logToTerminal(`"${entry.text}"`, 'game');
+                        }
+                        
+                        logToTerminal(`\n=== End of Entries ===`, 'system');
+                    } else {
+                        // Show default readable text if no custom entries
+                        logToTerminal(fullItemData.readableText || "The pages are blank.", 'game');
+                    }
                 } else {
                     // Check if it's a room detail that can be read
                     const roomDetails = currentRoom.details || {};
@@ -5342,6 +5709,94 @@ Examples:
                         logToTerminal(`You don't have "${target}" to read. You need to pick it up first.`, 'error');
                     }
                 }
+                break;
+            
+            case 'write':
+                // Write on an item (book, scroll, sign, etc.)
+                if (!target) {
+                    logToTerminal("What do you want to write on?", 'error');
+                    break;
+                }
+                
+                if (!parsedCommand.topic) {
+                    logToTerminal("What do you want to write? Use: write [item] [your message]", 'error');
+                    break;
+                }
+                
+                const playerDocWrite = await getDoc(playerRef);
+                if (!playerDocWrite.exists()) {
+                    logToTerminal(`Player data not found!`, 'error');
+                    break;
+                }
+                
+                const playerDataWrite = playerDocWrite.data();
+                const inventoryWrite = playerDataWrite.inventory || [];
+                const itemToWrite = findItemByName(target);
+                
+                if (!itemToWrite) {
+                    logToTerminal(`You don't have "${target}".`, 'error');
+                    break;
+                }
+                
+                // Check if item is in inventory
+                const itemInInventoryWrite = inventoryWrite.find(item => item && item.id === itemToWrite.id);
+                
+                if (!itemInInventoryWrite) {
+                    logToTerminal(`You need to pick up the ${itemToWrite.name} first.`, 'error');
+                    break;
+                }
+                
+                // Check if item is writable
+                const fullItemDataWrite = gameItems[itemToWrite.id];
+                if (!fullItemDataWrite || !fullItemDataWrite.isWritable) {
+                    logToTerminal(`You can't write on ${itemToWrite.name}.`, 'error');
+                    break;
+                }
+                
+                // Check character limit
+                const maxLength = fullItemDataWrite.maxWriteLength || 500;
+                const messageToWrite = parsedCommand.topic.substring(0, maxLength);
+                
+                if (parsedCommand.topic.length > maxLength) {
+                    logToTerminal(`Your message was truncated to ${maxLength} characters.`, 'system');
+                }
+                
+                // Create entry with timestamp and author
+                const entry = {
+                    author: playerName,
+                    authorId: userId,
+                    text: messageToWrite,
+                    timestamp: Date.now()
+                };
+                
+                // Update the item in inventory with new entry
+                const updatedInventoryWrite = inventoryWrite.map(item => {
+                    if (item && item.id === itemToWrite.id) {
+                        // Initialize entries array if it doesn't exist
+                        const entries = item.entries || [];
+                        
+                        // Check if there's a max entry limit
+                        const maxEntries = fullItemDataWrite.maxEntries || 50;
+                        const updatedEntries = [...entries, entry];
+                        
+                        // Trim to max entries (remove oldest)
+                        if (updatedEntries.length > maxEntries) {
+                            updatedEntries.shift();
+                            logToTerminal(`The oldest entry has been removed to make room.`, 'system');
+                        }
+                        
+                        return {
+                            ...item,
+                            entries: updatedEntries
+                        };
+                    }
+                    return item;
+                });
+                
+                await updateDoc(playerRef, { inventory: updatedInventoryWrite });
+                
+                logToTerminal(`You write in ${itemToWrite.name}: "${messageToWrite}"`, 'game');
+                logToTerminal(`Your message has been recorded.`, 'success');
                 break;
 
              case 'attack':
@@ -5710,6 +6165,7 @@ Examples:
                         updates.xp = newXp;
                         updates.score = (playerData.score || 0) + xpGain;
                         updates.money = (playerData.money || 0) + monsterTemplate.gold;
+                        updates.monstersKilled = (playerData.monstersKilled || 0) + 1;
 
                         combatMessages.push({ msg: `You gain ${xpGain} XP and ${monsterTemplate.gold} gold.`, type: 'loot-log' });
                         
@@ -6255,7 +6711,8 @@ Examples:
                                 const updates = {
                                     xp: (playerData.xp || 0) + xpGain,
                                     score: (playerData.score || 0) + xpGain,
-                                    money: (playerData.money || 0) + monsterTemplate.gold
+                                    money: (playerData.money || 0) + monsterTemplate.gold,
+                                    monstersKilled: (playerData.monstersKilled || 0) + 1
                                 };
                                 
                                 shootMonsterMessages.push({ msg: `You gain ${xpGain} XP and ${monsterTemplate.gold} gold.`, type: 'loot-log' });
@@ -6721,7 +7178,8 @@ Examples:
                                 const updates = {
                                     xp: (playerData.xp || 0) + xpGain,
                                     score: (playerData.score || 0) + xpGain,
-                                    money: (playerData.money || 0) + monsterTemplate.gold
+                                    money: (playerData.money || 0) + monsterTemplate.gold,
+                                    monstersKilled: (playerData.monstersKilled || 0) + 1
                                 };
                                 
                                 throwMonsterMessages.push({ msg: `You gain ${xpGain} XP and ${monsterTemplate.gold} gold.`, type: 'loot-log' });
@@ -6948,12 +7406,12 @@ Examples:
                             const recipientCompletedQuests = recipientData.completedQuests || [];
                             
                             // Remove from active quests
-                            const newActiveQuests = recipientActiveQuests.filter(aq => aq.questId !== quest.id);
+                            const newActiveQuests = recipientActiveQuests.filter(aq => aq.questId !== questToTurnIn.questId);
                             
                             // Add to completed quests (unless repeatable)
                             const newCompletedQuests = quest.isRepeatable 
                                 ? recipientCompletedQuests 
-                                : [...recipientCompletedQuests, quest.id];
+                                : [...recipientCompletedQuests, questToTurnIn.questId];
                             
                             // Award rewards - parse if string
                             let rewards = quest.rewards || {};
@@ -7022,6 +7480,22 @@ Examples:
                             logToTerminal(`All party members have been rewarded!`, 'success');
                         }
                         logToTerminal(`${npcToTalkTo.shortName || npcToTalkTo.name} thanks you for your help.`, 'npc');
+                        
+                        // Reset room states if specified (for repeatable quests with pushables)
+                        if (quest.resetsRoomStates && Array.isArray(quest.resetsRoomStates)) {
+                            for (const roomId of quest.resetsRoomStates) {
+                                const roomStateRef = doc(db, `/artifacts/${appId}/public/data/mud-room-states/${roomId}`);
+                                const roomStateSnap = await getDoc(roomStateRef);
+                                if (roomStateSnap.exists()) {
+                                    // Clear pushable states and revealed items
+                                    await updateDoc(roomStateRef, {
+                                        pushableStates: {},
+                                        revealedItems: []
+                                    });
+                                    console.log(`[QUEST] Reset room state for ${roomId}`);
+                                }
+                            }
+                        }
                         
                         // Parse rewards if it's a JSON string
                         let rewards = quest.rewards || {};
@@ -7192,6 +7666,12 @@ Examples:
                 logToTerminal(`HP: ${hp} / ${playerMaxHp}`, 'game');
                 logToTerminal(`MP: ${mp} / ${playerMaxMp}`, 'game');
                 
+                // Show poison status if poisoned
+                if (pData.poisonedUntil && pData.poisonedUntil > Date.now()) {
+                    const timeLeft = Math.ceil((pData.poisonedUntil - Date.now()) / 1000);
+                    logToTerminal(`💀 Status: POISONED (${timeLeft}s remaining, ${pData.poisonDamage || 5} damage per tick)`, 'error');
+                }
+                
                 if (level < MAX_LEVEL) {
                     logToTerminal(`XP: ${xp} (${xpProgress} / ${xpNeeded} to level ${level + 1})`, 'game');
                     logToTerminal(`${nextLevelXp - xp} XP needed for next level`, 'game');
@@ -7319,7 +7799,8 @@ Examples:
                         if (spell.healing > 0) {
                             const newHp = Math.min(currentHp + spell.healing, maxHpCast);
                             const healAmount = newHp - currentHp;
-                            await updateDoc(playerRef, {
+                            // Phase 3: HP and MP are session data
+                            await playerPersistence.updateSession(userId, {
                                 hp: newHp,
                                 mp: currentMp - spell.mpCost
                             });
@@ -7329,7 +7810,8 @@ Examples:
                             logToTerminal(`You cast ${spell.name}!`, 'magic');
                             logToTerminal(`${spell.description}`, 'game');
                             // TODO: Implement stat buff system with duration
-                            await updateDoc(playerRef, { mp: currentMp - spell.mpCost });
+                            // Phase 3: MP is session data
+                            await playerPersistence.updateSession(userId, { mp: currentMp - spell.mpCost });
                         }
                         castSuccess = true;
                         break;
@@ -7366,10 +7848,11 @@ Examples:
                             
                             // Grant XP
                             const xpGain = monsterTemplate.xpReward || 10;
-                            await updateDoc(playerRef, {
-                                xp: (pDataCast.xp || 0) + xpGain,
-                                mp: currentMp - spell.mpCost
+                            // Phase 3: XP is permanent, MP is session
+                            await playerPersistence.syncToMySQL(userId, {
+                                score: (pDataCast.score || 0) + xpGain
                             });
+                            await playerPersistence.updateSession(userId, { mp: currentMp - spell.mpCost });
                             logToTerminal(`You gained ${xpGain} XP!`, 'success');
                             
                             // Add corpse and mark spawn as defeated
@@ -7408,7 +7891,8 @@ Examples:
                             await updateDoc(doc(db, `/artifacts/${appId}/public/data/mud-active-monsters/${targetMonster.id}`), {
                                 hp: newMonsterHp
                             });
-                            await updateDoc(playerRef, { mp: currentMp - spell.mpCost });
+                            // Phase 3: MP is session data
+                            await playerPersistence.updateSession(userId, { mp: currentMp - spell.mpCost });
                         }
                         castSuccess = true;
                         break;
@@ -7419,7 +7903,8 @@ Examples:
                             // No target specified, heal self
                             const newHpAlly = Math.min(currentHp + spell.healing, maxHpCast);
                             const healAmountAlly = newHpAlly - currentHp;
-                            await updateDoc(playerRef, {
+                            // Phase 3: HP and MP are session data
+                            await playerPersistence.updateSession(userId, {
                                 hp: newHpAlly,
                                 mp: currentMp - spell.mpCost
                             });
@@ -7459,13 +7944,14 @@ Examples:
                                 break;
                             }
                             
+                            // Phase 3: HP is session data for both players
                             // Update target's HP
-                            await updateDoc(targetPlayerRef, {
+                            await playerPersistence.updateSession(targetPlayerId, {
                                 hp: newTargetHp
                             });
                             
                             // Deduct caster's MP
-                            await updateDoc(playerRef, {
+                            await playerPersistence.updateSession(userId, {
                                 mp: currentMp - spell.mpCost
                             });
                             
@@ -7522,7 +8008,8 @@ Examples:
                             }
                         }
                         
-                        await updateDoc(playerRef, { mp: currentMp - spell.mpCost });
+                        // Phase 3: MP is session data
+                        await playerPersistence.updateSession(userId, { mp: currentMp - spell.mpCost });
                         castSuccess = true;
                         break;
                         
@@ -7629,8 +8116,9 @@ Examples:
                     break;
                 }
                 
-                await updateDoc(playerRef, {
-                    knownSpells: arrayUnion(learnSpellId)
+                // Phase 3: Known spells are permanent data
+                await playerPersistence.syncToMySQL(userId, {
+                    knownSpells: [...currentKnownSpells, learnSpellId]
                 });
                 
                 logToTerminal(`You have learned ${gameSpells[learnSpellId].name}!`, 'success');
@@ -8507,6 +8995,34 @@ Examples:
                             description: getObjectiveDescription(obj)
                         }));
                         
+                        // Reset room states for repeatable quests (if player has completed before)
+                        if (quest.isRepeatable && completedQuests.includes(quest.id) && quest.resetsRoomStates && Array.isArray(quest.resetsRoomStates)) {
+                            console.log(`[QUEST] Attempting to reset rooms for repeatable quest:`, quest.resetsRoomStates);
+                            for (const roomId of quest.resetsRoomStates) {
+                                const roomStateRef = doc(db, `/artifacts/${appId}/public/data/mud-room-states/${roomId}`);
+                                const roomStateSnap = await getDoc(roomStateRef);
+                                if (roomStateSnap.exists()) {
+                                    const oldState = roomStateSnap.data();
+                                    console.log(`[QUEST] Old room state for ${roomId}:`, oldState);
+                                    // Clear pushable states and revealed items
+                                    await updateDoc(roomStateRef, {
+                                        pushableStates: {},
+                                        revealedItems: []
+                                    });
+                                    console.log(`[QUEST] Reset room state for ${roomId} upon re-accepting repeatable quest`);
+                                    logToTerminal(`The puzzle in the ${gameWorld[roomId]?.name || 'area'} has been reset for a fresh attempt.`, 'game');
+                                } else {
+                                    console.log(`[QUEST] Room state document doesn't exist for ${roomId}, creating empty state`);
+                                    // Create the document with empty states
+                                    await setDoc(roomStateRef, {
+                                        pushableStates: {},
+                                        revealedItems: []
+                                    });
+                                    logToTerminal(`The puzzle in the ${gameWorld[roomId]?.name || 'area'} has been reset for a fresh attempt.`, 'game');
+                                }
+                            }
+                        }
+                        
                         // Add quest to player's active quests
                         const newActiveQuest = {
                             questId: quest.id,
@@ -8674,8 +9190,21 @@ Examples:
                         break;
                     }
                     
-                    // Find party where player is leader
-                    const playerParty = Object.values(gameParties).find(p => p.leaderId === userId);
+                    // Find party where player is leader - check both cache and Firebase
+                    let playerParty = Object.values(gameParties).find(p => p.leaderId === userId);
+                    
+                    // If not in cache, query Firebase directly (handles newly created parties)
+                    if (!playerParty) {
+                        const partiesQuery = query(
+                            collection(db, `/artifacts/${appId}/public/data/mud-parties`),
+                            where('leaderId', '==', userId)
+                        );
+                        const partiesSnapshot = await getDocs(partiesQuery);
+                        if (!partiesSnapshot.empty) {
+                            const partyDoc = partiesSnapshot.docs[0];
+                            playerParty = { id: partyDoc.id, ...partyDoc.data() };
+                        }
+                    }
                     
                     if (!playerParty) {
                         logToTerminal("You must be a party leader to invite others. Use 'party create' first.", "error");
@@ -8972,6 +9501,7 @@ Examples:
                 logToTerminal("You can now type commands in natural language!", "system");
                 logToTerminal("After talking to an AI character, you can reply just by typing.", "system");
                 logToTerminal("Core commands: look, go, get, drop, inventory (i/inv), examine, talk to, ask...about, buy...from, attack, who, say, score, stats, logout.", "system");
+                logToTerminal("Interaction: 'push/pull/move [object]' to interact with objects in the room (may require party members for heavy objects).", "system");
                 logToTerminal("Combat: 'attack [monster]' or 'attack [player]' - Fight monsters or other players! PvP combat is active.", "system");
                 logToTerminal("Magic: 'spells' to view your spells, 'cast [spell name] [target]' to cast spells.", "system");
                 logToTerminal("Communication: 'say [message]' for local chat, 'whisper/tell [player] [message]' for private chat, 'shout [message]' to nearby rooms, 'gc [message]' for guild chat, 'pc [message]' for party chat.", "system");
@@ -9008,8 +9538,98 @@ Examples:
                     logToTerminal("announce/broadcast [message] - Send message to all rooms", "system");
                     logToTerminal("--- Weather Commands ---", "system");
                     logToTerminal("setweather [type] - Change weather (sunny/rainy/snowy/stormy/foggy/hot/cold/cloudy)", "system");
+                    logToTerminal("resetroom [room id] - Reset a room's pushable objects and revealed items", "system");
+                    logToTerminal("refreshcache [collection] - Reload game data from MySQL (all or specific: rooms, items, npcs, monsters, classes, spells, quests)", "system");
                 }
                 break;
+            
+            case 'resetroom':
+                if (!gamePlayers[userId]?.isAdmin) {
+                    logToTerminal("Admin only command.", "error");
+                    break;
+                }
+                
+                const roomToReset = target || currentPlayerRoomId;
+                
+                if (!gameWorld[roomToReset]) {
+                    logToTerminal(`Room "${roomToReset}" not found.`, "error");
+                    break;
+                }
+                
+                try {
+                    const resetRoomStateRef = doc(db, `/artifacts/${appId}/public/data/mud-room-states/${roomToReset}`);
+                    const resetRoomStateSnap = await getDoc(resetRoomStateRef);
+                    
+                    if (resetRoomStateSnap.exists()) {
+                        const oldState = resetRoomStateSnap.data();
+                        console.log(`[ADMIN] Resetting room ${roomToReset}, old state:`, oldState);
+                        
+                        await updateDoc(resetRoomStateRef, {
+                            pushableStates: {},
+                            revealedItems: []
+                        });
+                        
+                        logToTerminal(`✅ Room "${gameWorld[roomToReset].name}" (${roomToReset}) has been reset.`, "success");
+                        logToTerminal(`Cleared ${Object.keys(oldState.pushableStates || {}).length} pushable states and ${(oldState.revealedItems || []).length} revealed items.`, "system");
+                    } else {
+                        // Create empty state
+                        await setDoc(resetRoomStateRef, {
+                            pushableStates: {},
+                            revealedItems: []
+                        });
+                        logToTerminal(`✅ Room "${gameWorld[roomToReset].name}" (${roomToReset}) state has been initialized.`, "success");
+                    }
+                    
+                    // Refresh the room display
+                    if (roomToReset === currentPlayerRoomId) {
+                        await showRoom(currentPlayerRoomId);
+                    }
+                } catch (error) {
+                    console.error('[ADMIN] Error resetting room:', error);
+                    logToTerminal(`Error resetting room: ${error.message}`, "error");
+                }
+                break;
+            
+            case 'refreshcache':
+            case 'refresh':
+                if (!gamePlayers[userId]?.isAdmin) {
+                    logToTerminal("Admin only command.", "error");
+                    break;
+                }
+                
+                try {
+                    logToTerminal("🔄 Refreshing game data cache from MySQL...", "system");
+                    
+                    // Get the refresh function from the data loader
+                    // This assumes the data loader was passed in dependencies
+                    if (window.gameDataLoader && window.gameDataLoader.refreshCache) {
+                        const collections = target ? [target] : null; // If target specified, refresh only that collection
+                        const success = await window.gameDataLoader.refreshCache(collections);
+                        
+                        if (success) {
+                            if (target) {
+                                logToTerminal(`✅ Cache refreshed for: ${target}`, "success");
+                            } else {
+                                logToTerminal(`✅ All game data cache refreshed successfully!`, "success");
+                                logToTerminal(`Updated: rooms, items, NPCs, monsters, classes, spells, quests`, "system");
+                            }
+                            
+                            // Refresh current room display to show any changes
+                            if (currentPlayerRoomId) {
+                                await showRoom(currentPlayerRoomId);
+                            }
+                        } else {
+                            logToTerminal(`❌ Cache refresh failed. Check console for errors.`, "error");
+                        }
+                    } else {
+                        logToTerminal(`❌ Cache refresh not available (MySQL mode not enabled)`, "error");
+                    }
+                } catch (error) {
+                    console.error('[ADMIN] Error refreshing cache:', error);
+                    logToTerminal(`Error: ${error.message}`, "error");
+                }
+                break;
+            
             case 'npcchats':
                 if (!gamePlayers[userId]?.isAdmin) {
                     logToTerminal("Admin only command.", "error");
@@ -9782,6 +10402,8 @@ Examples:
         logNpcResponse,
         loadLevelConfig,
         loadActions,
+        // Player data access
+        getPlayerData: () => gamePlayers[userId],
         // NPC Conversation Settings
         getNpcConversationSettings: () => ({
             enabled: npcConversationsEnabled,
@@ -9806,7 +10428,10 @@ Examples:
         handlePermadeath,
         // Corpse Cleanup System
         startCorpseCleanup,
-        stopCorpseCleanup
+        stopCorpseCleanup,
+        // Poison System
+        startPoisonTicks,
+        stopPoisonTicks
     };
 }
 

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Statistics Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            background: #1a1a1a;
+            color: #00ff41;
+            padding: 20px;
+        }
+        .result {
+            background: #000;
+            border: 1px solid #00ff41;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .error { color: #ff4444; }
+        .success { color: #00ff41; }
+        .info { color: #ffaa00; }
+    </style>
+</head>
+<body>
+    <h1>MUD Statistics Test</h1>
+    <div id="output"></div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const output = document.getElementById('output');
+
+        function log(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `result ${type}`;
+            div.textContent = message;
+            output.appendChild(div);
+            console.log(message);
+        }
+
+        async function testStats() {
+            try {
+                log('Initializing Firebase...', 'info');
+                
+                const firebaseConfig = {
+                    apiKey: "AIzaSyCscVJaLJV1FoOulHQBateoRh1UYhEE5gg",
+                    authDomain: "mudgame-3cbb1.firebaseapp.com",
+                    projectId: "mudgame-3cbb1",
+                    storageBucket: "mudgame-3cbb1.appspot.com",
+                    messagingSenderId: "1004334145379",
+                    appId: "1:1004334145379:web:3db9fda346526a64e67d56"
+                };
+
+                const app = initializeApp(firebaseConfig);
+                const db = getFirestore(app);
+                const appId = 'mudgame-3cbb1';
+
+                log('✓ Firebase initialized', 'success');
+                log('Testing collection access...', 'info');
+
+                // Test Players from Firebase (real-time data)
+                log('\n=== FIREBASE (Players only) ===', 'info');
+                try {
+                    log('Querying Players collection...', 'info');
+                    const playersSnap = await getDocs(collection(db, `/artifacts/${appId}/public/data/mud-players`));
+                    log(`✓ Players: ${playersSnap.size} documents`, 'success');
+                    if (playersSnap.size > 0) {
+                        log(`  Sample IDs: ${playersSnap.docs.slice(0, 3).map(d => d.id).join(', ')}`, 'info');
+                    }
+                } catch (err) {
+                    log(`✗ Error reading Players: ${err.message}`, 'error');
+                }
+
+                // Test MySQL API (game content)
+                log('\n=== MYSQL API (Game Content) ===', 'info');
+                const MYSQL_API_URL = 'https://jphsoftware.com/api';
+                const mysqlCollections = ['rooms', 'monsters', 'npcs', 'items', 'classes', 'spells', 'quests'];
+
+                for (const collectionName of mysqlCollections) {
+                    try {
+                        log(`\nQuerying ${collectionName} from MySQL...`, 'info');
+                        log(`URL: ${MYSQL_API_URL}/${collectionName}`, 'info');
+                        
+                        const response = await fetch(`${MYSQL_API_URL}/${collectionName}`);
+                        
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        }
+                        
+                        const data = await response.json();
+                        const count = Object.keys(data).length;
+                        
+                        log(`✓ ${collectionName}: ${count} items`, 'success');
+                        
+                        if (count > 0) {
+                            log(`  Sample IDs: ${Object.keys(data).slice(0, 3).join(', ')}`, 'info');
+                        } else {
+                            log(`  ⚠ Collection is empty!`, 'error');
+                        }
+                    } catch (err) {
+                        log(`✗ Error reading ${collectionName}: ${err.message}`, 'error');
+                        console.error(`Error details for ${collectionName}:`, err);
+                    }
+                }
+
+                log('\n=== TEST COMPLETE ===', 'success');
+                
+            } catch (error) {
+                log(`✗ Fatal error: ${error.message}`, 'error');
+                console.error('Error details:', error);
+            }
+        }
+
+        testStats();
+    </script>
+</body>
+</html>

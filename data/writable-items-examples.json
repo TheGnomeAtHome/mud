@@ -1,0 +1,196 @@
+{
+  "journal": {
+    "id": "journal",
+    "name": "Personal Journal",
+    "description": "A small leather-bound journal perfect for recording your adventures.",
+    "weight": 0.3,
+    "movable": true,
+    "isReadable": true,
+    "isWritable": true,
+    "maxWriteLength": 500,
+    "maxEntries": 100,
+    "readableText": "The journal is empty, ready for your first entry."
+  },
+
+  "guild_logbook": {
+    "id": "guild_logbook",
+    "name": "Guild Logbook",
+    "description": "A thick book used to record guild activities and member contributions.",
+    "weight": 2,
+    "movable": true,
+    "isReadable": true,
+    "isWritable": true,
+    "maxWriteLength": 1000,
+    "maxEntries": 200,
+    "readableText": "This logbook chronicles the history of the guild."
+  },
+
+  "message_scroll": {
+    "id": "message_scroll",
+    "name": "Message Scroll",
+    "description": "A rolled parchment scroll for leaving messages.",
+    "weight": 0.1,
+    "movable": true,
+    "isReadable": true,
+    "isWritable": true,
+    "maxWriteLength": 200,
+    "maxEntries": 5,
+    "readableText": "The scroll is blank."
+  },
+
+  "tavern_guestbook": {
+    "id": "tavern_guestbook",
+    "name": "Tavern Guestbook",
+    "description": "A well-worn guestbook where travelers leave their mark.",
+    "weight": 3,
+    "movable": false,
+    "isReadable": true,
+    "isWritable": true,
+    "maxWriteLength": 300,
+    "maxEntries": 500,
+    "readableText": "Many travelers have signed this guestbook over the years. The pages are mostly empty now."
+  },
+
+  "recipe_book": {
+    "id": "recipe_book",
+    "name": "Recipe Book",
+    "description": "A cookbook for sharing recipes and cooking tips.",
+    "weight": 1,
+    "movable": true,
+    "isReadable": true,
+    "isWritable": true,
+    "maxWriteLength": 600,
+    "maxEntries": 50,
+    "readableText": "This recipe book awaits culinary wisdom."
+  },
+
+  "tome_of_wisdom": {
+    "id": "tome_of_wisdom",
+    "name": "Tome of Wisdom",
+    "description": "A grand tome where sages record their knowledge.",
+    "weight": 5,
+    "movable": true,
+    "isReadable": true,
+    "isWritable": true,
+    "maxWriteLength": 1500,
+    "maxEntries": 100,
+    "readableText": "This ancient tome contains the collected wisdom of many generations."
+  },
+
+  "wanted_poster": {
+    "id": "wanted_poster",
+    "name": "Wanted Poster",
+    "description": "A poster for announcing bounties and wanted criminals.",
+    "weight": 0.1,
+    "movable": true,
+    "isReadable": true,
+    "isWritable": true,
+    "maxWriteLength": 250,
+    "maxEntries": 10,
+    "readableText": "This poster is blank, waiting for a bounty to be posted."
+  },
+
+  "ship_log": {
+    "id": "ship_log",
+    "name": "Ship's Log",
+    "description": "A captain's log for recording voyages and discoveries.",
+    "weight": 2,
+    "movable": true,
+    "isReadable": true,
+    "isWritable": true,
+    "maxWriteLength": 800,
+    "maxEntries": 150,
+    "readableText": "The log is ready to record new voyages."
+  },
+
+  "love_letter": {
+    "id": "love_letter",
+    "name": "Love Letter",
+    "description": "A delicate piece of parchment for writing heartfelt messages.",
+    "weight": 0.05,
+    "movable": true,
+    "isReadable": true,
+    "isWritable": true,
+    "maxWriteLength": 400,
+    "maxEntries": 1,
+    "readableText": "The letter is blank, awaiting words of love."
+  },
+
+  "quest_diary": {
+    "id": "quest_diary",
+    "name": "Quest Diary",
+    "description": "A diary specifically for tracking quest progress and discoveries.",
+    "weight": 0.4,
+    "movable": true,
+    "isReadable": true,
+    "isWritable": true,
+    "maxWriteLength": 500,
+    "maxEntries": 200,
+    "readableText": "This diary will help you track your quests and adventures."
+  },
+
+  "magic_grimoire": {
+    "id": "magic_grimoire",
+    "name": "Blank Grimoire",
+    "description": "A grimoire for recording magical discoveries and spell notes.",
+    "weight": 3,
+    "movable": true,
+    "isReadable": true,
+    "isWritable": true,
+    "maxWriteLength": 1000,
+    "maxEntries": 75,
+    "readableText": "This grimoire awaits magical knowledge."
+  },
+
+  "trade_ledger": {
+    "id": "trade_ledger",
+    "name": "Trade Ledger",
+    "description": "A ledger for tracking trades, debts, and business deals.",
+    "weight": 1.5,
+    "movable": true,
+    "isReadable": true,
+    "isWritable": true,
+    "maxWriteLength": 400,
+    "maxEntries": 250,
+    "readableText": "This ledger is ready to record transactions."
+  },
+
+  "sticky_note": {
+    "id": "sticky_note",
+    "name": "Sticky Note",
+    "description": "A small piece of paper for quick notes.",
+    "weight": 0.01,
+    "movable": true,
+    "isReadable": true,
+    "isWritable": true,
+    "maxWriteLength": 100,
+    "maxEntries": 1,
+    "readableText": "The note is blank."
+  },
+
+  "travelers_guide": {
+    "id": "travelers_guide",
+    "name": "Traveler's Guide",
+    "description": "A guidebook where travelers share tips about locations and dangers.",
+    "weight": 1,
+    "movable": true,
+    "isReadable": true,
+    "isWritable": true,
+    "maxWriteLength": 600,
+    "maxEntries": 100,
+    "readableText": "This guide is waiting for travelers to share their experiences."
+  },
+
+  "memorial_stone": {
+    "id": "memorial_stone",
+    "name": "Memorial Stone",
+    "description": "A stone tablet where fallen heroes are remembered.",
+    "weight": 10,
+    "movable": false,
+    "isReadable": true,
+    "isWritable": true,
+    "maxWriteLength": 200,
+    "maxEntries": 1000,
+    "readableText": "In memory of those who gave their all."
+  }
+}

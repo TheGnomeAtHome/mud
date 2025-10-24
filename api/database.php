@@ -86,6 +86,35 @@ class Database {
         return $data;
     }
     
+    // Partial update document (merge with existing data)
+    public function patch($tableName, $id, $updates) {
+        // First get existing document
+        $existing = $this->getById($tableName, $id);
+        
+        if ($existing === null) {
+            return null; // Document not found
+        }
+        
+        // Remove 'id' from updates if present
+        unset($updates['id']);
+        
+        // Merge updates with existing data
+        $merged = array_merge($existing, $updates);
+        unset($merged['id']); // Remove id before storing in data column
+        
+        $jsonData = json_encode($merged, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        
+        $sql = "UPDATE " . $tableName . " 
+                SET data = ?, updated_at = NOW()
+                WHERE id = ?";
+        
+        $stmt = $this->connection->prepare($sql);
+        $stmt->execute([$jsonData, $id]);
+        
+        $merged['id'] = $id;
+        return $merged;
+    }
+    
     // Delete document
     public function delete($tableName, $id) {
         $stmt = $this->connection->prepare("DELETE FROM " . $tableName . " WHERE id = ?");

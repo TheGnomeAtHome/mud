@@ -50,6 +50,9 @@
                 <div class="text-gray-400">NPCs</div>
             </div>
         </div>
+        <div class="text-center mt-4">
+            <div class="text-xs text-gray-600" id="stats-timestamp">Loading statistics...</div>
+        </div>
     </div>
     
     <section class="py-20">
@@ -80,17 +83,39 @@
 
         async function loadStats() {
             try {
-                const [playersSnap, roomsSnap, monstersSnap, npcsSnap] = await Promise.all([
-                    getDocs(collection(db, `/artifacts/${appId}/public/data/mud-players`)),
-                    getDocs(collection(db, `/artifacts/${appId}/public/data/mud-rooms`)),
-                    getDocs(collection(db, `/artifacts/${appId}/public/data/mud-monsters`)),
-                    getDocs(collection(db, `/artifacts/${appId}/public/data/mud-npcs`))
+                console.log('[Stats] Loading statistics...');
+                
+                // Load players from Firebase (real-time player data)
+                const playersSnap = await getDocs(collection(db, `/artifacts/${appId}/public/data/mud-players`));
+                
+                // Load game content from MySQL API (where the actual data is stored)
+                const MYSQL_API_URL = 'https://jphsoftware.com/api';
+                const [roomsData, monstersData, npcsData] = await Promise.all([
+                    fetch(`${MYSQL_API_URL}/rooms`).then(r => r.json()),
+                    fetch(`${MYSQL_API_URL}/monsters`).then(r => r.json()),
+                    fetch(`${MYSQL_API_URL}/npcs`).then(r => r.json())
                 ]);
 
+                // Count the items in each collection
+                const roomCount = Object.keys(roomsData).length;
+                const monsterCount = Object.keys(monstersData).length;
+                const npcCount = Object.keys(npcsData).length;
+
+                console.log('[Stats] Players:', playersSnap.size);
+                console.log('[Stats] Rooms:', roomCount);
+                console.log('[Stats] Monsters:', monsterCount);
+                console.log('[Stats] NPCs:', npcCount);
+
                 document.getElementById('player-count').textContent = playersSnap.size;
-                document.getElementById('room-count').textContent = roomsSnap.size;
-                document.getElementById('monster-count').textContent = monstersSnap.size;
-                document.getElementById('npc-count').textContent = npcsSnap.size;
+                document.getElementById('room-count').textContent = roomCount;
+                document.getElementById('monster-count').textContent = monsterCount;
+                document.getElementById('npc-count').textContent = npcCount;
+                
+                const now = new Date();
+                const timeString = now.toLocaleTimeString();
+                document.getElementById('stats-timestamp').textContent = `Last updated: ${timeString}`;
+                
+                console.log('[Stats] Statistics updated successfully');
             } catch (error) {
                 console.error('Error loading stats:', error);
                 document.getElementById('player-count').textContent = '?';
@@ -162,6 +187,7 @@
 
         loadStats();
         loadNews();
+        setInterval(loadStats, 60000); // Refresh stats every 60 seconds
         setInterval(loadNews, 30000); // Refresh news every 30 seconds
     </script>
 </body>

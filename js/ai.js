@@ -177,7 +177,7 @@ export async function parseCommandWithGemini(command, logToTerminal) {
 User command: "${command}"
 
 Rules:
-- The action must be one of: "go", "north", "south", "east", "west", "northeast", "northwest", "southeast", "southwest", "up", "down", "n", "s", "e", "w", "ne", "nw", "se", "sw", "u", "d", "get", "drop", "examine", "say", "buy", "sell", "haggle", "give", "trade", "attack", "ask_dm", "talk", "ask_npc", "look", "inventory", "who", "score", "stats", "help", "logout", "use", "unlock", "lock", "drink", "consume", "eat", "read", "cast", "spells", "spell", "learn", "guild", "guilds", "gc", "quest", "quests", "party", "pc", "npcchats", "put", "take", "equip", "unequip", "wear", "wield", "remove", "equipment", "equipped", "unknown"
+- The action must be one of: "go", "north", "south", "east", "west", "northeast", "northwest", "southeast", "southwest", "up", "down", "n", "s", "e", "w", "ne", "nw", "se", "sw", "u", "d", "get", "drop", "examine", "say", "buy", "sell", "haggle", "give", "trade", "attack", "ask_dm", "talk", "ask_npc", "look", "inventory", "who", "score", "stats", "help", "logout", "use", "unlock", "lock", "drink", "consume", "eat", "read", "write", "cast", "spells", "spell", "learn", "guild", "guilds", "gc", "quest", "quests", "party", "pc", "npcchats", "put", "take", "equip", "unequip", "wear", "wield", "remove", "equipment", "equipped", "unknown"
 - For movement: "go north" -> {"action": "go", "target": "north"}
 - For movement: "north" -> {"action": "north"}
 - For movement: "n" -> {"action": "n"}
@@ -235,6 +235,12 @@ Rules:
 - For consuming: "drink beer" -> {"action": "drink", "target": "beer"}
 - For reading: "read scroll" -> {"action": "read", "target": "scroll"}
 - For reading: "read sign" -> {"action": "read", "target": "sign"}
+- For reading: "read the book" -> {"action": "read", "target": "book"}
+- For reading: "what does the journal say" -> {"action": "read", "target": "journal"}
+- For writing: "write book Hello world" -> {"action": "write", "target": "book", "topic": "Hello world"}
+- For writing: "write in journal Today was a great day" -> {"action": "write", "target": "journal", "topic": "Today was a great day"}
+- For writing: "I want to write something in the book" -> {"action": "write", "target": "book"}
+- For writing: "scribe on scroll magic words here" -> {"action": "write", "target": "scroll", "topic": "magic words here"}
 - For unlocking: "unlock door" -> {"action": "unlock", "target": "door"}
 - For unlocking: "unlock north" -> {"action": "unlock", "target": "north"}
 - For locking: "lock door" -> {"action": "lock", "target": "door"}

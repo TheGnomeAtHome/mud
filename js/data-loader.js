@@ -488,9 +488,70 @@ export function initializeDataLoader(firebase, appId) {
         unsubscribers.forEach(unsub => unsub());
     }
     
+    /**
+     * Refresh static data cache from MySQL
+     * Use this when admin makes changes to game content in the admin panel
+     */
+    async function refreshCache(collections = null) {
+        if (!USE_MYSQL_BACKEND) {
+            console.warn('[DataLoader] Cache refresh only available in MySQL mode');
+            return false;
+        }
+        
+        const collectionsToRefresh = collections || ['rooms', 'items', 'npcs', 'monsters', 'classes', 'spells', 'quests'];
+        console.log('[DataLoader] Refreshing cache for:', collectionsToRefresh.join(', '));
+        
+        try {
+            const promises = collectionsToRefresh.map(async (collectionName) => {
+                const data = await loadFromMySQL(collectionName);
+                
+                // Update the appropriate game data object
+                switch(collectionName) {
+                    case 'rooms':
+                        Object.keys(gameData.gameWorld).forEach(key => delete gameData.gameWorld[key]);
+                        Object.assign(gameData.gameWorld, data);
+                        break;
+                    case 'items':
+                        Object.keys(gameData.gameItems).forEach(key => delete gameData.gameItems[key]);
+                        Object.assign(gameData.gameItems, data);
+                        break;
+                    case 'npcs':
+                        Object.keys(gameData.gameNpcs).forEach(key => delete gameData.gameNpcs[key]);
+                        Object.assign(gameData.gameNpcs, data);
+                        break;
+                    case 'monsters':
+                        Object.keys(gameData.gameMonsters).forEach(key => delete gameData.gameMonsters[key]);
+                        Object.assign(gameData.gameMonsters, data);
+                        break;
+                    case 'classes':
+                        Object.keys(gameData.gameClasses).forEach(key => delete gameData.gameClasses[key]);
+                        Object.assign(gameData.gameClasses, data);
+                        break;
+                    case 'spells':
+                        Object.keys(gameData.gameSpells).forEach(key => delete gameData.gameSpells[key]);
+                        Object.assign(gameData.gameSpells, data);
+                        break;
+                    case 'quests':
+                        Object.keys(gameData.gameQuests).forEach(key => delete gameData.gameQuests[key]);
+                        Object.assign(gameData.gameQuests, data);
+                        break;
+                }
+            });
+            
+            await Promise.all(promises);
+            console.log('[DataLoader] ✓ Cache refresh complete');
+            return true;
+            
+        } catch (error) {
+            console.error('[DataLoader] Error refreshing cache:', error);
+            return false;
+        }
+    }
+    
     return {
         loadGameData,
         cleanup,
+        refreshCache,
         gameData
     };
 }

@@ -76,6 +76,9 @@ export function initializeAdminPanel({
     gameClassesReference = gameClasses;
     gameQuestsReference = gameQuests;
     gameGuildsReference = gameGuilds;
+    dbReference = db;
+    appIdReference = appId;
+    firestoreFunctionsReference = firestoreFunctions;
 
     // Tab switching
     const adminTabs = document.querySelectorAll('.admin-tab');
@@ -94,6 +97,7 @@ export function initializeAdminPanel({
         'levels-tab-btn': document.getElementById('levels-editor-panel'),
         'actions-tab-btn': document.getElementById('actions-editor-panel'),
         'map-tab-btn': document.getElementById('map-editor-panel'),
+        'stats-tab-btn': document.getElementById('stats-panel'),
         'settings-tab-btn': document.getElementById('settings-panel'),
         'export-tab-btn': document.getElementById('export-panel'),
     };
@@ -137,6 +141,11 @@ export function initializeAdminPanel({
             if (tab.id === 'export-tab-btn') {
                 setTimeout(() => initializeExportPanel(), 100);
             }
+            
+            // If switching to statistics tab, load statistics
+            if (tab.id === 'stats-tab-btn') {
+                setTimeout(() => loadGameStatistics(), 100);
+            }
         });
     });
 
@@ -166,6 +175,7 @@ export function initializeAdminPanel({
     const generateDescBtn = document.getElementById('generate-desc-btn');
     const roomExitsInput = document.getElementById('room-exits');
     const roomDetailsInput = document.getElementById('room-details');
+    const roomPushablesInput = document.getElementById('room-pushables');
     const roomItemsSelector = document.getElementById('room-items-selector');
     const roomNpcsSelector = document.getElementById('room-npcs-selector');
     const roomMonstersSelector = document.getElementById('room-monsters-selector');
@@ -188,7 +198,7 @@ export function initializeAdminPanel({
 
     function clearAdminRoomForm() {
         roomIdInput.value = ''; roomNameInput.value = ''; roomDescInput.value = '';
-        roomExitsInput.value = '{}'; roomDetailsInput.value = '{}';
+        roomExitsInput.value = '{}'; roomDetailsInput.value = '{}'; roomPushablesInput.value = '{}';
         roomIdInput.disabled = false; roomSelect.value = ''; roomDescKeywordsInput.value = '';
         document.querySelectorAll('.room-item-checkbox').forEach(cb => cb.checked = false);
         document.querySelectorAll('.room-npc-checkbox').forEach(cb => cb.checked = false);
@@ -205,6 +215,7 @@ export function initializeAdminPanel({
             roomNameInput.value = room.name || ''; roomDescInput.value = room.description || '';
             roomExitsInput.value = JSON.stringify(room.exits || {}, null, 2);
             roomDetailsInput.value = JSON.stringify(room.details || {}, null, 2);
+            roomPushablesInput.value = JSON.stringify(room.pushables || {}, null, 2);
             populateRoomItemsSelector();
             populateRoomNpcsSelector();
             populateRoomMonsterSelector();
@@ -484,11 +495,12 @@ export function initializeAdminPanel({
                 return;
             }
 
-            let exits, details;
+            let exits, details, pushables;
             try {
                 exits = JSON.parse(roomExitsInput.value);
                 details = JSON.parse(roomDetailsInput.value);
-                console.log('Parsed JSON - Exits:', exits, 'Details:', details);
+                pushables = JSON.parse(roomPushablesInput.value);
+                console.log('Parsed JSON - Exits:', exits, 'Details:', details, 'Pushables:', pushables);
             } catch (e) {
                 adminRoomStatus.textContent = `✗ Invalid JSON: ${e.message}`;
                 adminRoomStatus.className = 'ml-2 text-red-400';
@@ -514,7 +526,7 @@ export function initializeAdminPanel({
                 });
             });
 
-            const roomData = { name, description, exits, details, items: checkedItems, npcs: checkedNpcs, monsterSpawns };
+            const roomData = { name, description, exits, details, pushables, items: checkedItems, npcs: checkedNpcs, monsterSpawns };
             console.log('Full room data being saved:', JSON.stringify(roomData, null, 2));
             
             // Save to Firebase
@@ -2214,6 +2226,7 @@ export function initializeAdminPanel({
     const questObjectivesInput = document.getElementById('quest-objectives');
     const questRewardsInput = document.getElementById('quest-rewards');
     const questPrerequisitesInput = document.getElementById('quest-prerequisites');
+    const questResetsRoomsInput = document.getElementById('quest-resets-rooms');
     const saveQuestBtn = document.getElementById('save-quest-btn');
     const newQuestBtn = document.getElementById('new-quest-btn');
     const deleteQuestBtn = document.getElementById('delete-quest-btn');
@@ -2244,6 +2257,7 @@ export function initializeAdminPanel({
         questObjectivesInput.value = quest.objectives ? JSON.stringify(quest.objectives, null, 2) : '[]';
         questRewardsInput.value = quest.rewards ? JSON.stringify(quest.rewards, null, 2) : '{}';
         questPrerequisitesInput.value = quest.prerequisites ? JSON.stringify(quest.prerequisites, null, 2) : '[]';
+        questResetsRoomsInput.value = quest.resetsRoomStates ? JSON.stringify(quest.resetsRoomStates, null, 2) : '[]';
     }
 
     function clearQuestForm() {
@@ -2258,6 +2272,7 @@ export function initializeAdminPanel({
         questObjectivesInput.value = '[]';
         questRewardsInput.value = '{}';
         questPrerequisitesInput.value = '[]';
+        questResetsRoomsInput.value = '[]';
         questSelect.value = '';
         adminQuestStatus.textContent = '';
     }
@@ -2284,7 +2299,7 @@ export function initializeAdminPanel({
         }
 
         // Parse JSON fields
-        let objectives, rewards, prerequisites;
+        let objectives, rewards, prerequisites, resetsRoomStates;
         try {
             objectives = JSON.parse(questObjectivesInput.value || '[]');
         } catch (e) {
@@ -2306,6 +2321,13 @@ export function initializeAdminPanel({
             return;
         }
 
+        try {
+            resetsRoomStates = JSON.parse(questResetsRoomsInput.value || '[]');
+        } catch (e) {
+            adminQuestStatus.textContent = 'Invalid JSON in Resets Room States field!';
+            return;
+        }
+
         const questData = {
             id: questId,
             title: title,
@@ -2317,7 +2339,8 @@ export function initializeAdminPanel({
             turninNpcId: questTurninNpcInput.value.trim() || questGiverNpcInput.value.trim() || '',
             objectives: objectives,
             rewards: rewards,
-            prerequisites: prerequisites
+            prerequisites: prerequisites,
+            resetsRoomStates: resetsRoomStates
         };
 
         try {
@@ -3601,6 +3624,9 @@ let gameSpellsReference = null; // Store reference to game spells
 let gameClassesReference = null; // Store reference to game classes
 let gameQuestsReference = null; // Store reference to game quests
 let gameGuildsReference = null; // Store reference to game guilds
+let dbReference = null; // Store reference to Firestore database
+let appIdReference = null; // Store reference to app ID
+let firestoreFunctionsReference = null; // Store reference to Firestore functions
 
 /**
  * Initialize Settings Panel
@@ -3882,4 +3908,242 @@ if (refreshOnlineBtn) {
  */
 export function setGameLogicForSettings(gameLogic) {
     gameLogicReference = gameLogic;
+}
+
+// ========== STATISTICS PANEL ==========
+
+/**
+ * Load and display comprehensive game statistics
+ */
+async function loadGameStatistics() {
+    const statsLoading = document.getElementById('stats-loading');
+    const statsUpdated = document.getElementById('stats-updated');
+    
+    if (statsLoading) statsLoading.classList.remove('hidden');
+    
+    try {
+        console.log('[Statistics] Loading game statistics...');
+        
+        // Get MySQL API URL from data loader config
+        const MYSQL_API_URL = 'https://jphsoftware.com/api';
+        
+        // Load game content from MySQL
+        const [roomsData, itemsData, npcsData, monstersData, spellsData, classesData, questsData, guildsData] = await Promise.all([
+            fetch(`${MYSQL_API_URL}/rooms`).then(r => r.json()).catch(() => ({})),
+            fetch(`${MYSQL_API_URL}/items`).then(r => r.json()).catch(() => ({})),
+            fetch(`${MYSQL_API_URL}/npcs`).then(r => r.json()).catch(() => ({})),
+            fetch(`${MYSQL_API_URL}/monsters`).then(r => r.json()).catch(() => ({})),
+            fetch(`${MYSQL_API_URL}/spells`).then(r => r.json()).catch(() => ({})),
+            fetch(`${MYSQL_API_URL}/classes`).then(r => r.json()).catch(() => ({})),
+            fetch(`${MYSQL_API_URL}/quests`).then(r => r.json()).catch(() => ({})),
+            fetch(`${MYSQL_API_URL}/guilds`).then(r => r.json()).catch(() => ({}))
+        ]);
+        
+        // Load player data from Firebase
+        const { collection, getDocs } = firestoreFunctionsReference || {};
+        if (!collection || !getDocs) {
+            throw new Error('Firestore functions not available');
+        }
+        
+        const [playersSnap, activeMonstersSnap, partiesSnap] = await Promise.all([
+            getDocs(collection(dbReference, `/artifacts/${appIdReference}/public/data/mud-players`)),
+            getDocs(collection(dbReference, `/artifacts/${appIdReference}/public/data/mud-active-monsters`)),
+            getDocs(collection(dbReference, `/artifacts/${appIdReference}/public/data/mud-parties`))
+        ]);
+        
+        // Parse player data
+        const players = [];
+        playersSnap.forEach(doc => {
+            players.push({ id: doc.id, ...doc.data() });
+        });
+        
+        // Game content stats
+        document.getElementById('stat-total-rooms').textContent = Object.keys(roomsData).length;
+        document.getElementById('stat-total-items').textContent = Object.keys(itemsData).length;
+        document.getElementById('stat-total-npcs').textContent = Object.keys(npcsData).length;
+        document.getElementById('stat-total-monsters').textContent = Object.keys(monstersData).length;
+        document.getElementById('stat-total-spells').textContent = Object.keys(spellsData).length;
+        document.getElementById('stat-total-classes').textContent = Object.keys(classesData).length;
+        document.getElementById('stat-total-quests').textContent = Object.keys(questsData).length;
+        document.getElementById('stat-total-guilds').textContent = Object.keys(guildsData).length;
+        
+        // Player stats
+        document.getElementById('stat-total-players').textContent = players.length;
+        const onlinePlayers = players.filter(p => p.online).length;
+        document.getElementById('stat-online-players').textContent = onlinePlayers;
+        const highestLevel = players.reduce((max, p) => Math.max(max, p.level || 1), 1);
+        document.getElementById('stat-highest-level').textContent = highestLevel;
+        
+        // Top players by level
+        const topLevels = [...players]
+            .sort((a, b) => (b.level || 1) - (a.level || 1))
+            .slice(0, 10);
+        displayTopPlayersList('top-levels-list', topLevels, (p) => `Level ${p.level || 1}`);
+        
+        // Top players by gold (money field)
+        const topGold = [...players]
+            .sort((a, b) => (b.money || 0) - (a.money || 0))
+            .slice(0, 10);
+        displayTopPlayersList('top-gold-list', topGold, (p) => `${p.money || 0} gold`);
+        
+        // Top players by monster kills
+        const topKills = [...players]
+            .sort((a, b) => (b.monstersKilled || 0) - (a.monstersKilled || 0))
+            .slice(0, 10);
+        displayTopPlayersList('top-kills-list', topKills, (p) => `${p.monstersKilled || 0} kills`);
+        
+        // Top players by deaths
+        const topDeaths = [...players]
+            .sort((a, b) => (b.deaths || 0) - (a.deaths || 0))
+            .slice(0, 10);
+        displayTopPlayersList('top-deaths-list', topDeaths, (p) => `${p.deaths || 0} deaths`);
+        
+        // Quest statistics
+        console.log('[Stats] Checking quest completions for players:', players.length);
+        const totalQuestCompletions = players.reduce((sum, p) => {
+            const count = p.completedQuests?.length || 0;
+            if (count > 0) {
+                console.log(`[Stats] Player ${p.name} has completed ${count} quests:`, p.completedQuests);
+            }
+            return sum + count;
+        }, 0);
+        console.log('[Stats] Total quest completions:', totalQuestCompletions);
+        document.getElementById('stat-total-quest-completions').textContent = totalQuestCompletions;
+        const avgQuestsPerPlayer = players.length > 0 ? (totalQuestCompletions / players.length).toFixed(1) : '0';
+        document.getElementById('stat-avg-quests-per-player').textContent = avgQuestsPerPlayer;
+        
+        // Find most popular quest
+        const questCompletionCounts = {};
+        players.forEach(p => {
+            (p.completedQuests || []).forEach(questId => {
+                questCompletionCounts[questId] = (questCompletionCounts[questId] || 0) + 1;
+            });
+        });
+        
+        const mostPopularQuestId = Object.keys(questCompletionCounts).length > 0 
+            ? Object.keys(questCompletionCounts).reduce((a, b) => 
+                questCompletionCounts[a] > questCompletionCounts[b] ? a : b)
+            : null;
+        const mostPopularQuestName = mostPopularQuestId && questsData[mostPopularQuestId]?.title 
+            ? questsData[mostPopularQuestId].title 
+            : 'None';
+        document.getElementById('stat-most-popular-quest').textContent = mostPopularQuestName;
+        
+        // Top quest completers
+        const topQuests = [...players]
+            .sort((a, b) => (b.completedQuests?.length || 0) - (a.completedQuests?.length || 0))
+            .slice(0, 10);
+        displayTopPlayersList('top-quests-list', topQuests, (p) => `${p.completedQuests?.length || 0} quests`);
+        
+        // Class distribution
+        const classDistribution = {};
+        players.forEach(p => {
+            const className = p.class || 'Unknown';
+            classDistribution[className] = (classDistribution[className] || 0) + 1;
+        });
+        displayClassDistribution(classDistribution, players.length);
+        
+        // Active monsters
+        document.getElementById('stat-active-monsters').textContent = activeMonstersSnap.size;
+        const totalMonsterKills = players.reduce((sum, p) => sum + (p.monstersKilled || 0), 0);
+        document.getElementById('stat-total-monster-kills').textContent = totalMonsterKills;
+        const totalPlayerDeaths = players.reduce((sum, p) => sum + (p.deaths || 0), 0);
+        document.getElementById('stat-total-player-deaths').textContent = totalPlayerDeaths;
+        
+        // Miscellaneous stats
+        document.getElementById('stat-total-parties').textContent = partiesSnap.size;
+        const totalGuildMembers = players.filter(p => p.guildId).length;
+        document.getElementById('stat-total-guild-members').textContent = totalGuildMembers;
+        
+        // Count items in player inventories and rooms
+        let totalItemsInWorld = 0;
+        players.forEach(p => {
+            totalItemsInWorld += (p.inventory?.length || 0);
+        });
+        Object.values(roomsData).forEach(room => {
+            totalItemsInWorld += (room.items?.length || 0);
+        });
+        document.getElementById('stat-total-items-in-world').textContent = totalItemsInWorld;
+        
+        // Update timestamp
+        if (statsUpdated) {
+            const now = new Date();
+            statsUpdated.textContent = `Updated: ${now.toLocaleTimeString()}`;
+        }
+        
+        console.log('[Statistics] Statistics loaded successfully');
+        
+    } catch (error) {
+        console.error('[Statistics] Error loading statistics:', error);
+        alert('Error loading statistics. Check console for details.');
+    } finally {
+        if (statsLoading) statsLoading.classList.add('hidden');
+    }
+}
+
+/**
+ * Display a list of top players
+ */
+function displayTopPlayersList(elementId, players, statFormatter) {
+    const listElement = document.getElementById(elementId);
+    if (!listElement) return;
+    
+    if (players.length === 0) {
+        listElement.innerHTML = '<div class="text-center text-gray-400 py-4">No data available</div>';
+        return;
+    }
+    
+    listElement.innerHTML = players.map((player, index) => {
+        const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`;
+        const onlineIndicator = player.online ? '<span class="text-green-400">●</span>' : '<span class="text-gray-600">●</span>';
+        return `
+            <div class="flex justify-between items-center p-2 border border-gray-700 rounded bg-black bg-opacity-30">
+                <div class="flex items-center gap-2">
+                    <span class="text-lg">${medal}</span>
+                    <span class="font-bold text-[#00ff41]">${player.name || 'Unknown'}</span>
+                    ${onlineIndicator}
+                </div>
+                <span class="text-yellow-400 font-semibold">${statFormatter(player)}</span>
+            </div>
+        `;
+    }).join('');
+}
+
+/**
+ * Display class distribution chart
+ */
+function displayClassDistribution(distribution, totalPlayers) {
+    const element = document.getElementById('class-distribution');
+    if (!element) return;
+    
+    if (Object.keys(distribution).length === 0) {
+        element.innerHTML = '<div class="text-center text-gray-400 py-4">No players yet</div>';
+        return;
+    }
+    
+    // Sort by count descending
+    const sortedClasses = Object.entries(distribution).sort((a, b) => b[1] - a[1]);
+    
+    element.innerHTML = sortedClasses.map(([className, count]) => {
+        const percentage = ((count / totalPlayers) * 100).toFixed(1);
+        return `
+            <div class="mb-2">
+                <div class="flex justify-between mb-1">
+                    <span class="text-white font-bold">${className}</span>
+                    <span class="text-gray-400">${count} (${percentage}%)</span>
+                </div>
+                <div class="w-full bg-gray-700 rounded-full h-4">
+                    <div class="bg-purple-500 h-4 rounded-full" style="width: ${percentage}%"></div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Add refresh button handler
+const refreshStatsBtn = document.getElementById('refresh-stats-btn');
+if (refreshStatsBtn) {
+    refreshStatsBtn.addEventListener('click', () => {
+        loadGameStatistics();
+    });
 }
