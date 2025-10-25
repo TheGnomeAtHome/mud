@@ -284,7 +284,16 @@ export async function initializeApp() {
                     
                     // Special handling for proactive NPC greetings - always show if in same room and new
                     if (msg.isNpcGreeting && msg.roomId === myCurrentRoom && messageTime >= sessionStartTime) {
-                        logToTerminal(`<span class="text-lime-300">${msg.text}</span>`, 'game');
+                        // Check if message starts with pronouns like "He", "She", etc. (action descriptions)
+                        const startsWithPronoun = /^(he|she|they|it)\s+/i.test(msg.text.trim());
+                        if (startsWithPronoun) {
+                            // Replace pronoun with NPC name
+                            const textWithName = msg.text.replace(/^(he|she|they|it)\s+/i, `<span class="text-lime-300">${msg.username}</span> `);
+                            logToTerminal(textWithName, 'game');
+                        } else {
+                            // Direct dialogue or action, show as-is with lime color
+                            logToTerminal(`<span class="text-lime-300">${msg.text}</span>`, 'game');
+                        }
                         return; // Skip the normal message processing
                     }
                     

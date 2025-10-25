@@ -1593,6 +1593,7 @@ TASK: ${isFirstMessage ?
 IMPORTANT: 
 - Keep your response SHORT (1-2 sentences maximum)
 - Stay in character and maintain continuity with past conversations
+- Respond ONLY with spoken dialogue - no actions, no "he/she says", no descriptions
 - Don't use quotation marks or attribution (just the dialogue)
 - If they asked a question, answer it before changing topics
 - Reference past discussions naturally when relevant
@@ -1642,6 +1643,8 @@ ${playerName} just said in the room: "${playerSpeech}"
 Generate a SHORT, natural response (1-2 sentences max) as this character would react.
 Only respond if what they said seems directed at you or is relevant to your character.
 If it's not relevant to you, respond with something brief and in-character, or just acknowledge them.
+
+IMPORTANT: Respond ONLY with spoken dialogue - no actions, no "he/she says", no descriptions or narrative.
 
 Your response:`;
 
