@@ -1394,7 +1394,11 @@ export function initializeGameLogic(dependencies) {
                     console.warn('[NPC Conversations] NPC', npcId, 'not found in gameNpcs');
                     return null;
                 }
-                console.log('[NPC Conversations] Checking NPC:', npcId, 'dialogue:', npc?.dialogue);
+                if (!npc.name && !npc.shortName) {
+                    console.warn('[NPC Conversations] NPC', npcId, 'has no name property:', npc);
+                    return null;
+                }
+                console.log('[NPC Conversations] Checking NPC:', npcId, 'name:', npc.name, 'dialogue:', npc?.dialogue);
                 return { id: npcId, ...npc };
             })
             .filter(npc => {
