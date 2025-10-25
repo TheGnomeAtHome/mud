@@ -275,15 +275,16 @@ export async function initializeApp() {
                     }
                     
                     const myCurrentRoom = gameLogic ? gameLogic.getCurrentRoom() : null;
+                    const myCurrentRoomId = typeof myCurrentRoom === 'string' ? myCurrentRoom : myCurrentRoom?.id || null;
                     
                     // Special handling for NPC conversations - always show if in same room and new
-                    if (msg.isNpcConversation && msg.roomId === myCurrentRoom && messageTime >= sessionStartTime) {
+                    if (msg.isNpcConversation && msg.roomId === myCurrentRoomId && messageTime >= sessionStartTime) {
                         logToTerminal(`<span class="text-lime-300">${msg.username}</span> says, "${msg.text}"`, 'game');
                         return; // Skip the normal message processing
                     }
                     
                     // Special handling for proactive NPC greetings - always show if in same room and new
-                    if (msg.isNpcGreeting && msg.roomId === myCurrentRoom && messageTime >= sessionStartTime) {
+                    if (msg.isNpcGreeting && msg.roomId === myCurrentRoomId && messageTime >= sessionStartTime) {
                         // Check if message starts with pronouns like "He", "She", etc. (action descriptions)
                         const startsWithPronoun = /^(he|she|they|it)\s+/i.test(msg.text.trim());
                         if (startsWithPronoun) {
@@ -298,7 +299,7 @@ export async function initializeApp() {
                     }
                     
                     // Special handling for NPC responses to room chat - always show if in same room and new
-                    if (msg.isNpcResponse && msg.roomId === myCurrentRoom && messageTime >= sessionStartTime) {
+                    if (msg.isNpcResponse && msg.roomId === myCurrentRoomId && messageTime >= sessionStartTime) {
                         logToTerminal(`<span class="text-lime-300">${msg.username}</span> says, "${msg.text}"`, 'game');
                         return; // Skip the normal message processing
                     }
