@@ -8590,7 +8590,8 @@ Examples:
                                         senderId: userId,
                                         senderName: playerName,
                                         roomId: memberPlayer.roomId,
-                                        text: `[Guild] ${playerName}: ${guildArg}`,
+                                        // Store only the raw message; the display code will add the [Guild] prefix
+                                        text: guildArg,
                                         recipientId: memberId,
                                         isGuildChat: true,
                                         timestamp: serverTimestamp()
@@ -8906,7 +8907,8 @@ Examples:
                             senderId: userId,
                             senderName: playerName,
                             roomId: memberPlayer.roomId,
-                            text: `[Guild] ${playerName}: ${fullMessage}`,
+                            // Store only the raw message; display adds the guild prefix
+                            text: fullMessage,
                             recipientId: memberId,
                             isGuildChat: true,
                             timestamp: serverTimestamp()
