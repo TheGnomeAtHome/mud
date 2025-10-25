@@ -337,7 +337,13 @@ export async function initializeApp() {
                         } else if (msg.isSystem) {
                             logToTerminal(msg.text, 'system');
                         } else if (msg.isEmote) {
-                            logToTerminal(msg.text, 'action');
+                            // Show sender name for emotes unless it's already in the text
+                            const sender = msg.senderId === userId ? "You" : msg.senderName;
+                            if (sender && !msg.text.startsWith(sender)) {
+                                logToTerminal(`${sender} ${msg.text}`, 'action');
+                            } else {
+                                logToTerminal(msg.text, 'action');
+                            }
                         } else if (msg.text.includes(' leaves ') || msg.text.includes(' arrives')) {
                             logToTerminal(msg.text, 'system');
                         } else {

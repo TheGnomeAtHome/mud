@@ -774,21 +774,9 @@ export function initializeGameLogic(dependencies) {
 
     function logNpcResponse(npc, rawText) {
         const npcDisplayName = npc.shortName || npc.name;
-        const regex = /(\*[^*]+\*|"[^"]+"|[^"*]+)/g;
-        const parts = rawText.match(regex) || [];
-
-        parts.forEach(part => {
-            const trimmedPart = part.trim();
-            if (trimmedPart.startsWith('*') && trimmedPart.endsWith('*')) {
-                logToTerminal(trimmedPart.slice(1, -1), 'action');
-            } else if (trimmedPart.startsWith('"') && trimmedPart.endsWith('"')) {
-                logToTerminal(`${npcDisplayName} says, ${trimmedPart}`, 'npc');
-            } else if (trimmedPart) {
-                logToTerminal(trimmedPart, 'action');
-            }
-        });
         
         // Broadcast NPC response to all players in the same room
+        // Don't display locally - let the Firebase listener handle it for everyone (including sender)
         if (currentPlayerRoomId && npcDisplayName && rawText) {
             addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
                 roomId: currentPlayerRoomId,
