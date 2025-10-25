@@ -278,9 +278,16 @@ export async function initializeApp() {
                     const myCurrentRoomId = typeof myCurrentRoom === 'string' ? myCurrentRoom : myCurrentRoom?.id || null;
                     
                     // Special handling for NPC conversations - always show if in same room and new
+                    // Skip if we just got a response locally (within last 2 seconds) to avoid duplicates
                     if (msg.isNpcConversation && msg.roomId === myCurrentRoomId && messageTime >= sessionStartTime) {
-                        logToTerminal(`<span class="text-lime-300">${msg.username}</span> says, "${msg.text}"`, 'game');
-                        return; // Skip the normal message processing
+                        const lastLocalResponse = gameLogic ? gameLogic.getLastNpcResponseTime() : 0;
+                        const timeSinceLocalResponse = Date.now() - lastLocalResponse;
+                        
+                        if (timeSinceLocalResponse > 2000) {
+                            // Only show if it's been >2 seconds since we got a local response
+                            logToTerminal(`<span class="text-lime-300">${msg.username}</span> says, "${msg.text}"`, 'game');
+                        }
+                        return; // Skip the normal message processing either way
                     }
                     
                     // Special handling for proactive NPC greetings - always show if in same room and new

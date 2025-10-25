@@ -73,6 +73,7 @@ export function initializeGameLogic(dependencies) {
     let playerName = null;
     let currentPlayerRoomId = null;
     let lastNpcInteraction = null;
+    let lastNpcResponseTime = 0; // Track when we last got an NPC response locally
     let conversationHistory = []; // Track conversation with AI NPCs
     let gameActions = {}; // Store custom actions/emotes
     
@@ -775,8 +776,13 @@ export function initializeGameLogic(dependencies) {
     function logNpcResponse(npc, rawText) {
         const npcDisplayName = npc.shortName || npc.name;
         
-        // Broadcast NPC response to all players in the same room
-        // Don't display locally - let the Firebase listener handle it for everyone (including sender)
+        // Show locally immediately for the player who asked
+        logToTerminal(`<span class="text-lime-300">${npcDisplayName}</span> says, "${rawText}"`, 'game');
+        
+        // Track that we just displayed this locally (to avoid showing it again from Firebase)
+        lastNpcResponseTime = Date.now();
+        
+        // Broadcast NPC response to all OTHER players in the same room via Firebase
         if (currentPlayerRoomId && npcDisplayName && rawText) {
             addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
                 roomId: currentPlayerRoomId,
@@ -10639,6 +10645,7 @@ Examples:
         setPlayerInfo,
         setCurrentRoom,
         getCurrentRoom,
+        getLastNpcResponseTime: () => lastNpcResponseTime,
         showRoom,
         spawnMonster,
         handleAiNpcInteraction,
