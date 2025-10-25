@@ -287,9 +287,9 @@ export async function initializeApp() {
                         // Check if message starts with pronouns like "He", "She", etc. (action descriptions)
                         const startsWithPronoun = /^(he|she|they|it)\s+/i.test(msg.text.trim());
                         if (startsWithPronoun) {
-                            // Replace pronoun with NPC name
-                            const textWithName = msg.text.replace(/^(he|she|they|it)\s+/i, `<span class="text-lime-300">${msg.username}</span> `);
-                            logToTerminal(textWithName, 'game');
+                            // Replace pronoun with NPC name and wrap entire message in lime color
+                            const textWithName = msg.text.trim().replace(/^(he|she|they|it)\s+/i, `${msg.username} `);
+                            logToTerminal(`<span class="text-lime-300">${textWithName}</span>`, 'game');
                         } else {
                             // Direct dialogue or action, show as-is with lime color
                             logToTerminal(`<span class="text-lime-300">${msg.text}</span>`, 'game');
