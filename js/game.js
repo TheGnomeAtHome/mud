@@ -1708,16 +1708,19 @@ Your response:`;
         // Create a unique message ID to prevent duplicates
         const messageId = `npc-conv-${npc.id || 'unknown'}-${roomId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         
+        const username = npc.shortName || npc.name;
+        console.log('[NPC Conversations] Creating message with username:', username, 'from NPC:', npc);
+        
         addDoc(messageRef, {
             roomId: roomId,
             userId: 'npc-conversation',
-            username: npc.shortName || npc.name,
+            username: username,
             text: message,
             timestamp: serverTimestamp(),
             isNpcConversation: true,
             messageId: messageId  // Add unique ID for duplicate detection
         }).then(() => {
-            console.log('[NPC Conversations] Message sent successfully with ID:', messageId);
+            console.log('[NPC Conversations] Message sent successfully with ID:', messageId, 'username:', username);
         }).catch(err => {
             console.error('[NPC Conversations] Error broadcasting:', err);
         });
