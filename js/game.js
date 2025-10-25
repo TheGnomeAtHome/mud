@@ -8608,24 +8608,17 @@ Examples:
                                 chatGuild = guildSnap.data();
                             }
                             
-                            // Send message to all guild members
-                            const guildMemberIds = Object.keys(chatGuild.members || {});
-                            
-                            for (const memberId of guildMemberIds) {
-                                const memberPlayer = gamePlayers[memberId];
-                                if (memberPlayer) {
-                                    await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
-                                        senderId: userId,
-                                        senderName: playerName,
-                                        roomId: memberPlayer.roomId,
-                                        // Store only the raw message; the display code will add the [Guild] prefix
-                                        text: guildArg,
-                                        recipientId: memberId,
-                                        isGuildChat: true,
-                                        timestamp: serverTimestamp()
-                                    });
-                                }
-                            }
+                            // Send ONE guild message that all members will see
+                            // Use a special recipientId to indicate it's for all guild members
+                            await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                                senderId: userId,
+                                senderName: playerName,
+                                guildId: chatGuildId,
+                                // Store only the raw message; the display code will add the [Guild] prefix
+                                text: guildArg,
+                                isGuildChat: true,
+                                timestamp: serverTimestamp()
+                            });
                             
                             logToTerminal(`[Guild] You: ${guildArg}`, 'system');
                             break;
@@ -8926,23 +8919,17 @@ Examples:
                 }
                 
                 const gcGuild = gameGuilds[gcGuildId];
-                const guildMemberIds = Object.keys(gcGuild.members || {});
                 
-                for (const memberId of guildMemberIds) {
-                    const memberPlayer = gamePlayers[memberId];
-                    if (memberPlayer) {
-                        await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
-                            senderId: userId,
-                            senderName: playerName,
-                            roomId: memberPlayer.roomId,
-                            // Store only the raw message; display adds the guild prefix
-                            text: fullMessage,
-                            recipientId: memberId,
-                            isGuildChat: true,
-                            timestamp: serverTimestamp()
-                        });
-                    }
-                }
+                // Send ONE guild message that all members will see
+                await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                    senderId: userId,
+                    senderName: playerName,
+                    guildId: gcGuildId,
+                    // Store only the raw message; display adds the guild prefix
+                    text: fullMessage,
+                    isGuildChat: true,
+                    timestamp: serverTimestamp()
+                });
                 
                 logToTerminal(`[Guild] You: ${fullMessage}`, 'system');
                 break;

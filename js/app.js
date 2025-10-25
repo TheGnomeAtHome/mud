@@ -309,11 +309,19 @@ export async function initializeApp() {
                         }
                     }
                     
-                    if (messageTime >= sessionStartTime && msg.roomId === myCurrentRoom) {
-                        if (msg.isGuildChat) {
+                    // Special handling for guild chat - show to all guild members
+                    if (msg.isGuildChat) {
+                        // Check if this player is in the guild
+                        const myPlayer = gamePlayers[userId];
+                        if (myPlayer && myPlayer.guildId === msg.guildId && messageTime >= sessionStartTime) {
                             const sender = msg.senderId === userId ? "You" : msg.senderName;
                             logToTerminal(`[Guild] ${sender}: ${msg.text}`, 'system');
-                        } else if (msg.isPartyChat) {
+                        }
+                        return; // Skip normal processing
+                    }
+                    
+                    if (messageTime >= sessionStartTime && msg.roomId === myCurrentRoom) {
+                        if (msg.isPartyChat) {
                             const sender = msg.senderId === userId ? "You" : msg.senderName;
                             logToTerminal(`[Party] ${sender}: ${msg.text}`, 'party');
                         } else if (msg.isSystem) {
