@@ -1524,6 +1524,27 @@ export function initializeGameLogic(dependencies) {
             return;
         }
         
+        // Check if there's been a recent conversation (last 30 seconds) to prevent duplicate conversations from multiple clients
+        const messagesRef = collection(db, 'artifacts', appId, 'public', 'data', 'mud-messages');
+        const thirtySecondsAgo = Date.now() - 30000;
+        const recentMessagesQuery = query(
+            messagesRef,
+            where('roomId', '==', roomId),
+            where('isNpcConversation', '==', true),
+            where('timestamp', '>', thirtySecondsAgo)
+        );
+        
+        try {
+            const recentSnapshot = await getDocs(recentMessagesQuery);
+            if (!recentSnapshot.empty) {
+                console.log('[NPC Conversations] Recent conversation found - skipping to avoid duplicates');
+                return;
+            }
+        } catch (error) {
+            console.error('[NPC Conversations] Error checking recent messages:', error);
+            // Continue anyway - better to have duplicate than no conversation
+        }
+        
         // Pick two random NPCs
         const shuffled = [...aiNpcs].sort(() => Math.random() - 0.5);
         const npc1 = shuffled[0];
