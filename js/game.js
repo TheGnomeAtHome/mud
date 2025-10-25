@@ -1372,6 +1372,12 @@ export function initializeGameLogic(dependencies) {
             return;
         }
         
+        // Check if conversations are already running in this room
+        if (npcConversationTimers[roomId]) {
+            console.log('[NPC Conversations] Already running in room:', roomId);
+            return;
+        }
+        
         const room = gameWorld[roomId];
         if (!room || !room.npcs || room.npcs.length < 2) {
             console.log('[NPC Conversations] Not starting - need 2+ NPCs in room');
@@ -1691,15 +1697,20 @@ Your response:`;
         
         // If no players found, still send the message (it will be picked up by message listener)
         const messageRef = collection(db, `/artifacts/${appId}/public/data/mud-messages`);
+        
+        // Create a unique message ID to prevent duplicates
+        const messageId = `npc-conv-${npc.id || 'unknown'}-${roomId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
         addDoc(messageRef, {
             roomId: roomId,
             userId: 'npc-conversation',
             username: npc.shortName || npc.name,
             text: message,
             timestamp: serverTimestamp(),
-            isNpcConversation: true
+            isNpcConversation: true,
+            messageId: messageId  // Add unique ID for duplicate detection
         }).then(() => {
-            console.log('[NPC Conversations] Message sent successfully');
+            console.log('[NPC Conversations] Message sent successfully with ID:', messageId);
         }).catch(err => {
             console.error('[NPC Conversations] Error broadcasting:', err);
         });
