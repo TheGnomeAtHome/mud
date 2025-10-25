@@ -1484,6 +1484,23 @@ export function initializeGameLogic(dependencies) {
             clearInterval(npcConversationTimers[roomId]);
         }
         
+        // IMPORTANT: Only the first player in alphabetical order (by userId) should control NPC conversations
+        // This prevents multiple clients from generating different conversations
+        const playersInRoom = Object.entries(gamePlayers)
+            .filter(([id, player]) => player.currentRoom === roomId)
+            .map(([id]) => id)
+            .sort();
+        
+        const isConversationController = playersInRoom.length === 0 || playersInRoom[0] === userId;
+        
+        if (!isConversationController) {
+            console.log('[NPC Conversations] Not the conversation controller for this room - skipping timer setup');
+            console.log('[NPC Conversations] Controller is:', playersInRoom[0], 'I am:', userId);
+            return;
+        }
+        
+        console.log('[NPC Conversations] I am the conversation controller for this room');
+        
         // Start conversation cycle (every 60-120 seconds to avoid rate limits)
         const conversationInterval = 60000 + Math.random() * 60000;
         npcConversationTimers[roomId] = setInterval(() => {
@@ -1522,27 +1539,6 @@ export function initializeGameLogic(dependencies) {
         if (playersInRoom.length === 0) {
             console.log('[NPC Conversations] No players in room - skipping conversation');
             return;
-        }
-        
-        // Check if there's been a recent conversation (last 30 seconds) to prevent duplicate conversations from multiple clients
-        const messagesRef = collection(db, 'artifacts', appId, 'public', 'data', 'mud-messages');
-        const thirtySecondsAgo = Date.now() - 30000;
-        const recentMessagesQuery = query(
-            messagesRef,
-            where('roomId', '==', roomId),
-            where('isNpcConversation', '==', true),
-            where('timestamp', '>', thirtySecondsAgo)
-        );
-        
-        try {
-            const recentSnapshot = await getDocs(recentMessagesQuery);
-            if (!recentSnapshot.empty) {
-                console.log('[NPC Conversations] Recent conversation found - skipping to avoid duplicates');
-                return;
-            }
-        } catch (error) {
-            console.error('[NPC Conversations] Error checking recent messages:', error);
-            // Continue anyway - better to have duplicate than no conversation
         }
         
         // Pick two random NPCs
