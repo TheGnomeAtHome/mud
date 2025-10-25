@@ -776,8 +776,20 @@ export function initializeGameLogic(dependencies) {
     function logNpcResponse(npc, rawText) {
         const npcDisplayName = npc.shortName || npc.name;
         
-        // Show locally immediately for the player who asked
-        logToTerminal(`<span class="text-lime-300">${npcDisplayName}</span> says, "${rawText}"`, 'game');
+        // Parse and display the response locally with proper formatting
+        const regex = /(\*[^*]+\*|"[^"]+"|[^"*]+)/g;
+        const parts = rawText.match(regex) || [];
+
+        parts.forEach(part => {
+            const trimmedPart = part.trim();
+            if (trimmedPart.startsWith('*') && trimmedPart.endsWith('*')) {
+                logToTerminal(trimmedPart.slice(1, -1), 'action');
+            } else if (trimmedPart.startsWith('"') && trimmedPart.endsWith('"')) {
+                logToTerminal(`${npcDisplayName} says, ${trimmedPart}`, 'npc');
+            } else if (trimmedPart) {
+                logToTerminal(trimmedPart, 'action');
+            }
+        });
         
         // Track that we just displayed this locally (to avoid showing it again from Firebase)
         lastNpcResponseTime = Date.now();
