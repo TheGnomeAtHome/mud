@@ -787,6 +787,20 @@ export function initializeGameLogic(dependencies) {
                 logToTerminal(trimmedPart, 'action');
             }
         });
+        
+        // Broadcast NPC response to all players in the same room
+        if (currentPlayerRoomId && npcDisplayName && rawText) {
+            addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                roomId: currentPlayerRoomId,
+                userId: `npc-${npc.id}`,
+                username: npcDisplayName,
+                text: rawText,
+                timestamp: serverTimestamp(),
+                isNpcConversation: true
+            }).catch(err => {
+                console.error('[NPC Response] Error broadcasting to room:', err);
+            });
+        }
     }
 
     async function showRoom(roomId) {
@@ -1127,6 +1141,36 @@ export function initializeGameLogic(dependencies) {
         }
         
         lastNpcInteraction = npc.id;
+        
+        // Broadcast player's question/action to other players in the room
+        if (interactionType === 'ask_npc' && topicOrSpeech) {
+            await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                senderId: userId,
+                senderName: playerName,
+                roomId: currentPlayerRoomId,
+                text: `asks ${npc.shortName || npc.name} about ${topicOrSpeech}`,
+                timestamp: serverTimestamp(),
+                isEmote: true
+            });
+        } else if (interactionType === 'talk') {
+            await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                senderId: userId,
+                senderName: playerName,
+                roomId: currentPlayerRoomId,
+                text: `talks to ${npc.shortName || npc.name}`,
+                timestamp: serverTimestamp(),
+                isEmote: true
+            });
+        } else if (interactionType === 'reply' && topicOrSpeech) {
+            await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                senderId: userId,
+                senderName: playerName,
+                roomId: currentPlayerRoomId,
+                text: topicOrSpeech,
+                timestamp: serverTimestamp()
+            });
+        }
+        
         logToTerminal(`${npc.shortName || npc.name} is thinking...`, 'action');
 
         // Handle dialogue as either array or string
