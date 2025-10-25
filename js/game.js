@@ -1384,10 +1384,17 @@ export function initializeGameLogic(dependencies) {
         const aiNpcs = room.npcs
             .map(npcId => {
                 const npc = gameNpcs[npcId];
+                if (!npc) {
+                    console.warn('[NPC Conversations] NPC', npcId, 'not found in gameNpcs');
+                    return null;
+                }
                 console.log('[NPC Conversations] Checking NPC:', npcId, 'dialogue:', npc?.dialogue);
                 return { id: npcId, ...npc };
             })
             .filter(npc => {
+                // Skip null NPCs
+                if (!npc) return false;
+                
                 // AI NPCs have dialogue (either string or array with personality prompt)
                 // Traditional NPCs with random dialogue arrays usually have multiple short phrases
                 if (!npc.dialogue) return false;
@@ -1659,7 +1666,17 @@ Your response:`;
      * Broadcast NPC conversation to all players in the room
      */
     function broadcastNpcConversation(roomId, npc, message) {
-        console.log('[NPC Conversations] Broadcasting to room:', roomId, 'Message:', message);
+        if (!npc) {
+            console.error('[NPC Conversations] Cannot broadcast - NPC is null/undefined');
+            return;
+        }
+        
+        if (!npc.name && !npc.shortName) {
+            console.error('[NPC Conversations] Cannot broadcast - NPC has no name:', npc);
+            return;
+        }
+        
+        console.log('[NPC Conversations] Broadcasting to room:', roomId, 'NPC:', npc.name || npc.shortName, 'Message:', message);
         
         // Debug: Log all players
         console.log('[NPC Conversations] All players in gamePlayers:', Object.keys(gamePlayers).length);
