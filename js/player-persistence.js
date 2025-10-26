@@ -127,9 +127,31 @@ export function initializePlayerPersistence(firebase, appId) {
         try {
             console.log(`[PlayerPersistence] Creating Firebase session for ${userId}...`);
             
-            // Session data: only frequently changing data
+            // Session data: frequently changing data PLUS key permanent fields for display
             const sessionData = {
+                // Identity (needed for admin panel and display)
                 name: characterData.name,
+                race: characterData.race,
+                class: characterData.class,
+                gender: characterData.gender,
+                age: characterData.age,
+                description: characterData.description,
+                
+                // Stats (for display and calculations)
+                level: characterData.level || 1,
+                maxHp: characterData.maxHp || 100,
+                maxMp: characterData.maxMp || 100,
+                str: characterData.str,
+                dex: characterData.dex,
+                con: characterData.con,
+                int: characterData.int,
+                wis: characterData.wis,
+                cha: characterData.cha,
+                
+                // Permissions
+                isAdmin: characterData.isAdmin || false,
+                
+                // Real-time session data
                 roomId: characterData.roomId || 'start',
                 online: true,
                 lastSeen: Date.now(),
