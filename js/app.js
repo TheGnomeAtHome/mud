@@ -1073,6 +1073,16 @@ export async function initializeApp() {
                 console.log('[Auth] ✓ Firebase session created');
                 playerName = playerData.name;
                 await initializePlayerGame(playerData);
+                
+                // Start presence cleanup system (run every 60 seconds)
+                setInterval(() => {
+                    playerPersistence.cleanupStaleSessions();
+                }, 60000);
+                
+                // Run initial cleanup after 5 seconds
+                setTimeout(() => {
+                    playerPersistence.cleanupStaleSessions();
+                }, 5000);
             }
         } else {
             authModule.showAuthModal();

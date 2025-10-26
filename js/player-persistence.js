@@ -148,6 +148,34 @@ export function initializePlayerPersistence(firebase, appId) {
             
             console.log(`[PlayerPersistence] ✓ Session created in Firebase`);
             
+            // Set up presence system: update lastSeen every 30 seconds
+            const presenceInterval = setInterval(async () => {
+                try {
+                    await updateDoc(playerRef, {
+                        online: true,
+                        lastSeen: Date.now()
+                    });
+                } catch (error) {
+                    console.error('[Presence] Error updating heartbeat:', error);
+                }
+            }, 30000); // 30 seconds
+            
+            // Mark offline when page is closed/refreshed
+            window.addEventListener('beforeunload', async () => {
+                clearInterval(presenceInterval);
+                try {
+                    // Use sendBeacon for reliability during page unload
+                    const offlineData = {
+                        online: false,
+                        lastSeen: Date.now()
+                    };
+                    // Note: This won't work with Firestore directly, but we'll try updateDoc
+                    await updateDoc(playerRef, offlineData);
+                } catch (error) {
+                    console.error('[Presence] Error marking offline:', error);
+                }
+            });
+            
         } catch (error) {
             console.error('[PlayerPersistence] Error creating session:', error);
             throw error;
@@ -256,6 +284,49 @@ export function initializePlayerPersistence(firebase, appId) {
         };
     }
     
+    /**
+     * Clean up stale player sessions (offline for more than 2 minutes)
+     * Should be called periodically
+     * @returns {Promise<number>} Number of players cleaned up
+     */
+    async function cleanupStaleSessions() {
+        try {
+            const { collection, getDocs, query, where, updateDoc } = firestoreFunctions;
+            
+            const twoMinutesAgo = Date.now() - (2 * 60 * 1000);
+            const playersRef = collection(db, `/artifacts/${appId}/public/data/mud-players`);
+            
+            // Get all players
+            const snapshot = await getDocs(playersRef);
+            let cleanedCount = 0;
+            
+            for (const docSnap of snapshot.docs) {
+                const player = docSnap.data();
+                const lastSeen = player.lastSeen || 0;
+                
+                // If player hasn't been seen in 2 minutes and is marked online, mark them offline
+                if (player.online && lastSeen < twoMinutesAgo) {
+                    const playerRef = doc(db, `/artifacts/${appId}/public/data/mud-players/${docSnap.id}`);
+                    await updateDoc(playerRef, {
+                        online: false
+                    });
+                    cleanedCount++;
+                    console.log(`[Presence] Marked ${player.name || docSnap.id} as offline (stale session)`);
+                }
+            }
+            
+            if (cleanedCount > 0) {
+                console.log(`[Presence] Cleaned up ${cleanedCount} stale session(s)`);
+            }
+            
+            return cleanedCount;
+            
+        } catch (error) {
+            console.error('[Presence] Error cleaning up stale sessions:', error);
+            return 0;
+        }
+    }
+    
     return {
         loadPlayerCharacter,
         savePlayerCharacter,
@@ -263,6 +334,7 @@ export function initializePlayerPersistence(firebase, appId) {
         updateSession,
         syncToMySQL,
         endSession,
-        mergePlayerData
+        mergePlayerData,
+        cleanupStaleSessions
     };
 }
