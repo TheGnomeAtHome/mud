@@ -7794,6 +7794,11 @@ Examples:
             case 'who':
                 logToTerminal("--- Adventurers Online ---", 'system');
                 Object.entries(gamePlayers).forEach(([playerId, player]) => {
+                    // Skip offline players
+                    if (player.online === false) {
+                        return;
+                    }
+                    
                     // Hide invisible admins (unless you're also an admin)
                     if (player.invisible && !gamePlayers[userId]?.isAdmin) {
                         return;
