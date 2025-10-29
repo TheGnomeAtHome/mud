@@ -538,19 +538,20 @@ export async function initializeApp() {
     
     // Initialize player game after character creation or login
     async function initializePlayerGame(playerData) {
-        appContainer.classList.remove('hidden');
-        logToTerminal("Welcome to the M.U.D. - The Digital Realm!", "system");
-        logToTerminal("Type 'help' for a list of commands.", "system");
-        logToTerminal("Loading game world...", "system");
-        focusInput();
-        
-        console.log('[Init] Starting game data load...');
-        const worldReady = await dataLoader.loadGameData(userId);
-        if (!worldReady) {
-            logToTerminal("Failed to initialize the game world. Please reload.", "error");
-            return;
-        }
-        console.log('[Init] Game data loaded successfully');
+        try {
+            appContainer.classList.remove('hidden');
+            logToTerminal("Welcome to the M.U.D. - The Digital Realm!", "system");
+            logToTerminal("Type 'help' for a list of commands.", "system");
+            logToTerminal("Loading game world...", "system");
+            focusInput();
+            
+            console.log('[Init] Starting game data load...');
+            const worldReady = await dataLoader.loadGameData(userId);
+            if (!worldReady) {
+                logToTerminal("Failed to initialize the game world. Please reload.", "error");
+                return;
+            }
+            console.log('[Init] Game data loaded successfully');
         
         const { gameWorld, gameItems, gameNpcs, gameMonsters, gamePlayers, activeMonsters, gameClasses, gameSpells, gameGuilds, gameQuests, gameParties } = dataLoader.gameData;
         
@@ -940,6 +941,11 @@ export async function initializeApp() {
             });
             logToTerminal("Use 'guild accept [guild name]' to join a guild.", "system");
         }
+        } catch (error) {
+            console.error('[Init] Error during game initialization:', error);
+            logToTerminal(`Failed to initialize game: ${error.message}`, "error");
+            logToTerminal("Please refresh the page and try again.", "error");
+        }
     }
     
     // Command input handler
@@ -1049,44 +1055,50 @@ export async function initializeApp() {
     
     // Authentication state handler
     authModule.setupAuthStateHandler(async (user) => {
-        if (user) {
-            userId = user.uid;
-            sessionStartTime = Date.now();
-            logoutBtn.classList.remove('hidden');
-            
-            console.log('[Auth] User logged in, loading character data...');
-            
-            // Phase 3: Load character from MySQL first, fallback to Firebase
-            const playerData = await playerPersistence.loadPlayerCharacter(userId);
-            
-            if (!playerData) {
-                // No character found, show character creation
-                console.log('[Auth] No character found, showing creation screen');
-                charCreateModal.classList.remove('hidden');
-                currentStats = rollRandomStats();
-                displayRolledStats(currentStats);
-                populateClassSelector(); // Load available classes
+        try {
+            if (user) {
+                userId = user.uid;
+                sessionStartTime = Date.now();
+                logoutBtn.classList.remove('hidden');
+                
+                console.log('[Auth] User logged in, loading character data...');
+                
+                // Phase 3: Load character from MySQL first, fallback to Firebase
+                const playerData = await playerPersistence.loadPlayerCharacter(userId);
+                
+                if (!playerData) {
+                    // No character found, show character creation
+                    console.log('[Auth] No character found, showing creation screen');
+                    charCreateModal.classList.remove('hidden');
+                    currentStats = rollRandomStats();
+                    displayRolledStats(currentStats);
+                    populateClassSelector(); // Load available classes
+                } else {
+                    // Player exists, create/update Firebase session and load game
+                    console.log('[Auth] ✓ Character loaded from MySQL');
+                    await playerPersistence.createSession(userId, playerData);
+                    console.log('[Auth] ✓ Firebase session created');
+                    playerName = playerData.name;
+                    await initializePlayerGame(playerData);
+                    
+                    // Start presence cleanup system (run every 60 seconds)
+                    setInterval(() => {
+                        playerPersistence.cleanupStaleSessions();
+                    }, 60000);
+                    
+                    // Run initial cleanup after 5 seconds
+                    setTimeout(() => {
+                        playerPersistence.cleanupStaleSessions();
+                    }, 5000);
+                }
             } else {
-                // Player exists, create/update Firebase session and load game
-                console.log('[Auth] ✓ Character loaded from MySQL');
-                await playerPersistence.createSession(userId, playerData);
-                console.log('[Auth] ✓ Firebase session created');
-                playerName = playerData.name;
-                await initializePlayerGame(playerData);
-                
-                // Start presence cleanup system (run every 60 seconds)
-                setInterval(() => {
-                    playerPersistence.cleanupStaleSessions();
-                }, 60000);
-                
-                // Run initial cleanup after 5 seconds
-                setTimeout(() => {
-                    playerPersistence.cleanupStaleSessions();
-                }, 5000);
+                authModule.showAuthModal();
+                appContainer.classList.add('hidden');
             }
-        } else {
-            authModule.showAuthModal();
-            appContainer.classList.add('hidden');
+        } catch (error) {
+            console.error('[Auth] Error in authentication handler:', error);
+            logToTerminal(`Authentication error: ${error.message}`, "error");
+            logToTerminal("Please refresh the page and try again.", "error");
         }
     });
     

@@ -2,7 +2,7 @@
 
 ## 🎉 What's New
 
-You now have a **complete trading system** with:
+There is a **complete trading system** with:
 - 🤝 **Haggling mechanics** with NPCs
 - 👥 **Player-to-player trading** (secure & safe)
 - 📈 **Merchant reputation system** (build relationships for discounts)
