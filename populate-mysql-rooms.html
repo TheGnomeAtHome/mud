@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Populate Existing Rooms - MUD Game</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background: #1a1a1a;
+            color: #00ff41;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 { color: #ffff00; text-align: center; }
+        .section {
+            background: #2a2a2a;
+            border: 2px solid #00ff41;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+        }
+        button {
+            background: #00ff41;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            border-radius: 3px;
+        }
+        button:hover { background: #00cc33; }
+        button:disabled { background: #666; cursor: not-allowed; }
+        .danger { background: #ff4444; }
+        .danger:hover { background: #cc0000; }
+        #log {
+            background: #000;
+            color: #00ff41;
+            padding: 10px;
+            margin: 10px 0;
+            height: 500px;
+            overflow-y: scroll;
+            border: 1px solid #00ff41;
+            font-size: 12px;
+        }
+        #stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin: 15px 0;
+        }
+        .stat-box {
+            background: #000;
+            padding: 10px;
+            border: 1px solid #00ff41;
+            border-radius: 3px;
+            text-align: center;
+        }
+        .stat-box h3 { margin: 0; color: #ffff00; font-size: 14px; }
+        .stat-box .value { font-size: 24px; font-weight: bold; color: #00ff41; }
+        .success { color: #00ff41; }
+        .error { color: #ff4444; }
+        .info { color: #00d4ff; }
+        .warning { color: #ffaa00; }
+        .room-list {
+            max-height: 300px;
+            overflow-y: auto;
+            background: #000;
+            padding: 10px;
+            border: 1px solid #00ff41;
+            margin: 10px 0;
+        }
+        .room-item {
+            padding: 5px;
+            border-bottom: 1px solid #333;
+        }
+        .room-item:hover {
+            background: #1a3a1a;
+        }
+    </style>
+</head>
+<body>
+    <h1>🗺️ Populate Existing MySQL Rooms</h1>
+    
+    <div class="section">
+        <h2>� API Configuration</h2>
+        <p>Your MySQL API requires authentication. Enter your API key:</p>
+        <input type="password" id="api-key-input" placeholder="Enter your MySQL API key" style="width: 100%; padding: 10px; background: #000; color: #00ff41; border: 1px solid #00ff41; border-radius: 3px; font-family: 'Courier New', monospace;">
+        <p style="font-size: 12px; color: #888; margin-top: 5px;">💡 This is stored in your browser session only, not saved permanently.</p>
+    </div>
+
+    <div class="section">
+        <h2>�📊 Database Statistics</h2>
+        <div id="stats">
+            <div class="stat-box">
+                <h3>Total Rooms</h3>
+                <div class="value" id="total-rooms">-</div>
+            </div>
+            <div class="stat-box">
+                <h3>Empty Rooms</h3>
+                <div class="value" id="empty-rooms">-</div>
+            </div>
+            <div class="stat-box">
+                <h3>Rooms with NPCs</h3>
+                <div class="value" id="rooms-with-npcs">-</div>
+            </div>
+            <div class="stat-box">
+                <h3>Rooms with Monsters</h3>
+                <div class="value" id="rooms-with-monsters">-</div>
+            </div>
+            <div class="stat-box">
+                <h3>Rooms with Items</h3>
+                <div class="value" id="rooms-with-items">-</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>🔍 Step 1: Analyze Existing Content</h2>
+        <button onclick="analyzeRooms()">📥 Load & Analyze All Rooms from MySQL</button>
+        <div id="analysis-results" style="margin-top: 10px;"></div>
+    </div>
+
+    <div class="section">
+        <h2>🎮 Step 2: Create Base Content</h2>
+        <p>Create NPCs, monsters, and items that can be placed in rooms:</p>
+        <button onclick="createBaseNPCs()">👥 Create NPCs (10 types)</button>
+        <button onclick="createBaseMonsters()">👹 Create Monsters (15 types)</button>
+        <button onclick="createBaseItems()">🎒 Create Items (30 types)</button>
+        <button onclick="createAllBaseContent()">🌟 Create All Base Content</button>
+    </div>
+
+    <div class="section">
+        <h2>⚙️ Step 3: Auto-Populate Empty Rooms</h2>
+        <p>Automatically add content to rooms based on their name/description:</p>
+        <button onclick="populateEmptyRooms()">🤖 AI Auto-Populate Empty Rooms</button>
+        <button onclick="populateAllRooms()">🔧 Force Populate ALL Rooms (Dangerous)</button>
+        <p class="warning" style="font-size: 12px;">⚠️ Force populate will ADD content to ALL rooms, even those with existing content. Use with caution!</p>
+    </div>
+
+    <div class="section">
+        <h2>📜 Activity Log</h2>
+        <div id="log"></div>
+    </div>
+
+    <script type="module">
+        const MYSQL_API_URL = 'https://jphsoftware.com/api';
+        
+        let allRooms = {};
+        let allNPCs = {};
+        let allMonsters = {};
+        let allItems = {};
+
+        function getApiKey() {
+            const key = document.getElementById('api-key-input').value.trim();
+            if (!key) {
+                log('⚠️ Please enter your API key first!', 'error');
+                throw new Error('API key required');
+            }
+            return key;
+        }
+
+        function getHeaders() {
+            return {
+                'Content-Type': 'application/json',
+                'X-API-Key': getApiKey()
+            };
+        }
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = type;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function updateStats() {
+            const totalRooms = Object.keys(allRooms).length;
+            const emptyRooms = Object.values(allRooms).filter(r => 
+                (!r.npcs || r.npcs.length === 0) && 
+                (!r.monsterSpawns || r.monsterSpawns.length === 0) &&
+                (!r.items || r.items.length === 0)
+            ).length;
+            const roomsWithNPCs = Object.values(allRooms).filter(r => r.npcs && r.npcs.length > 0).length;
+            const roomsWithMonsters = Object.values(allRooms).filter(r => r.monsterSpawns && r.monsterSpawns.length > 0).length;
+            const roomsWithItems = Object.values(allRooms).filter(r => r.items && r.items.length > 0).length;
+
+            document.getElementById('total-rooms').textContent = totalRooms;
+            document.getElementById('empty-rooms').textContent = emptyRooms;
+            document.getElementById('rooms-with-npcs').textContent = roomsWithNPCs;
+            document.getElementById('rooms-with-monsters').textContent = roomsWithMonsters;
+            document.getElementById('rooms-with-items').textContent = roomsWithItems;
+        }
+
+        window.analyzeRooms = async function() {
+            log('Fetching all rooms from MySQL...', 'info');
+            
+            try {
+                const apiKey = getApiKey();
+                const response = await fetch(`${MYSQL_API_URL}/rooms`, {
+                    headers: { 'X-API-Key': apiKey }
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                allRooms = await response.json();
+                log(`✓ Loaded ${Object.keys(allRooms).length} rooms from MySQL`, 'success');
+                
+                // Fetch existing NPCs, monsters, items
+                const [npcsRes, monstersRes, itemsRes] = await Promise.all([
+                    fetch(`${MYSQL_API_URL}/npcs`, { headers: { 'X-API-Key': apiKey } }),
+                    fetch(`${MYSQL_API_URL}/monsters`, { headers: { 'X-API-Key': apiKey } }),
+                    fetch(`${MYSQL_API_URL}/items`, { headers: { 'X-API-Key': apiKey } })
+                ]);
+
+                allNPCs = await npcsRes.json();
+                allMonsters = await monstersRes.json();
+                allItems = await itemsRes.json();
+
+                log(`✓ Loaded ${Object.keys(allNPCs).length} NPCs`, 'success');
+                log(`✓ Loaded ${Object.keys(allMonsters).length} monsters`, 'success');
+                log(`✓ Loaded ${Object.keys(allItems).length} items`, 'success');
+
+                updateStats();
+
+                // Show sample of empty rooms
+                const emptyRooms = Object.entries(allRooms).filter(([id, r]) => 
+                    (!r.npcs || r.npcs.length === 0) && 
+                    (!r.monsterSpawns || r.monsterSpawns.length === 0) &&
+                    (!r.items || r.items.length === 0)
+                );
+
+                const resultsDiv = document.getElementById('analysis-results');
+                resultsDiv.innerHTML = `
+                    <div class="room-list">
+                        <h4>Sample Empty Rooms (showing first 20):</h4>
+                        ${emptyRooms.slice(0, 20).map(([id, room]) => `
+                            <div class="room-item">
+                                <strong>${room.name || id}</strong><br>
+                                <span style="color: #888;">${(room.description || '').substring(0, 80)}...</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+
+                log('Analysis complete! Ready to populate rooms.', 'success');
+            } catch (error) {
+                log(`❌ Error: ${error.message}`, 'error');
+            }
+        };
+
+        window.createBaseNPCs = async function() {
+            log('Creating base NPCs...', 'info');
+            
+            const npcs = {
+                'merchant-general': {
+                    name: 'Traveling Merchant',
+                    shortName: 'Merchant',
+                    description: 'A friendly merchant with a cart of goods',
+                    dialogue: ['Welcome! Take a look at my wares.', 'Best prices in the realm!'],
+                    shop: ['health-potion', 'bread', 'torch']
+                },
+                'guard-town': {
+                    name: 'Town Guard',
+                    shortName: 'Guard',
+                    description: 'A vigilant guard in steel armor',
+                    dialogue: ['Stay out of trouble.', 'Move along, citizen.', 'The roads are dangerous lately.']
+                },
+                'beggar': {
+                    name: 'Poor Beggar',
+                    shortName: 'Beggar',
+                    description: 'A ragged person asking for alms',
+                    dialogue: ['Spare a coin?', 'I haven\'t eaten in days...']
+                },
+                'hermit': {
+                    name: 'Old Hermit',
+                    shortName: 'Hermit',
+                    description: 'A mysterious old person living in solitude',
+                    dialogue: ['Few visitors come this way.', 'I know secrets of the ancient times.']
+                },
+                'priest-wandering': {
+                    name: 'Wandering Priest',
+                    shortName: 'Priest',
+                    description: 'A holy person in simple robes',
+                    dialogue: ['May the light guide you.', 'Evil lurks in dark places.']
+                },
+                'bandit-leader': {
+                    name: 'Bandit Leader',
+                    shortName: 'Bandit',
+                    description: 'A dangerous-looking rogue',
+                    dialogue: ['Your gold or your life!', 'Turn back while you can.']
+                },
+                'scholar': {
+                    name: 'Traveling Scholar',
+                    shortName: 'Scholar',
+                    description: 'A learned person with many books',
+                    dialogue: ['Knowledge is power!', 'I study the ancient texts.']
+                },
+                'miner': {
+                    name: 'Old Miner',
+                    shortName: 'Miner',
+                    description: 'A grizzled miner with a pickaxe',
+                    dialogue: ['These caves go deep.', 'I\'ve seen things down here...']
+                },
+                'spirit-guardian': {
+                    name: 'Spirit Guardian',
+                    shortName: 'Spirit',
+                    description: 'A ghostly figure watching over this place',
+                    dialogue: ['Only the worthy may pass.', 'I protect these sacred grounds.']
+                },
+                'innkeeper': {
+                    name: 'Friendly Innkeeper',
+                    shortName: 'Innkeeper',
+                    description: 'A cheerful host',
+                    dialogue: ['Welcome! Rest your weary feet.', 'I have rooms and warm meals.'],
+                    shop: ['ale', 'bread', 'health-potion']
+                }
+            };
+
+            try {
+                const headers = getHeaders();
+                for (const [id, npcData] of Object.entries(npcs)) {
+                    const response = await fetch(`${MYSQL_API_URL}/npcs`, {
+                        method: 'POST',
+                        headers: headers,
+                        body: JSON.stringify({ id, ...npcData })
+                    });
+                    
+                    if (response.ok) {
+                        log(`✓ Created NPC: ${npcData.name}`, 'success');
+                        allNPCs[id] = npcData;
+                    } else {
+                        log(`⚠️ NPC ${id} might already exist`, 'warning');
+                    }
+                }
+                log('✅ Base NPCs created!', 'success');
+            } catch (error) {
+                log(`❌ Error: ${error.message}`, 'error');
+            }
+        };
+
+        window.createBaseMonsters = async function() {
+            log('Creating base monsters...', 'info');
+            
+            const monsters = {
+                'rat': { name: 'Rat', description: 'A diseased rat', hp: 10, maxHp: 10, attack: 2, defense: 0, xp: 5, loot: ['rat-tail'] },
+                'giant-rat': { name: 'Giant Rat', description: 'A rat the size of a dog', hp: 20, maxHp: 20, attack: 3, defense: 1, xp: 8, loot: ['rat-tail'] },
+                'wolf': { name: 'Wolf', description: 'A fierce gray wolf', hp: 30, maxHp: 30, attack: 5, defense: 2, xp: 15, loot: ['wolf-pelt'] },
+                'goblin': { name: 'Goblin', description: 'A small green creature', hp: 25, maxHp: 25, attack: 4, defense: 1, xp: 12, loot: ['rusty-dagger'] },
+                'orc': { name: 'Orc', description: 'A brutish warrior', hp: 50, maxHp: 50, attack: 8, defense: 4, xp: 25, loot: ['iron-sword'] },
+                'skeleton': { name: 'Skeleton', description: 'Animated bones', hp: 35, maxHp: 35, attack: 6, defense: 2, xp: 18, loot: ['bone'] },
+                'zombie': { name: 'Zombie', description: 'A shambling corpse', hp: 40, maxHp: 40, attack: 5, defense: 3, xp: 20, loot: ['rotten-flesh'] },
+                'spider': { name: 'Giant Spider', description: 'A huge poisonous spider', hp: 28, maxHp: 28, attack: 7, defense: 1, xp: 16, loot: ['spider-silk'] },
+                'bat': { name: 'Giant Bat', description: 'A large aggressive bat', hp: 15, maxHp: 15, attack: 3, defense: 0, xp: 10, loot: ['bat-wing'] },
+                'bandit': { name: 'Bandit', description: 'A rough thug', hp: 40, maxHp: 40, attack: 7, defense: 3, xp: 20, loot: ['leather-armor'] },
+                'troll': { name: 'Troll', description: 'A massive regenerating beast', hp: 80, maxHp: 80, attack: 12, defense: 6, xp: 40, loot: ['troll-hide'] },
+                'ghost': { name: 'Ghost', description: 'A spectral apparition', hp: 30, maxHp: 30, attack: 8, defense: 1, xp: 22, loot: ['ectoplasm'] },
+                'demon': { name: 'Lesser Demon', description: 'A creature from the underworld', hp: 60, maxHp: 60, attack: 10, defense: 5, xp: 35, loot: ['demon-horn'] },
+                'dragon-wyrmling': { name: 'Dragon Wyrmling', description: 'A young dragon', hp: 100, maxHp: 100, attack: 15, defense: 8, xp: 60, loot: ['dragon-scale'] },
+                'elemental': { name: 'Fire Elemental', description: 'Living flame', hp: 70, maxHp: 70, attack: 11, defense: 4, xp: 38, loot: ['fire-essence'] }
+            };
+
+            try {
+                const headers = getHeaders();
+                for (const [id, monsterData] of Object.entries(monsters)) {
+                    const response = await fetch(`${MYSQL_API_URL}/monsters`, {
+                        method: 'POST',
+                        headers: headers,
+                        body: JSON.stringify({ id, ...monsterData })
+                    });
+                    
+                    if (response.ok) {
+                        log(`✓ Created monster: ${monsterData.name}`, 'success');
+                        allMonsters[id] = monsterData;
+                    } else {
+                        log(`⚠️ Monster ${id} might already exist`, 'warning');
+                    }
+                }
+                log('✅ Base monsters created!', 'success');
+            } catch (error) {
+                log(`❌ Error: ${error.message}`, 'error');
+            }
+        };
+
+        window.createBaseItems = async function() {
+            log('Creating base items...', 'info');
+            
+            const items = {
+                'health-potion': { name: 'Health Potion', description: 'Restores 50 HP', cost: 25, movable: true, consumable: true, healAmount: 50 },
+                'mana-potion': { name: 'Mana Potion', description: 'Restores 50 MP', cost: 25, movable: true, consumable: true, mpRestore: 50 },
+                'bread': { name: 'Bread', description: 'Fresh bread', cost: 3, movable: true, consumable: true, healAmount: 10 },
+                'ale': { name: 'Ale', description: 'Frothy ale', cost: 5, movable: true, consumable: true, healAmount: 5 },
+                'torch': { name: 'Torch', description: 'Wooden torch', cost: 10, movable: true },
+                'rope': { name: 'Rope', description: '50 feet of rope', cost: 15, movable: true },
+                'iron-sword': { name: 'Iron Sword', description: 'Sturdy iron sword', cost: 50, movable: true, isWeapon: true, weaponDamage: 10, itemType: 'weapon' },
+                'steel-sword': { name: 'Steel Sword', description: 'Sharp steel blade', cost: 100, movable: true, isWeapon: true, weaponDamage: 15, itemType: 'weapon' },
+                'rusty-dagger': { name: 'Rusty Dagger', description: 'Old rusty dagger', cost: 10, movable: true, isWeapon: true, weaponDamage: 3, itemType: 'weapon' },
+                'leather-armor': { name: 'Leather Armor', description: 'Basic leather armor', cost: 40, movable: true, isArmor: true, armorValue: 5, itemType: 'armor', slot: 'body' },
+                'chainmail': { name: 'Chainmail', description: 'Metal chainmail armor', cost: 100, movable: true, isArmor: true, armorValue: 10, itemType: 'armor', slot: 'body' },
+                'wooden-shield': { name: 'Wooden Shield', description: 'Simple wooden shield', cost: 30, movable: true, isArmor: true, armorValue: 3, itemType: 'shield', slot: 'shield' },
+                'gold-coins': { name: 'Gold Coins', description: 'A pouch of gold', cost: 20, movable: true },
+                'wolf-pelt': { name: 'Wolf Pelt', description: 'Fur from a wolf', cost: 15, movable: true },
+                'rat-tail': { name: 'Rat Tail', description: 'Disgusting rat tail', cost: 2, movable: true },
+                'bone': { name: 'Bone', description: 'Skeletal bone', cost: 5, movable: true },
+                'spider-silk': { name: 'Spider Silk', description: 'Strong spider webbing', cost: 12, movable: true },
+                'bat-wing': { name: 'Bat Wing', description: 'Leathery bat wing', cost: 8, movable: true },
+                'troll-hide': { name: 'Troll Hide', description: 'Tough troll skin', cost: 40, movable: true },
+                'ectoplasm': { name: 'Ectoplasm', description: 'Ghostly substance', cost: 25, movable: true },
+                'demon-horn': { name: 'Demon Horn', description: 'Curved demon horn', cost: 50, movable: true },
+                'dragon-scale': { name: 'Dragon Scale', description: 'Shimmering dragon scale', cost: 100, movable: true },
+                'fire-essence': { name: 'Fire Essence', description: 'Bottled elemental fire', cost: 35, movable: true },
+                'rusty-key': { name: 'Rusty Key', description: 'Old rusty key', cost: 0, movable: true, itemType: 'key' },
+                'silver-key': { name: 'Silver Key', description: 'Ornate silver key', cost: 0, movable: true, itemType: 'key' },
+                'crystal': { name: 'Magic Crystal', description: 'Glowing crystal', cost: 75, movable: true },
+                'scroll': { name: 'Ancient Scroll', description: 'Weathered parchment', cost: 30, movable: true },
+                'gem-ruby': { name: 'Ruby', description: 'Precious red gem', cost: 150, movable: true },
+                'gem-emerald': { name: 'Emerald', description: 'Precious green gem', cost: 150, movable: true },
+                'gem-sapphire': { name: 'Sapphire', description: 'Precious blue gem', cost: 150, movable: true }
+            };
+
+            try {
+                const headers = getHeaders();
+                for (const [id, itemData] of Object.entries(items)) {
+                    const response = await fetch(`${MYSQL_API_URL}/items`, {
+                        method: 'POST',
+                        headers: headers,
+                        body: JSON.stringify({ id, ...itemData })
+                    });
+                    
+                    if (response.ok) {
+                        log(`✓ Created item: ${itemData.name}`, 'success');
+                        allItems[id] = itemData;
+                    } else {
+                        log(`⚠️ Item ${id} might already exist`, 'warning');
+                    }
+                }
+                log('✅ Base items created!', 'success');
+            } catch (error) {
+                log(`❌ Error: ${error.message}`, 'error');
+            }
+        };
+
+        window.createAllBaseContent = async function() {
+            await createBaseNPCs();
+            await createBaseMonsters();
+            await createBaseItems();
+            log('🎉 All base content created!', 'success');
+        };
+
+        window.populateEmptyRooms = async function() {
+            log('Starting AI-powered room population...', 'info');
+            log('This will analyze room names/descriptions and add appropriate content', 'info');
+            
+            const emptyRooms = Object.entries(allRooms).filter(([id, r]) => 
+                (!r.npcs || r.npcs.length === 0) && 
+                (!r.monsterSpawns || r.monsterSpawns.length === 0) &&
+                (!r.items || r.items.length === 0)
+            );
+
+            log(`Found ${emptyRooms.length} empty rooms to populate`, 'info');
+
+            let updated = 0;
+            for (const [roomId, room] of emptyRooms) {
+                const updates = analyzeAndPopulate(roomId, room);
+                
+                if (updates.npcs.length > 0 || updates.monsterSpawns.length > 0 || updates.items.length > 0) {
+                    try {
+                        const response = await fetch(`${MYSQL_API_URL}/rooms/${roomId}`, {
+                            method: 'PATCH',
+                            headers: getHeaders(),
+                            body: JSON.stringify(updates)
+                        });
+                        
+                        if (response.ok) {
+                            log(`✓ Updated: ${room.name || roomId}`, 'success');
+                            updated++;
+                        } else {
+                            log(`⚠️ Failed to update: ${roomId}`, 'warning');
+                        }
+                    } catch (error) {
+                        log(`❌ Error updating ${roomId}: ${error.message}`, 'error');
+                    }
+                    
+                    // Rate limiting - wait a bit between requests
+                    await new Promise(r => setTimeout(r, 100));
+                }
+            }
+
+            log(`✅ Population complete! Updated ${updated} rooms.`, 'success');
+            await analyzeRooms(); // Refresh stats
+        };
+
+        function analyzeAndPopulate(roomId, room) {
+            const name = (room.name || '').toLowerCase();
+            const desc = (room.description || '').toLowerCase();
+            const combined = name + ' ' + desc;
+
+            const updates = {
+                npcs: [],
+                monsterSpawns: [],
+                items: []
+            };
+
+            // NPCs based on room type
+            if (combined.includes('shop') || combined.includes('store') || combined.includes('merchant')) {
+                updates.npcs.push('merchant-general');
+            }
+            if (combined.includes('guard') || combined.includes('barracks') || combined.includes('tower')) {
+                updates.npcs.push('guard-town');
+            }
+            if (combined.includes('temple') || combined.includes('shrine') || combined.includes('church')) {
+                updates.npcs.push('priest-wandering');
+            }
+            if (combined.includes('library') || combined.includes('study')) {
+                updates.npcs.push('scholar');
+            }
+            if (combined.includes('inn') || combined.includes('tavern')) {
+                updates.npcs.push('innkeeper');
+            }
+            if (combined.includes('hermit') || combined.includes('cave') && Math.random() > 0.7) {
+                updates.npcs.push('hermit');
+            }
+            if (combined.includes('beggar') || combined.includes('alley') || combined.includes('slum')) {
+                updates.npcs.push('beggar');
+            }
+            if (combined.includes('mine') || combined.includes('quarry')) {
+                updates.npcs.push('miner');
+            }
+
+            // Monsters based on environment
+            if (combined.includes('sewer') || combined.includes('cellar') || combined.includes('basement')) {
+                updates.monsterSpawns.push({ monsterId: 'rat', respawnTime: 120000 });
+                updates.monsterSpawns.push({ monsterId: 'giant-rat', respawnTime: 180000 });
+            }
+            if (combined.includes('forest') || combined.includes('woods')) {
+                updates.monsterSpawns.push({ monsterId: 'wolf', respawnTime: 200000 });
+                if (Math.random() > 0.5) updates.monsterSpawns.push({ monsterId: 'goblin', respawnTime: 240000 });
+            }
+            if (combined.includes('cave') || combined.includes('cavern') || combined.includes('grotto')) {
+                updates.monsterSpawns.push({ monsterId: 'bat', respawnTime: 150000 });
+                updates.monsterSpawns.push({ monsterId: 'spider', respawnTime: 200000 });
+            }
+            if (combined.includes('dungeon') || combined.includes('crypt') || combined.includes('tomb')) {
+                updates.monsterSpawns.push({ monsterId: 'skeleton', respawnTime: 180000 });
+                if (Math.random() > 0.6) updates.monsterSpawns.push({ monsterId: 'zombie', respawnTime: 220000 });
+            }
+            if (combined.includes('bandit') || combined.includes('hideout') || combined.includes('camp')) {
+                updates.monsterSpawns.push({ monsterId: 'bandit', respawnTime: 240000 });
+            }
+            if (combined.includes('swamp') || combined.includes('bog') || combined.includes('marsh')) {
+                updates.monsterSpawns.push({ monsterId: 'zombie', respawnTime: 200000 });
+            }
+            if (combined.includes('mountain') || combined.includes('peak') || combined.includes('cliff')) {
+                if (Math.random() > 0.7) updates.monsterSpawns.push({ monsterId: 'troll', respawnTime: 300000 });
+            }
+            if (combined.includes('haunted') || combined.includes('spirit') || combined.includes('ghost')) {
+                updates.monsterSpawns.push({ monsterId: 'ghost', respawnTime: 250000 });
+                updates.npcs.push('spirit-guardian');
+            }
+            if (combined.includes('demon') || combined.includes('hell') || combined.includes('infernal')) {
+                updates.monsterSpawns.push({ monsterId: 'demon', respawnTime: 300000 });
+            }
+            if (combined.includes('dragon') || combined.includes('wyrm') || combined.includes('lair')) {
+                updates.monsterSpawns.push({ monsterId: 'dragon-wyrmling', respawnTime: 400000 });
+            }
+
+            // Items based on environment
+            if (combined.includes('treasure') || combined.includes('vault') || combined.includes('hoard')) {
+                updates.items.push('gold-coins');
+                updates.items.push('gem-ruby');
+            }
+            if (combined.includes('library') || combined.includes('study')) {
+                updates.items.push('scroll');
+            }
+            if (combined.includes('armory') || combined.includes('weapon')) {
+                updates.items.push('iron-sword');
+                updates.items.push('leather-armor');
+            }
+            if (combined.includes('alchemist') || combined.includes('apothecary')) {
+                updates.items.push('health-potion');
+                updates.items.push('mana-potion');
+            }
+            if (combined.includes('mine') || combined.includes('quarry')) {
+                updates.items.push('crystal');
+            }
+
+            return updates;
+        }
+
+        window.populateAllRooms = async function() {
+            if (!confirm('⚠️ WARNING: This will add content to ALL 182 rooms, even those with existing content. Are you sure?')) {
+                return;
+            }
+
+            log('Force populating ALL rooms...', 'warning');
+            
+            let updated = 0;
+            for (const [roomId, room] of Object.entries(allRooms)) {
+                const updates = analyzeAndPopulate(roomId, room);
+                
+                if (updates.npcs.length > 0 || updates.monsterSpawns.length > 0 || updates.items.length > 0) {
+                    try {
+                        // Merge with existing content
+                        const mergedUpdates = {
+                            npcs: [...new Set([...(room.npcs || []), ...updates.npcs])],
+                            monsterSpawns: [...(room.monsterSpawns || []), ...updates.monsterSpawns],
+                            items: [...new Set([...(room.items || []), ...updates.items])]
+                        };
+
+                        const response = await fetch(`${MYSQL_API_URL}/rooms/${roomId}`, {
+                            method: 'PATCH',
+                            headers: getHeaders(),
+                            body: JSON.stringify(mergedUpdates)
+                        });
+                        
+                        if (response.ok) {
+                            log(`✓ Updated: ${room.name || roomId}`, 'success');
+                            updated++;
+                        }
+                    } catch (error) {
+                        log(`❌ Error: ${error.message}`, 'error');
+                    }
+                    
+                    await new Promise(r => setTimeout(r, 100));
+                }
+            }
+
+            log(`✅ Complete! Updated ${updated} rooms.`, 'success');
+            await analyzeRooms();
+        };
+
+        log('Ready! Start by clicking "Load & Analyze All Rooms from MySQL"', 'success');
+    </script>
+</body>
+</html>

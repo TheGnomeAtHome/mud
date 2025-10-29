@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Populate World Content - MUD Game</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background: #1a1a1a;
+            color: #00ff41;
+            padding: 20px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        h1 { color: #ffff00; text-align: center; }
+        .section {
+            background: #2a2a2a;
+            border: 2px solid #00ff41;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+        }
+        button {
+            background: #00ff41;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            border-radius: 3px;
+        }
+        button:hover { background: #00cc33; }
+        button:disabled { background: #666; cursor: not-allowed; }
+        #log {
+            background: #000;
+            color: #00ff41;
+            padding: 10px;
+            margin: 10px 0;
+            height: 400px;
+            overflow-y: scroll;
+            border: 1px solid #00ff41;
+            font-size: 12px;
+        }
+        .success { color: #00ff41; }
+        .error { color: #ff4444; }
+        .info { color: #00d4ff; }
+        .warning { color: #ffaa00; }
+    </style>
+</head>
+<body>
+    <h1>🗺️ Populate World Content</h1>
+    
+    <div class="section">
+        <h2>📋 What This Does</h2>
+        <p>This tool will enhance your existing world by adding:</p>
+        <ul>
+            <li><strong>NPCs</strong> - Quest givers, merchants, friendly characters</li>
+            <li><strong>Monsters</strong> - More variety with different spawn rates</li>
+            <li><strong>Items</strong> - Weapons, armor, keys, quest items</li>
+            <li><strong>New Rooms</strong> - Connected areas like dungeons, caves, temples</li>
+            <li><strong>Puzzles</strong> - Locked doors, pushable objects, hidden items</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>🎮 Select Content to Add</h2>
+        <button onclick="enhanceExistingRooms()">Enhance Existing Rooms (NPCs, Monsters, Items)</button>
+        <button onclick="addForestExpansion()">Add Forest Expansion (5 new rooms)</button>
+        <button onclick="addDungeonComplex()">Add Dungeon Complex (6 new rooms)</button>
+        <button onclick="addTownExpansion()">Add Town Expansion (4 new rooms)</button>
+        <button onclick="addTempleArea()">Add Temple Area (4 new rooms)</button>
+        <button onclick="addAllContent()">🌟 Add Everything (Recommended)</button>
+    </div>
+
+    <div class="section">
+        <h2>📜 Log</h2>
+        <div id="log"></div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getFirestore, collection, doc, setDoc, getDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDLx3I55Ro7hH7vL-y0SzwlrqdVrSZ15U4",
+            authDomain: "appleturnover-app-test2.firebaseapp.com",
+            projectId: "appleturnover-app-test2",
+            storageBucket: "appleturnover-app-test2.firebasestorage.app",
+            messagingSenderId: "785691669609",
+            appId: "1:785691669609:web:54c02a5dba00e89dd9a60d"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const APP_ID = 'mud-game';
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = type;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        // Enhanced existing rooms
+        window.enhanceExistingRooms = async function() {
+            log('Enhancing existing rooms with NPCs, monsters, and items...', 'info');
+            
+            try {
+                // Add NPCs
+                const npcs = {
+                    'barkeep': {
+                        name: 'Grimwald the Barkeep',
+                        shortName: 'Grimwald',
+                        description: 'A stout man with a weathered face and a warm smile',
+                        dialogue: ['Welcome to the Prancing Pony! Care for a drink?', 'I hear there are bandits in the forest...', 'The old temple to the north holds many secrets.'],
+                        shop: ['health-potion', 'ale', 'bread']
+                    },
+                    'shopkeeper': {
+                        name: 'Mira the Shopkeeper',
+                        shortName: 'Mira',
+                        description: 'A friendly woman with sharp eyes',
+                        dialogue: ['Looking for supplies? I have the best prices in town!', 'That sword you want costs 50 gold.', 'Be careful in the forest at night.'],
+                        shop: ['sword', 'leather-armor', 'health-potion', 'torch']
+                    },
+                    'guildmaster': {
+                        name: 'Captain Thorven',
+                        shortName: 'Thorven',
+                        description: 'A stern warrior with battle scars',
+                        dialogue: ['Welcome, adventurer! Ready to prove yourself?', 'The dungeon beneath the town is dangerous. Only the brave dare enter.', 'Complete quests to earn your rank!'],
+                        triggers: {}
+                    },
+                    'oldman': {
+                        name: 'Old Tom',
+                        shortName: 'Tom',
+                        description: 'An elderly man sitting by the fountain',
+                        dialogue: ['I used to be an adventurer like you...', 'The forest path leads to an ancient temple.', 'Beware the wolves after dark!'],
+                        triggers: {}
+                    }
+                };
+
+                for (const [id, npcData] of Object.entries(npcs)) {
+                    await setDoc(doc(db, `/artifacts/${APP_ID}/public/data/mud-npcs/${id}`), npcData);
+                    log(`✓ Created NPC: ${npcData.name}`, 'success');
+                }
+
+                // Add monsters
+                const monsters = {
+                    'wolf': {
+                        name: 'Gray Wolf',
+                        description: 'A fierce gray wolf with hungry eyes',
+                        hp: 30,
+                        maxHp: 30,
+                        attack: 5,
+                        defense: 2,
+                        xp: 15,
+                        loot: ['wolf-pelt']
+                    },
+                    'goblin': {
+                        name: 'Goblin',
+                        description: 'A small, green creature with sharp teeth',
+                        hp: 25,
+                        maxHp: 25,
+                        attack: 4,
+                        defense: 1,
+                        xp: 12,
+                        loot: ['rusty-dagger', 'gold-coins']
+                    },
+                    'bandit': {
+                        name: 'Bandit',
+                        description: 'A rough-looking thug in leather armor',
+                        hp: 40,
+                        maxHp: 40,
+                        attack: 7,
+                        defense: 3,
+                        xp: 20,
+                        loot: ['leather-armor', 'gold-coins']
+                    },
+                    'skeleton': {
+                        name: 'Skeleton Warrior',
+                        description: 'Bones held together by dark magic',
+                        hp: 35,
+                        maxHp: 35,
+                        attack: 6,
+                        defense: 2,
+                        xp: 18,
+                        loot: ['bone', 'rusty-sword']
+                    },
+                    'giant-rat': {
+                        name: 'Giant Rat',
+                        description: 'A rat the size of a small dog',
+                        hp: 20,
+                        maxHp: 20,
+                        attack: 3,
+                        defense: 1,
+                        xp: 8,
+                        loot: ['rat-tail']
+                    }
+                };
+
+                for (const [id, monsterData] of Object.entries(monsters)) {
+                    await setDoc(doc(db, `/artifacts/${APP_ID}/public/data/mud-monsters/${id}`), monsterData);
+                    log(`✓ Created monster: ${monsterData.name}`, 'success');
+                }
+
+                // Add items
+                const items = {
+                    'health-potion': {
+                        name: 'Health Potion',
+                        description: 'A red potion that restores 50 HP',
+                        cost: 25,
+                        movable: true,
+                        consumable: true,
+                        healAmount: 50
+                    },
+                    'ale': {
+                        name: 'Ale',
+                        description: 'A frothy mug of ale',
+                        cost: 5,
+                        movable: true,
+                        consumable: true,
+                        healAmount: 5
+                    },
+                    'bread': {
+                        name: 'Bread',
+                        description: 'Fresh-baked bread',
+                        cost: 3,
+                        movable: true,
+                        consumable: true,
+                        healAmount: 10
+                    },
+                    'sword': {
+                        name: 'Iron Sword',
+                        description: 'A sturdy iron sword',
+                        cost: 50,
+                        movable: true,
+                        isWeapon: true,
+                        weaponDamage: 10,
+                        itemType: 'weapon'
+                    },
+                    'leather-armor': {
+                        name: 'Leather Armor',
+                        description: 'Basic leather armor',
+                        cost: 40,
+                        movable: true,
+                        isArmor: true,
+                        armorValue: 5,
+                        itemType: 'armor',
+                        slot: 'body'
+                    },
+                    'torch': {
+                        name: 'Torch',
+                        description: 'A wooden torch',
+                        cost: 10,
+                        movable: true
+                    },
+                    'wolf-pelt': {
+                        name: 'Wolf Pelt',
+                        description: 'Fur from a wolf',
+                        cost: 15,
+                        movable: true
+                    },
+                    'rusty-dagger': {
+                        name: 'Rusty Dagger',
+                        description: 'An old, rusty dagger',
+                        cost: 10,
+                        movable: true,
+                        isWeapon: true,
+                        weaponDamage: 3,
+                        itemType: 'weapon'
+                    },
+                    'gold-coins': {
+                        name: 'Gold Coins',
+                        description: 'A small pouch of gold coins',
+                        cost: 20,
+                        movable: true
+                    },
+                    'bone': {
+                        name: 'Bone',
+                        description: 'A skeletal bone',
+                        cost: 5,
+                        movable: true
+                    },
+                    'rusty-sword': {
+                        name: 'Rusty Sword',
+                        description: 'An old, rusty sword',
+                        cost: 15,
+                        movable: true,
+                        isWeapon: true,
+                        weaponDamage: 5,
+                        itemType: 'weapon'
+                    },
+                    'rat-tail': {
+                        name: 'Rat Tail',
+                        description: 'A disgusting rat tail',
+                        cost: 2,
+                        movable: true
+                    },
+                    'dungeon-key': {
+                        name: 'Rusty Key',
+                        description: 'An old rusty key',
+                        cost: 0,
+                        movable: true,
+                        itemType: 'key'
+                    }
+                };
+
+                for (const [id, itemData] of Object.entries(items)) {
+                    await setDoc(doc(db, `/artifacts/${APP_ID}/public/data/mud-items/${id}`), itemData);
+                    log(`✓ Created item: ${itemData.name}`, 'success');
+                }
+
+                // Update existing rooms with NPCs and additional content
+                const roomUpdates = {
+                    'tavern': {
+                        npcs: ['barkeep'],
+                        items: ['ale'],
+                        isIndoor: true
+                    },
+                    'shop': {
+                        npcs: ['shopkeeper'],
+                        isIndoor: true
+                    },
+                    'guild': {
+                        npcs: ['guildmaster'],
+                        isIndoor: true
+                    },
+                    'start': {
+                        npcs: ['oldman'],
+                        isIndoor: false
+                    }
+                };
+
+                for (const [roomId, updates] of Object.entries(roomUpdates)) {
+                    const roomRef = doc(db, `/artifacts/${APP_ID}/public/data/mud-rooms/${roomId}`);
+                    const roomSnap = await getDoc(roomRef);
+                    if (roomSnap.exists()) {
+                        const roomData = roomSnap.data();
+                        await setDoc(roomRef, { ...roomData, ...updates }, { merge: true });
+                        log(`✓ Enhanced room: ${roomData.name}`, 'success');
+                    }
+                }
+
+                log('✅ Existing rooms enhanced!', 'success');
+            } catch (error) {
+                log(`❌ Error: ${error.message}`, 'error');
+            }
+        };
+
+        // Forest expansion - dense forest with dangers
+        window.addForestExpansion = async function() {
+            log('Creating forest expansion...', 'info');
+            
+            const rooms = {
+                'forest-path': {
+                    name: 'Forest Path',
+                    description: 'A narrow dirt path winds through thick trees. Animal sounds echo from all directions.',
+                    exits: { north: 'forest', south: 'forest-clearing', east: 'forest-den' },
+                    isIndoor: false,
+                    details: { path: 'Well-worn dirt path through the trees.' },
+                    monsterSpawns: [{ monsterId: 'wolf', respawnTime: 180000 }]
+                },
+                'forest-clearing': {
+                    name: 'Forest Clearing',
+                    description: 'A small clearing with sunlight streaming through the canopy. Wildflowers grow here.',
+                    exits: { north: 'forest-path', west: 'forest-ruins' },
+                    isIndoor: false,
+                    items: ['health-potion'],
+                    details: { flowers: 'Beautiful wildflowers of various colors.' }
+                },
+                'forest-den': {
+                    name: 'Wolf Den',
+                    description: 'A dark cave carved into a hillside. Bones litter the entrance.',
+                    exits: { west: 'forest-path' },
+                    isIndoor: true,
+                    details: { bones: 'Animal bones scattered everywhere.' },
+                    monsterSpawns: [
+                        { monsterId: 'wolf', respawnTime: 120000 },
+                        { monsterId: 'wolf', respawnTime: 150000 }
+                    ]
+                },
+                'forest-ruins': {
+                    name: 'Ancient Ruins',
+                    description: 'Crumbling stone walls covered in moss. This was once a grand structure.',
+                    exits: { east: 'forest-clearing', north: 'ruins-interior' },
+                    isIndoor: false,
+                    details: { 
+                        walls: 'Ancient stone walls with faded carvings.',
+                        carvings: 'Symbols you don\'t recognize, possibly magical in nature.'
+                    }
+                },
+                'ruins-interior': {
+                    name: 'Ruined Hall',
+                    description: 'The interior of the ruins. A stone altar stands at the far end.',
+                    exits: { south: 'forest-ruins' },
+                    isIndoor: true,
+                    items: ['rusty-sword'],
+                    details: { 
+                        altar: 'An ancient stone altar with strange symbols.',
+                        symbols: 'Glowing runes that pulse with faint energy.'
+                    },
+                    pushables: {
+                        altar: {
+                            description: 'A heavy stone altar',
+                            weight: 2,
+                            pushMessage: 'The altar grinds across the floor, revealing a hidden compartment!',
+                            revealsItems: ['dungeon-key']
+                        }
+                    }
+                }
+            };
+
+            try {
+                // Update forest to connect to new area
+                const forestRef = doc(db, `/artifacts/${APP_ID}/public/data/mud-rooms/forest`);
+                const forestSnap = await getDoc(forestRef);
+                if (forestSnap.exists()) {
+                    const forestData = forestSnap.data();
+                    forestData.exits = { ...forestData.exits, north: 'forest-path' };
+                    await setDoc(forestRef, forestData);
+                    log('✓ Connected forest to new path', 'success');
+                }
+
+                for (const [id, roomData] of Object.entries(rooms)) {
+                    await setDoc(doc(db, `/artifacts/${APP_ID}/public/data/mud-rooms/${id}`), roomData);
+                    log(`✓ Created room: ${roomData.name}`, 'success');
+                }
+
+                log('✅ Forest expansion complete!', 'success');
+            } catch (error) {
+                log(`❌ Error: ${error.message}`, 'error');
+            }
+        };
+
+        // Dungeon complex - dangerous underground area
+        window.addDungeonComplex = async function() {
+            log('Creating dungeon complex...', 'info');
+            
+            const rooms = {
+                'dungeon-entrance': {
+                    name: 'Dungeon Entrance',
+                    description: 'Stone steps descend into darkness. Cold air rises from below.',
+                    exits: { up: 'guild', down: 'dungeon-hall' },
+                    isIndoor: true,
+                    details: { stairs: 'Worn stone steps leading down into blackness.' }
+                },
+                'dungeon-hall': {
+                    name: 'Dark Hall',
+                    description: 'A long corridor with cells on either side. Water drips from the ceiling.',
+                    exits: { up: 'dungeon-entrance', north: 'dungeon-cells', east: 'dungeon-treasury', west: 'dungeon-torture' },
+                    isIndoor: true,
+                    monsterSpawns: [{ monsterId: 'skeleton', respawnTime: 200000 }],
+                    details: { 
+                        cells: 'Barred cells, long abandoned.',
+                        water: 'Moisture seeps through cracks in the stone.'
+                    }
+                },
+                'dungeon-cells': {
+                    name: 'Prison Cells',
+                    description: 'Rows of cells with rusty iron bars. Skeletons lie in corners.',
+                    exits: { south: 'dungeon-hall' },
+                    isIndoor: true,
+                    items: ['bone'],
+                    monsterSpawns: [
+                        { monsterId: 'skeleton', respawnTime: 180000 },
+                        { monsterId: 'giant-rat', respawnTime: 120000 }
+                    ],
+                    details: { skeletons: 'Remains of prisoners long dead.' }
+                },
+                'dungeon-treasury': {
+                    name: 'Treasury',
+                    description: 'An old vault with a heavy door. Most treasures have been looted.',
+                    exits: { west: 'dungeon-hall' },
+                    isIndoor: true,
+                    items: ['gold-coins'],
+                    details: { vault: 'An ancient vault, mostly empty now.' },
+                    lockedExits: {
+                        west: {
+                            keyId: 'dungeon-key',
+                            lockedMessage: 'The treasury door is locked with a rusty lock.',
+                            unlockMessage: 'The rusty key turns with a grinding sound. The door opens!'
+                        }
+                    }
+                },
+                'dungeon-torture': {
+                    name: 'Torture Chamber',
+                    description: 'Rusted implements of torture line the walls. A dark stain covers the floor.',
+                    exits: { east: 'dungeon-hall', south: 'dungeon-boss' },
+                    isIndoor: true,
+                    details: { 
+                        implements: 'Terrifying tools of torture, now rusted with age.',
+                        stain: 'Dark bloodstains on the stone floor.'
+                    },
+                    monsterSpawns: [{ monsterId: 'skeleton', respawnTime: 150000 }]
+                },
+                'dungeon-boss': {
+                    name: 'Champion\'s Vault',
+                    description: 'A large chamber with a throne. The air feels heavy with ancient magic.',
+                    exits: { north: 'dungeon-torture' },
+                    isIndoor: true,
+                    items: ['sword'],
+                    details: { 
+                        throne: 'A stone throne carved with skulls.',
+                        magic: 'You sense powerful magic emanating from this place.'
+                    }
+                }
+            };
+
+            try {
+                // Update guild to have dungeon entrance
+                const guildRef = doc(db, `/artifacts/${APP_ID}/public/data/mud-rooms/guild`);
+                const guildSnap = await getDoc(guildRef);
+                if (guildSnap.exists()) {
+                    const guildData = guildSnap.data();
+                    guildData.exits = { ...guildData.exits, down: 'dungeon-entrance' };
+                    await setDoc(guildRef, guildData);
+                    log('✓ Connected guild to dungeon', 'success');
+                }
+
+                for (const [id, roomData] of Object.entries(rooms)) {
+                    await setDoc(doc(db, `/artifacts/${APP_ID}/public/data/mud-rooms/${id}`), roomData);
+                    log(`✓ Created room: ${roomData.name}`, 'success');
+                }
+
+                log('✅ Dungeon complex complete!', 'success');
+            } catch (error) {
+                log(`❌ Error: ${error.message}`, 'error');
+            }
+        };
+
+        // Town expansion - marketplace, temple, residential areas
+        window.addTownExpansion = async function() {
+            log('Creating town expansion...', 'info');
+            
+            const npcs = {
+                'blacksmith': {
+                    name: 'Garrick the Blacksmith',
+                    shortName: 'Garrick',
+                    description: 'A muscular man with soot-stained hands',
+                    dialogue: ['Need a weapon? I forge the best!', 'These swords are my finest work.', 'Bring me ore and I can craft something special.'],
+                    shop: ['sword', 'leather-armor']
+                },
+                'priest': {
+                    name: 'Father Aldric',
+                    shortName: 'Aldric',
+                    description: 'A kind-faced priest in white robes',
+                    dialogue: ['May the light guide you.', 'The temple is open to all.', 'Evil stirs in the dark places of the world.'],
+                    triggers: {}
+                }
+            };
+
+            for (const [id, npcData] of Object.entries(npcs)) {
+                await setDoc(doc(db, `/artifacts/${APP_ID}/public/data/mud-npcs/${id}`), npcData);
+                log(`✓ Created NPC: ${npcData.name}`, 'success');
+            }
+
+            const rooms = {
+                'marketplace': {
+                    name: 'Town Marketplace',
+                    description: 'A bustling market with stalls and vendors. The smell of fresh bread fills the air.',
+                    exits: { south: 'shop', north: 'blacksmith-shop', east: 'temple-entrance' },
+                    isIndoor: false,
+                    details: { 
+                        stalls: 'Colorful market stalls selling various goods.',
+                        vendors: 'Merchants calling out their wares.'
+                    }
+                },
+                'blacksmith-shop': {
+                    name: 'Blacksmith',
+                    description: 'The heat from the forge is intense. Weapons and armor line the walls.',
+                    exits: { south: 'marketplace' },
+                    isIndoor: true,
+                    npcs: ['blacksmith'],
+                    details: { 
+                        forge: 'A roaring forge with red-hot coals.',
+                        weapons: 'Swords, axes, and other weapons on display.'
+                    }
+                },
+                'temple-entrance': {
+                    name: 'Temple Steps',
+                    description: 'White marble steps lead up to ornate wooden doors.',
+                    exits: { west: 'marketplace', up: 'temple-main' },
+                    isIndoor: false,
+                    details: { 
+                        steps: 'Pristine white marble steps.',
+                        doors: 'Beautifully carved wooden doors depicting holy scenes.'
+                    }
+                },
+                'temple-main': {
+                    name: 'Temple Hall',
+                    description: 'A grand hall with high ceilings. Stained glass windows cast colorful light.',
+                    exits: { down: 'temple-entrance' },
+                    isIndoor: true,
+                    npcs: ['priest'],
+                    details: { 
+                        windows: 'Magnificent stained glass depicting ancient heroes.',
+                        altar: 'A golden altar radiating divine energy.'
+                    }
+                }
+            };
+
+            try {
+                // Update shop to connect to marketplace
+                const shopRef = doc(db, `/artifacts/${APP_ID}/public/data/mud-rooms/shop`);
+                const shopSnap = await getDoc(shopRef);
+                if (shopSnap.exists()) {
+                    const shopData = shopSnap.data();
+                    shopData.exits = { ...shopData.exits, north: 'marketplace' };
+                    await setDoc(shopRef, shopData);
+                    log('✓ Connected shop to marketplace', 'success');
+                }
+
+                for (const [id, roomData] of Object.entries(rooms)) {
+                    await setDoc(doc(db, `/artifacts/${APP_ID}/public/data/mud-rooms/${id}`), roomData);
+                    log(`✓ Created room: ${roomData.name}`, 'success');
+                }
+
+                log('✅ Town expansion complete!', 'success');
+            } catch (error) {
+                log(`❌ Error: ${error.message}`, 'error');
+            }
+        };
+
+        // Temple area - mysterious ancient temple with puzzles
+        window.addTempleArea = async function() {
+            log('Creating temple area...', 'info');
+            
+            const npcs = {
+                'guardian': {
+                    name: 'Temple Guardian',
+                    shortName: 'Guardian',
+                    description: 'A spectral figure in ancient armor',
+                    dialogue: [
+                        'Only the worthy may pass.',
+                        'Prove your courage in the depths below.',
+                        'The sacred treasures are protected by ancient magic.'
+                    ],
+                    aiPersonality: 'You are the guardian of an ancient temple. You speak formally and cryptically about tests of worthiness. You give hints about pushing stone blocks to reveal secrets.',
+                    useAI: true,
+                    triggers: {
+                        'worthy': 'temple-key'
+                    }
+                }
+            };
+
+            for (const [id, npcData] of Object.entries(npcs)) {
+                await setDoc(doc(db, `/artifacts/${APP_ID}/public/data/mud-npcs/${id}`), npcData);
+                log(`✓ Created NPC: ${npcData.name}`, 'success');
+            }
+
+            const items = {
+                'temple-key': {
+                    name: 'Sacred Key',
+                    description: 'An ornate golden key with glowing runes',
+                    cost: 0,
+                    movable: true,
+                    itemType: 'key'
+                }
+            };
+
+            for (const [id, itemData] of Object.entries(items)) {
+                await setDoc(doc(db, `/artifacts/${APP_ID}/public/data/mud-items/${id}`), itemData);
+                log(`✓ Created item: ${itemData.name}`, 'success');
+            }
+
+            const rooms = {
+                'temple-path': {
+                    name: 'Overgrown Path',
+                    description: 'An ancient path leads north through thick vegetation toward stone pillars.',
+                    exits: { south: 'start', north: 'temple-gate' },
+                    isIndoor: false,
+                    details: { 
+                        vegetation: 'Vines and moss cover everything.',
+                        pillars: 'Weathered stone pillars mark the temple entrance.'
+                    },
+                    monsterSpawns: [{ monsterId: 'goblin', respawnTime: 240000 }]
+                },
+                'temple-gate': {
+                    name: 'Temple Gate',
+                    description: 'Massive stone gates stand open. Statues of ancient warriors flank the entrance.',
+                    exits: { south: 'temple-path', north: 'temple-courtyard' },
+                    isIndoor: false,
+                    npcs: ['guardian'],
+                    details: { 
+                        gates: 'Enormous stone gates covered in carved symbols.',
+                        statues: 'Imposing warrior statues with blank eyes that seem to watch you.'
+                    }
+                },
+                'temple-courtyard': {
+                    name: 'Temple Courtyard',
+                    description: 'A vast courtyard paved with ancient stones. A fountain sits dry in the center.',
+                    exits: { south: 'temple-gate', north: 'temple-inner', east: 'temple-library' },
+                    isIndoor: false,
+                    details: { 
+                        fountain: 'A dry fountain with intricate carvings.',
+                        stones: 'Some of the paving stones have unusual markings.'
+                    },
+                    pushables: {
+                        stone: {
+                            description: 'A loose paving stone',
+                            weight: 1,
+                            pushMessage: 'The stone slides aside, revealing a hidden cache!',
+                            revealsItems: ['health-potion', 'gold-coins']
+                        }
+                    }
+                },
+                'temple-library': {
+                    name: 'Ancient Library',
+                    description: 'Shelves of crumbling books and scrolls. Dust fills the air.',
+                    exits: { west: 'temple-courtyard' },
+                    isIndoor: true,
+                    details: { 
+                        books: 'Ancient tomes with knowledge long forgotten.',
+                        scrolls: 'Fragile scrolls containing arcane writings.'
+                    }
+                },
+                'temple-inner': {
+                    name: 'Inner Sanctum',
+                    description: 'The heart of the temple. A sacred altar glows with divine light.',
+                    exits: { south: 'temple-courtyard' },
+                    isIndoor: true,
+                    items: ['sword'],
+                    details: { 
+                        altar: 'A golden altar radiating pure light.',
+                        light: 'The light seems to banish all darkness and evil.'
+                    },
+                    lockedExits: {
+                        south: {
+                            keyId: 'temple-key',
+                            lockedMessage: 'A magical barrier blocks your path. You need the Sacred Key.',
+                            unlockMessage: 'The Sacred Key dissolves the magical barrier!'
+                        }
+                    }
+                }
+            };
+
+            try {
+                // Update start room to connect to temple path
+                const startRef = doc(db, `/artifacts/${APP_ID}/public/data/mud-rooms/start`);
+                const startSnap = await getDoc(startRef);
+                if (startSnap.exists()) {
+                    const startData = startSnap.data();
+                    startData.exits = { ...startData.exits, northeast: 'temple-path' };
+                    await setDoc(startRef, startData);
+                    log('✓ Connected town square to temple path', 'success');
+                }
+
+                for (const [id, roomData] of Object.entries(rooms)) {
+                    await setDoc(doc(db, `/artifacts/${APP_ID}/public/data/mud-rooms/${id}`), roomData);
+                    log(`✓ Created room: ${roomData.name}`, 'success');
+                }
+
+                log('✅ Temple area complete!', 'success');
+            } catch (error) {
+                log(`❌ Error: ${error.message}`, 'error');
+            }
+        };
+
+        // Add everything
+        window.addAllContent = async function() {
+            const buttons = document.querySelectorAll('button');
+            buttons.forEach(btn => btn.disabled = true);
+            
+            log('🌟 Starting complete world population...', 'info');
+            log('This will take a few moments...', 'warning');
+            
+            await enhanceExistingRooms();
+            await new Promise(r => setTimeout(r, 1000));
+            
+            await addForestExpansion();
+            await new Promise(r => setTimeout(r, 1000));
+            
+            await addDungeonComplex();
+            await new Promise(r => setTimeout(r, 1000));
+            
+            await addTownExpansion();
+            await new Promise(r => setTimeout(r, 1000));
+            
+            await addTempleArea();
+            
+            log('', 'info');
+            log('🎉🎉🎉 COMPLETE! 🎉🎉🎉', 'success');
+            log('Your world now has:', 'success');
+            log('• 5 original rooms (enhanced)', 'success');
+            log('• 5 forest rooms', 'success');
+            log('• 6 dungeon rooms', 'success');
+            log('• 4 town rooms', 'success');
+            log('• 5 temple rooms', 'success');
+            log('• 25 total rooms!', 'success');
+            log('• Multiple NPCs, monsters, items, puzzles, and locked doors!', 'success');
+            log('', 'info');
+            log('✨ Your players can now explore a rich, interconnected world!', 'success');
+            
+            buttons.forEach(btn => btn.disabled = false);
+        };
+
+        log('Ready to populate your world!', 'success');
+        log('Select which content to add above, or click "Add Everything" to add it all!', 'info');
+    </script>
+</body>
+</html>
