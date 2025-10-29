@@ -43,6 +43,7 @@ in all copies or substantial portions of this software.
 - **Crafting** - Poison system and item interactions
 - **Bot System** - Automated test players for development and ambient activity
 - **News/Achievement System** - Track and share player accomplishments
+- **Builder System** - Players can create and design their own rooms
 - **Admin Panel** - Comprehensive content management system
 - **Interactive Map** - Visual room network with relationship mapping
 
@@ -166,7 +167,7 @@ mud/
 ### MySQL (Static & Permanent Data)
 ```
 Tables:
-├── mud_rooms           # World geography
+├── mud_rooms           # World geography (builder-created rooms)
 ├── mud_items           # Item definitions
 ├── mud_npcs            # NPC configurations
 ├── mud_monsters        # Monster templates
@@ -175,7 +176,7 @@ Tables:
 ├── mud_guilds          # Guild data
 ├── mud_quests          # Quest definitions
 ├── mud_parties         # Party data
-└── mud_players         # Player permanent data (XP, inventory, equipment)
+└── mud_players         # Player permanent data (XP, inventory, equipment, permissions)
 ```
 
 ### Hybrid Strategy
@@ -185,13 +186,21 @@ Tables:
 
 ## 🎯 Recent Updates
 
+### Builder System (January 2025)
+- **Player World-Building**: Trusted players can create and design custom rooms
+- **11 Builder Commands**: buildroom, editdesc, addexit, removeexit, adddetail, builderrooms, and more
+- **Approval Workflow**: Admin review system for quality control
+- **Permission System**: 3-tier permissions (player/builder/admin)
+- **Complete Documentation**: In-game HTML guides and markdown references
+
 ### Firebase Optimization (October 2024)
 - **Phase 1**: Message cleanup - Automatic deletion of messages >24 hours old
 - **Phase 2**: Data caching - Static game data loaded from MySQL once per session
 - **Phase 3**: Player data split - Session data (Firebase) vs permanent data (MySQL)
 - **Result**: 80% reduction in Firebase costs while maintaining real-time performance
 
-### New Features (2024)
+### New Features (2024-2025)
+- ✅ Builder system - Player-created rooms with approval workflow
 - ✅ Quest system with prerequisites and multi-objectives
 - ✅ Guild system with guild halls
 - ✅ Party system for cooperative play
@@ -203,6 +212,7 @@ Tables:
 - ✅ Writable items (books, notes)
 - ✅ Pushable objects revealing secrets
 - ✅ Locked doors and keys
+- ✅ Debug tools and data cleanup utilities
 
 ### Roadmap
 - [ ] Mobile PWA improvements

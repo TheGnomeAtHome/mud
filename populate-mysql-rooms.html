@@ -125,20 +125,19 @@
     </div>
 
     <div class="section">
-        <h2>🎮 Step 2: Create Base Content</h2>
-        <p>Create NPCs, monsters, and items that can be placed in rooms:</p>
-        <button onclick="createBaseNPCs()">👥 Create NPCs (10 types)</button>
-        <button onclick="createBaseMonsters()">👹 Create Monsters (15 types)</button>
-        <button onclick="createBaseItems()">🎒 Create Items (30 types)</button>
-        <button onclick="createAllBaseContent()">🌟 Create All Base Content</button>
+        <h2>🎮 Step 2: Available Content</h2>
+        <div id="available-content" style="background: #000; padding: 10px; border: 1px solid #00ff41; margin: 10px 0;">
+            <p>Loading available NPCs, monsters, and items...</p>
+        </div>
     </div>
 
     <div class="section">
         <h2>⚙️ Step 3: Auto-Populate Empty Rooms</h2>
-        <p>Automatically add content to rooms based on their name/description:</p>
-        <button onclick="populateEmptyRooms()">🤖 AI Auto-Populate Empty Rooms</button>
+        <p>Automatically add content to rooms using ONLY existing NPCs, monsters, and items:</p>
+        <button onclick="populateEmptyRooms()">🤖 Smart Populate Empty Rooms</button>
         <button onclick="populateAllRooms()">🔧 Force Populate ALL Rooms (Dangerous)</button>
         <p class="warning" style="font-size: 12px;">⚠️ Force populate will ADD content to ALL rooms, even those with existing content. Use with caution!</p>
+        <p class="info" style="font-size: 12px;">✓ Only uses existing content - no new NPCs/monsters/items will be created</p>
     </div>
 
     <div class="section">
@@ -227,6 +226,9 @@
                 log(`✓ Loaded ${Object.keys(allMonsters).length} monsters`, 'success');
                 log(`✓ Loaded ${Object.keys(allItems).length} items`, 'success');
 
+                // Display available content
+                displayAvailableContent();
+
                 updateStats();
 
                 // Show sample of empty rooms
@@ -255,202 +257,42 @@
             }
         };
 
-        window.createBaseNPCs = async function() {
-            log('Creating base NPCs...', 'info');
+        function displayAvailableContent() {
+            const contentDiv = document.getElementById('available-content');
+            const npcList = Object.keys(allNPCs).join(', ');
+            const monsterList = Object.keys(allMonsters).join(', ');
+            const itemList = Object.keys(allItems).slice(0, 20).join(', ');
             
-            const npcs = {
-                'merchant-general': {
-                    name: 'Traveling Merchant',
-                    shortName: 'Merchant',
-                    description: 'A friendly merchant with a cart of goods',
-                    dialogue: ['Welcome! Take a look at my wares.', 'Best prices in the realm!'],
-                    shop: ['health-potion', 'bread', 'torch']
-                },
-                'guard-town': {
-                    name: 'Town Guard',
-                    shortName: 'Guard',
-                    description: 'A vigilant guard in steel armor',
-                    dialogue: ['Stay out of trouble.', 'Move along, citizen.', 'The roads are dangerous lately.']
-                },
-                'beggar': {
-                    name: 'Poor Beggar',
-                    shortName: 'Beggar',
-                    description: 'A ragged person asking for alms',
-                    dialogue: ['Spare a coin?', 'I haven\'t eaten in days...']
-                },
-                'hermit': {
-                    name: 'Old Hermit',
-                    shortName: 'Hermit',
-                    description: 'A mysterious old person living in solitude',
-                    dialogue: ['Few visitors come this way.', 'I know secrets of the ancient times.']
-                },
-                'priest-wandering': {
-                    name: 'Wandering Priest',
-                    shortName: 'Priest',
-                    description: 'A holy person in simple robes',
-                    dialogue: ['May the light guide you.', 'Evil lurks in dark places.']
-                },
-                'bandit-leader': {
-                    name: 'Bandit Leader',
-                    shortName: 'Bandit',
-                    description: 'A dangerous-looking rogue',
-                    dialogue: ['Your gold or your life!', 'Turn back while you can.']
-                },
-                'scholar': {
-                    name: 'Traveling Scholar',
-                    shortName: 'Scholar',
-                    description: 'A learned person with many books',
-                    dialogue: ['Knowledge is power!', 'I study the ancient texts.']
-                },
-                'miner': {
-                    name: 'Old Miner',
-                    shortName: 'Miner',
-                    description: 'A grizzled miner with a pickaxe',
-                    dialogue: ['These caves go deep.', 'I\'ve seen things down here...']
-                },
-                'spirit-guardian': {
-                    name: 'Spirit Guardian',
-                    shortName: 'Spirit',
-                    description: 'A ghostly figure watching over this place',
-                    dialogue: ['Only the worthy may pass.', 'I protect these sacred grounds.']
-                },
-                'innkeeper': {
-                    name: 'Friendly Innkeeper',
-                    shortName: 'Innkeeper',
-                    description: 'A cheerful host',
-                    dialogue: ['Welcome! Rest your weary feet.', 'I have rooms and warm meals.'],
-                    shop: ['ale', 'bread', 'health-potion']
-                }
-            };
+            contentDiv.innerHTML = `
+                <div style="margin-bottom: 10px;">
+                    <strong style="color: #ffff00;">NPCs (${Object.keys(allNPCs).length}):</strong><br>
+                    <span style="color: #888; font-size: 11px;">${npcList || 'None'}</span>
+                </div>
+                <div style="margin-bottom: 10px;">
+                    <strong style="color: #ffff00;">Monsters (${Object.keys(allMonsters).length}):</strong><br>
+                    <span style="color: #888; font-size: 11px;">${monsterList || 'None'}</span>
+                </div>
+                <div>
+                    <strong style="color: #ffff00;">Items (${Object.keys(allItems).length}):</strong><br>
+                    <span style="color: #888; font-size: 11px;">${itemList || 'None'}${Object.keys(allItems).length > 20 ? '...' : ''}</span>
+                </div>
+            `;
+        }
 
-            try {
-                const headers = getHeaders();
-                for (const [id, npcData] of Object.entries(npcs)) {
-                    const response = await fetch(`${MYSQL_API_URL}/npcs`, {
-                        method: 'POST',
-                        headers: headers,
-                        body: JSON.stringify({ id, ...npcData })
-                    });
-                    
-                    if (response.ok) {
-                        log(`✓ Created NPC: ${npcData.name}`, 'success');
-                        allNPCs[id] = npcData;
-                    } else {
-                        log(`⚠️ NPC ${id} might already exist`, 'warning');
-                    }
-                }
-                log('✅ Base NPCs created!', 'success');
-            } catch (error) {
-                log(`❌ Error: ${error.message}`, 'error');
-            }
+        window.createBaseNPCs = async function() {
+            log('⚠️ This function is deprecated. The tool now uses existing NPCs only.', 'warning');
         };
 
         window.createBaseMonsters = async function() {
-            log('Creating base monsters...', 'info');
-            
-            const monsters = {
-                'rat': { name: 'Rat', description: 'A diseased rat', hp: 10, maxHp: 10, attack: 2, defense: 0, xp: 5, loot: ['rat-tail'] },
-                'giant-rat': { name: 'Giant Rat', description: 'A rat the size of a dog', hp: 20, maxHp: 20, attack: 3, defense: 1, xp: 8, loot: ['rat-tail'] },
-                'wolf': { name: 'Wolf', description: 'A fierce gray wolf', hp: 30, maxHp: 30, attack: 5, defense: 2, xp: 15, loot: ['wolf-pelt'] },
-                'goblin': { name: 'Goblin', description: 'A small green creature', hp: 25, maxHp: 25, attack: 4, defense: 1, xp: 12, loot: ['rusty-dagger'] },
-                'orc': { name: 'Orc', description: 'A brutish warrior', hp: 50, maxHp: 50, attack: 8, defense: 4, xp: 25, loot: ['iron-sword'] },
-                'skeleton': { name: 'Skeleton', description: 'Animated bones', hp: 35, maxHp: 35, attack: 6, defense: 2, xp: 18, loot: ['bone'] },
-                'zombie': { name: 'Zombie', description: 'A shambling corpse', hp: 40, maxHp: 40, attack: 5, defense: 3, xp: 20, loot: ['rotten-flesh'] },
-                'spider': { name: 'Giant Spider', description: 'A huge poisonous spider', hp: 28, maxHp: 28, attack: 7, defense: 1, xp: 16, loot: ['spider-silk'] },
-                'bat': { name: 'Giant Bat', description: 'A large aggressive bat', hp: 15, maxHp: 15, attack: 3, defense: 0, xp: 10, loot: ['bat-wing'] },
-                'bandit': { name: 'Bandit', description: 'A rough thug', hp: 40, maxHp: 40, attack: 7, defense: 3, xp: 20, loot: ['leather-armor'] },
-                'troll': { name: 'Troll', description: 'A massive regenerating beast', hp: 80, maxHp: 80, attack: 12, defense: 6, xp: 40, loot: ['troll-hide'] },
-                'ghost': { name: 'Ghost', description: 'A spectral apparition', hp: 30, maxHp: 30, attack: 8, defense: 1, xp: 22, loot: ['ectoplasm'] },
-                'demon': { name: 'Lesser Demon', description: 'A creature from the underworld', hp: 60, maxHp: 60, attack: 10, defense: 5, xp: 35, loot: ['demon-horn'] },
-                'dragon-wyrmling': { name: 'Dragon Wyrmling', description: 'A young dragon', hp: 100, maxHp: 100, attack: 15, defense: 8, xp: 60, loot: ['dragon-scale'] },
-                'elemental': { name: 'Fire Elemental', description: 'Living flame', hp: 70, maxHp: 70, attack: 11, defense: 4, xp: 38, loot: ['fire-essence'] }
-            };
-
-            try {
-                const headers = getHeaders();
-                for (const [id, monsterData] of Object.entries(monsters)) {
-                    const response = await fetch(`${MYSQL_API_URL}/monsters`, {
-                        method: 'POST',
-                        headers: headers,
-                        body: JSON.stringify({ id, ...monsterData })
-                    });
-                    
-                    if (response.ok) {
-                        log(`✓ Created monster: ${monsterData.name}`, 'success');
-                        allMonsters[id] = monsterData;
-                    } else {
-                        log(`⚠️ Monster ${id} might already exist`, 'warning');
-                    }
-                }
-                log('✅ Base monsters created!', 'success');
-            } catch (error) {
-                log(`❌ Error: ${error.message}`, 'error');
-            }
+            log('⚠️ This function is deprecated. The tool now uses existing monsters only.', 'warning');
         };
 
         window.createBaseItems = async function() {
-            log('Creating base items...', 'info');
-            
-            const items = {
-                'health-potion': { name: 'Health Potion', description: 'Restores 50 HP', cost: 25, movable: true, consumable: true, healAmount: 50 },
-                'mana-potion': { name: 'Mana Potion', description: 'Restores 50 MP', cost: 25, movable: true, consumable: true, mpRestore: 50 },
-                'bread': { name: 'Bread', description: 'Fresh bread', cost: 3, movable: true, consumable: true, healAmount: 10 },
-                'ale': { name: 'Ale', description: 'Frothy ale', cost: 5, movable: true, consumable: true, healAmount: 5 },
-                'torch': { name: 'Torch', description: 'Wooden torch', cost: 10, movable: true },
-                'rope': { name: 'Rope', description: '50 feet of rope', cost: 15, movable: true },
-                'iron-sword': { name: 'Iron Sword', description: 'Sturdy iron sword', cost: 50, movable: true, isWeapon: true, weaponDamage: 10, itemType: 'weapon' },
-                'steel-sword': { name: 'Steel Sword', description: 'Sharp steel blade', cost: 100, movable: true, isWeapon: true, weaponDamage: 15, itemType: 'weapon' },
-                'rusty-dagger': { name: 'Rusty Dagger', description: 'Old rusty dagger', cost: 10, movable: true, isWeapon: true, weaponDamage: 3, itemType: 'weapon' },
-                'leather-armor': { name: 'Leather Armor', description: 'Basic leather armor', cost: 40, movable: true, isArmor: true, armorValue: 5, itemType: 'armor', slot: 'body' },
-                'chainmail': { name: 'Chainmail', description: 'Metal chainmail armor', cost: 100, movable: true, isArmor: true, armorValue: 10, itemType: 'armor', slot: 'body' },
-                'wooden-shield': { name: 'Wooden Shield', description: 'Simple wooden shield', cost: 30, movable: true, isArmor: true, armorValue: 3, itemType: 'shield', slot: 'shield' },
-                'gold-coins': { name: 'Gold Coins', description: 'A pouch of gold', cost: 20, movable: true },
-                'wolf-pelt': { name: 'Wolf Pelt', description: 'Fur from a wolf', cost: 15, movable: true },
-                'rat-tail': { name: 'Rat Tail', description: 'Disgusting rat tail', cost: 2, movable: true },
-                'bone': { name: 'Bone', description: 'Skeletal bone', cost: 5, movable: true },
-                'spider-silk': { name: 'Spider Silk', description: 'Strong spider webbing', cost: 12, movable: true },
-                'bat-wing': { name: 'Bat Wing', description: 'Leathery bat wing', cost: 8, movable: true },
-                'troll-hide': { name: 'Troll Hide', description: 'Tough troll skin', cost: 40, movable: true },
-                'ectoplasm': { name: 'Ectoplasm', description: 'Ghostly substance', cost: 25, movable: true },
-                'demon-horn': { name: 'Demon Horn', description: 'Curved demon horn', cost: 50, movable: true },
-                'dragon-scale': { name: 'Dragon Scale', description: 'Shimmering dragon scale', cost: 100, movable: true },
-                'fire-essence': { name: 'Fire Essence', description: 'Bottled elemental fire', cost: 35, movable: true },
-                'rusty-key': { name: 'Rusty Key', description: 'Old rusty key', cost: 0, movable: true, itemType: 'key' },
-                'silver-key': { name: 'Silver Key', description: 'Ornate silver key', cost: 0, movable: true, itemType: 'key' },
-                'crystal': { name: 'Magic Crystal', description: 'Glowing crystal', cost: 75, movable: true },
-                'scroll': { name: 'Ancient Scroll', description: 'Weathered parchment', cost: 30, movable: true },
-                'gem-ruby': { name: 'Ruby', description: 'Precious red gem', cost: 150, movable: true },
-                'gem-emerald': { name: 'Emerald', description: 'Precious green gem', cost: 150, movable: true },
-                'gem-sapphire': { name: 'Sapphire', description: 'Precious blue gem', cost: 150, movable: true }
-            };
-
-            try {
-                const headers = getHeaders();
-                for (const [id, itemData] of Object.entries(items)) {
-                    const response = await fetch(`${MYSQL_API_URL}/items`, {
-                        method: 'POST',
-                        headers: headers,
-                        body: JSON.stringify({ id, ...itemData })
-                    });
-                    
-                    if (response.ok) {
-                        log(`✓ Created item: ${itemData.name}`, 'success');
-                        allItems[id] = itemData;
-                    } else {
-                        log(`⚠️ Item ${id} might already exist`, 'warning');
-                    }
-                }
-                log('✅ Base items created!', 'success');
-            } catch (error) {
-                log(`❌ Error: ${error.message}`, 'error');
-            }
+            log('⚠️ This function is deprecated. The tool now uses existing items only.', 'warning');
         };
 
         window.createAllBaseContent = async function() {
-            await createBaseNPCs();
-            await createBaseMonsters();
-            await createBaseItems();
-            log('🎉 All base content created!', 'success');
+            log('⚠️ This function is deprecated. The tool now uses existing content only.', 'warning');
         };
 
         window.populateEmptyRooms = async function() {
@@ -507,87 +349,115 @@
                 items: []
             };
 
-            // NPCs based on room type
+            // Get available IDs from existing content
+            const availableNpcs = Object.keys(allNPCs);
+            const availableMonsters = Object.keys(allMonsters);
+            const availableItems = Object.keys(allItems);
+
+            // Helper function to check if NPC exists
+            const hasNpc = (id) => availableNpcs.includes(id);
+            const hasMonster = (id) => availableMonsters.includes(id);
+            const hasItem = (id) => availableItems.includes(id);
+
+            // NPCs based on room type (only add if they exist)
             if (combined.includes('shop') || combined.includes('store') || combined.includes('merchant')) {
-                updates.npcs.push('merchant-general');
+                if (hasNpc('merchant-general')) updates.npcs.push('merchant-general');
+                else if (hasNpc('frank')) updates.npcs.push('frank');
             }
             if (combined.includes('guard') || combined.includes('barracks') || combined.includes('tower')) {
-                updates.npcs.push('guard-town');
+                if (hasNpc('guard-town')) updates.npcs.push('guard-town');
             }
             if (combined.includes('temple') || combined.includes('shrine') || combined.includes('church')) {
-                updates.npcs.push('priest-wandering');
+                if (hasNpc('priest-wandering')) updates.npcs.push('priest-wandering');
             }
             if (combined.includes('library') || combined.includes('study')) {
-                updates.npcs.push('scholar');
+                if (hasNpc('scholar')) updates.npcs.push('scholar');
+                else if (hasNpc('mysterious-wizard')) updates.npcs.push('mysterious-wizard');
             }
             if (combined.includes('inn') || combined.includes('tavern')) {
-                updates.npcs.push('innkeeper');
+                if (hasNpc('innkeeper')) updates.npcs.push('innkeeper');
+                else if (hasNpc('barman')) updates.npcs.push('barman');
             }
-            if (combined.includes('hermit') || combined.includes('cave') && Math.random() > 0.7) {
-                updates.npcs.push('hermit');
+            if (combined.includes('smithy') || combined.includes('forge') || combined.includes('blacksmith')) {
+                if (hasNpc('bronson')) updates.npcs.push('bronson');
+                else if (hasNpc('apprentice')) updates.npcs.push('apprentice');
+            }
+            if (combined.includes('hermit') || (combined.includes('cave') && Math.random() > 0.7)) {
+                if (hasNpc('hermit')) updates.npcs.push('hermit');
             }
             if (combined.includes('beggar') || combined.includes('alley') || combined.includes('slum')) {
-                updates.npcs.push('beggar');
+                if (hasNpc('beggar')) updates.npcs.push('beggar');
             }
             if (combined.includes('mine') || combined.includes('quarry')) {
-                updates.npcs.push('miner');
+                if (hasNpc('miner')) updates.npcs.push('miner');
+            }
+            if (combined.includes('graveyard') || combined.includes('cemetery')) {
+                if (hasNpc('old_man')) updates.npcs.push('old_man');
+            }
+            
+            // Add random NPCs for generic locations
+            if (updates.npcs.length === 0 && availableNpcs.length > 0 && Math.random() > 0.85) {
+                // 15% chance to add a random NPC to any room
+                const randomNpc = availableNpcs[Math.floor(Math.random() * availableNpcs.length)];
+                updates.npcs.push(randomNpc);
             }
 
-            // Monsters based on environment
+            // Monsters based on environment (only add if they exist)
             if (combined.includes('sewer') || combined.includes('cellar') || combined.includes('basement')) {
-                updates.monsterSpawns.push({ monsterId: 'rat', respawnTime: 120000 });
-                updates.monsterSpawns.push({ monsterId: 'giant-rat', respawnTime: 180000 });
+                if (hasMonster('rat')) updates.monsterSpawns.push({ monsterId: 'rat', respawnTime: 120000 });
+                if (hasMonster('giant-rat')) updates.monsterSpawns.push({ monsterId: 'giant-rat', respawnTime: 180000 });
             }
             if (combined.includes('forest') || combined.includes('woods')) {
-                updates.monsterSpawns.push({ monsterId: 'wolf', respawnTime: 200000 });
-                if (Math.random() > 0.5) updates.monsterSpawns.push({ monsterId: 'goblin', respawnTime: 240000 });
+                if (hasMonster('wolf')) updates.monsterSpawns.push({ monsterId: 'wolf', respawnTime: 200000 });
+                if (hasMonster('goblin') && Math.random() > 0.5) updates.monsterSpawns.push({ monsterId: 'goblin', respawnTime: 240000 });
             }
             if (combined.includes('cave') || combined.includes('cavern') || combined.includes('grotto')) {
-                updates.monsterSpawns.push({ monsterId: 'bat', respawnTime: 150000 });
-                updates.monsterSpawns.push({ monsterId: 'spider', respawnTime: 200000 });
+                if (hasMonster('bat')) updates.monsterSpawns.push({ monsterId: 'bat', respawnTime: 150000 });
+                if (hasMonster('spider')) updates.monsterSpawns.push({ monsterId: 'spider', respawnTime: 200000 });
             }
             if (combined.includes('dungeon') || combined.includes('crypt') || combined.includes('tomb')) {
-                updates.monsterSpawns.push({ monsterId: 'skeleton', respawnTime: 180000 });
-                if (Math.random() > 0.6) updates.monsterSpawns.push({ monsterId: 'zombie', respawnTime: 220000 });
+                if (hasMonster('skeleton')) updates.monsterSpawns.push({ monsterId: 'skeleton', respawnTime: 180000 });
+                if (hasMonster('zombie') && Math.random() > 0.6) updates.monsterSpawns.push({ monsterId: 'zombie', respawnTime: 220000 });
             }
             if (combined.includes('bandit') || combined.includes('hideout') || combined.includes('camp')) {
-                updates.monsterSpawns.push({ monsterId: 'bandit', respawnTime: 240000 });
+                if (hasMonster('bandit')) updates.monsterSpawns.push({ monsterId: 'bandit', respawnTime: 240000 });
             }
             if (combined.includes('swamp') || combined.includes('bog') || combined.includes('marsh')) {
-                updates.monsterSpawns.push({ monsterId: 'zombie', respawnTime: 200000 });
+                if (hasMonster('zombie')) updates.monsterSpawns.push({ monsterId: 'zombie', respawnTime: 200000 });
             }
             if (combined.includes('mountain') || combined.includes('peak') || combined.includes('cliff')) {
-                if (Math.random() > 0.7) updates.monsterSpawns.push({ monsterId: 'troll', respawnTime: 300000 });
+                if (hasMonster('troll') && Math.random() > 0.7) updates.monsterSpawns.push({ monsterId: 'troll', respawnTime: 300000 });
             }
             if (combined.includes('haunted') || combined.includes('spirit') || combined.includes('ghost')) {
-                updates.monsterSpawns.push({ monsterId: 'ghost', respawnTime: 250000 });
-                updates.npcs.push('spirit-guardian');
+                if (hasMonster('ghost')) updates.monsterSpawns.push({ monsterId: 'ghost', respawnTime: 250000 });
+                if (hasNpc('spirit-guardian')) updates.npcs.push('spirit-guardian');
             }
             if (combined.includes('demon') || combined.includes('hell') || combined.includes('infernal')) {
-                updates.monsterSpawns.push({ monsterId: 'demon', respawnTime: 300000 });
+                if (hasMonster('demon')) updates.monsterSpawns.push({ monsterId: 'demon', respawnTime: 300000 });
             }
             if (combined.includes('dragon') || combined.includes('wyrm') || combined.includes('lair')) {
-                updates.monsterSpawns.push({ monsterId: 'dragon-wyrmling', respawnTime: 400000 });
+                if (hasMonster('dragon-wyrmling')) updates.monsterSpawns.push({ monsterId: 'dragon-wyrmling', respawnTime: 400000 });
             }
 
-            // Items based on environment
+            // Items based on environment (only add if they exist)
             if (combined.includes('treasure') || combined.includes('vault') || combined.includes('hoard')) {
-                updates.items.push('gold-coins');
-                updates.items.push('gem-ruby');
+                if (hasItem('gold-coins')) updates.items.push('gold-coins');
+                if (hasItem('gem-ruby')) updates.items.push('gem-ruby');
             }
             if (combined.includes('library') || combined.includes('study')) {
-                updates.items.push('scroll');
+                if (hasItem('scroll')) updates.items.push('scroll');
+                else if (hasItem('dusty-tome')) updates.items.push('dusty-tome');
             }
             if (combined.includes('armory') || combined.includes('weapon')) {
-                updates.items.push('iron-sword');
-                updates.items.push('leather-armor');
+                if (hasItem('iron-sword')) updates.items.push('iron-sword');
+                if (hasItem('leather-armor')) updates.items.push('leather-armor');
             }
             if (combined.includes('alchemist') || combined.includes('apothecary')) {
-                updates.items.push('health-potion');
-                updates.items.push('mana-potion');
+                if (hasItem('health-potion')) updates.items.push('health-potion');
+                if (hasItem('mana-potion')) updates.items.push('mana-potion');
             }
             if (combined.includes('mine') || combined.includes('quarry')) {
-                updates.items.push('crystal');
+                if (hasItem('crystal')) updates.items.push('crystal');
             }
 
             return updates;

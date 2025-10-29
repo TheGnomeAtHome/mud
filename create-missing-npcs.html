@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Missing NPCs</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .description {
+            color: #666;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="password"],
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 14px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        #output {
+            margin-top: 30px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 4px;
+            min-height: 100px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+        .success { color: #4CAF50; }
+        .error { color: #f44336; }
+        .info { color: #2196F3; }
+        .warning { color: #ff9800; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Create Missing NPCs</h1>
+        <p class="description">
+            This tool creates NPCs that are referenced in rooms but don't exist in the database.
+            It will create the <strong>guard-town</strong> NPC that's currently missing.
+        </p>
+
+        <div class="input-group">
+            <label for="apiKey">MySQL API Key:</label>
+            <input type="password" id="apiKey" placeholder="Enter your API key from api/config.php">
+        </div>
+
+        <button onclick="createMissingNpcs()">Create Missing NPCs</button>
+        
+        <div id="output"></div>
+    </div>
+
+    <script>
+        const API_URL = 'https://jphsoftware.com/api';
+        
+        function log(message, type = 'info') {
+            const output = document.getElementById('output');
+            const line = document.createElement('div');
+            line.className = type;
+            line.textContent = message;
+            output.appendChild(line);
+            output.scrollTop = output.scrollHeight;
+        }
+
+        async function createMissingNpcs() {
+            const apiKey = document.getElementById('apiKey').value.trim();
+            
+            if (!apiKey) {
+                alert('Please enter your API key');
+                return;
+            }
+
+            const output = document.getElementById('output');
+            output.innerHTML = '';
+            
+            log('=== Creating Missing NPCs ===', 'info');
+
+            // Define the missing NPC
+            const guardNpc = {
+                id: 'guard-town',
+                name: 'Town Guard',
+                shortName: 'Guard',
+                description: 'A vigilant town guard in polished armor, keeping watch over the city.',
+                dialogue: [
+                    "Stay out of trouble, citizen.",
+                    "Move along now, nothing to see here.",
+                    "The city is safe under our watch.",
+                    "Report any suspicious activity to the guard.",
+                    "Welcome to the city. Obey the laws and you'll be fine.",
+                    "We don't tolerate lawbreakers here."
+                ],
+                sells: [],
+                quests: [],
+                triggers: {},
+                personality: 'stern',
+                wandering: false
+            };
+
+            try {
+                log(`Creating NPC: ${guardNpc.name} (${guardNpc.id})...`, 'info');
+                
+                const response = await fetch(`${API_URL}/npcs/${guardNpc.id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-API-Key': apiKey
+                    },
+                    body: JSON.stringify(guardNpc)
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+
+                const result = await response.json();
+                log(`✓ Created: ${guardNpc.name}`, 'success');
+                
+            } catch (error) {
+                log(`✗ Error creating NPC: ${error.message}`, 'error');
+                return;
+            }
+
+            log('\n=== Complete ===', 'success');
+            log('The guard-town NPC has been created!', 'success');
+            log('The "mysterious figure" should now appear as "Town Guard" in your game.', 'info');
+            log('\nRefresh your game page to see the changes.', 'warning');
+        }
+    </script>
+</body>
+</html>

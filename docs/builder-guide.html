@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Builder Guide - MUD Game Guide</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <nav class="breadcrumb">
+            <a href="index.html">← Back to Guides</a> | <a href="../mud.html">Play Game</a>
+        </nav>
+        
+        <header>
+            <h1>🛠️ Builder Guide</h1>
+            <p class="subtitle">Help Expand the Game World</p>
+        </header>
+        
+        <section>
+            <h2>What is a Builder?</h2>
+            <p>Builders are trusted players who can create and design new rooms to expand the game world. As a builder, you help create immersive locations, design interesting areas, and contribute to the shared adventure.</p>
+            
+            <div class="info-box">
+                <h3>✨ Builder Benefits</h3>
+                <ul>
+                    <li>Create your own custom rooms and locations</li>
+                    <li>Design unique areas for other players to explore</li>
+                    <li>Contribute to the game's lore and world-building</li>
+                    <li>See your creations come to life</li>
+                    <li>Special recognition for your contributions</li>
+                </ul>
+            </div>
+        </section>
+        
+        <section>
+            <h2>Getting Builder Status</h2>
+            <p>Builder permissions are granted by game administrators to trusted, active players who demonstrate:</p>
+            <ul>
+                <li><strong>Creativity:</strong> Good ideas for locations and areas</li>
+                <li><strong>Writing Skills:</strong> Ability to write engaging descriptions</li>
+                <li><strong>Game Knowledge:</strong> Understanding of the game world and lore</li>
+                <li><strong>Reliability:</strong> Active participation and good standing</li>
+            </ul>
+            
+            <div class="tip-box">
+                <strong>How to Request:</strong> Message an admin in-game or demonstrate your interest by suggesting room ideas. Admins may grant builder status to promising players.
+            </div>
+        </section>
+        
+        <section>
+            <h2>Builder Commands</h2>
+            
+            <div class="command-section">
+                <h3>📐 buildroom [id] [name]</h3>
+                <p>Create a new room with a unique ID and name.</p>
+                <div class="code-block">
+                    buildroom my-cottage My Cozy Cottage
+                </div>
+                <ul>
+                    <li><strong>ID Rules:</strong> Lowercase letters, numbers, hyphens only</li>
+                    <li><strong>Must be unique:</strong> No duplicate room IDs</li>
+                    <li><strong>Good IDs:</strong> dark-forest, elven-temple, mystic-shop</li>
+                    <li><strong>Bad IDs:</strong> Room1, MyRoom, AWESOME_PLACE</li>
+                </ul>
+                <div class="warning-box">
+                    <strong>Note:</strong> Newly created rooms are marked as "pending" and require admin approval before becoming accessible.
+                </div>
+            </div>
+            
+            <div class="command-section">
+                <h3>📝 editdesc [description]</h3>
+                <p>Edit the description of the current room (must be a room you created).</p>
+                <div class="code-block">
+                    editdesc A warm and inviting cottage with wooden beams overhead and a crackling fireplace. Sunlight streams through the windows.
+                </div>
+                <ul>
+                    <li>Write 2-4 sentences for best effect</li>
+                    <li>Include sensory details (sight, sound, smell)</li>
+                    <li>Set the mood and atmosphere</li>
+                    <li>Mention notable features players can examine</li>
+                </ul>
+            </div>
+            
+            <div class="command-section">
+                <h3>🚪 addexit [direction] [room-id]</h3>
+                <p>Add an exit connecting to another room.</p>
+                <div class="code-block">
+                    addexit north forest-clearing<br>
+                    addexit south city-square
+                </div>
+                <p><strong>Valid Directions:</strong></p>
+                <ul>
+                    <li>Cardinal: north, south, east, west</li>
+                    <li>Vertical: up, down</li>
+                    <li>Diagonal: northeast (ne), northwest (nw), southeast (se), southwest (sw)</li>
+                </ul>
+                <div class="tip-box">
+                    <strong>Tip:</strong> Create two-way connections! If you go north from room A to room B, add a south exit in room B back to room A.
+                </div>
+            </div>
+            
+            <div class="command-section">
+                <h3>🔒 removeexit [direction]</h3>
+                <p>Remove an exit from the current room.</p>
+                <div class="code-block">
+                    removeexit north
+                </div>
+            </div>
+            
+            <div class="command-section">
+                <h3>🔍 adddetail [keyword] [description]</h3>
+                <p>Add an examinable detail that players can look at closely.</p>
+                <div class="code-block">
+                    adddetail fireplace A warm fire crackles invitingly in the stone hearth, casting dancing shadows on the walls.<br>
+                    adddetail window Through the glass you can see the forest outside, peaceful and serene.
+                </div>
+                <ul>
+                    <li>Add 3-5 details per room</li>
+                    <li>Mention details in your main description</li>
+                    <li>Reward player curiosity</li>
+                    <li>Good keywords: fireplace, window, painting, statue, altar</li>
+                </ul>
+            </div>
+            
+            <div class="command-section">
+                <h3>📋 builderrooms</h3>
+                <p>List all rooms you've created and their approval status.</p>
+                <div class="code-block">
+                    builderrooms
+                </div>
+                <p>Shows:</p>
+                <ul>
+                    <li><span class="warning">[PENDING]</span> - Waiting for admin approval</li>
+                    <li><span class="success">[APPROVED]</span> - Live and accessible to players</li>
+                </ul>
+            </div>
+        </section>
+        
+        <section>
+            <h2>Building Workflow</h2>
+            
+            <div class="step-box">
+                <h3>Step 1: Create the Room</h3>
+                <div class="code-block">
+                    buildroom mystic-grove Mystic Grove
+                </div>
+                <p>Room is created and marked as pending approval.</p>
+            </div>
+            
+            <div class="step-box">
+                <h3>Step 2: Write the Description</h3>
+                <div class="code-block">
+                    editdesc Ancient trees tower overhead, their branches forming a natural cathedral. Soft, ethereal light filters through the canopy, and the air hums with magical energy. A circle of standing stones marks the center of the grove.
+                </div>
+            </div>
+            
+            <div class="step-box">
+                <h3>Step 3: Add Details</h3>
+                <div class="code-block">
+                    adddetail trees These ancient oaks are centuries old, their bark covered in glowing runes.<br>
+                    adddetail stones The standing stones are arranged in a perfect circle, each carved with mystical symbols.<br>
+                    adddetail light The light seems to come from everywhere and nowhere, neither sun nor moon.
+                </div>
+            </div>
+            
+            <div class="step-box">
+                <h3>Step 4: Wait for Approval</h3>
+                <p>An admin will review your room using the <code>reviewrooms</code> command. If approved, you'll receive an in-game notification!</p>
+            </div>
+            
+            <div class="step-box">
+                <h3>Step 5: Connect to the World</h3>
+                <p>Once approved, navigate to a connected location and add an exit:</p>
+                <div class="code-block">
+                    go forest-path<br>
+                    addexit west mystic-grove
+                </div>
+                <p>Don't forget the reverse exit!</p>
+                <div class="code-block">
+                    go west<br>
+                    addexit east forest-path
+                </div>
+            </div>
+        </section>
+        
+        <section>
+            <h2>Writing Great Descriptions</h2>
+            
+            <h3>The Formula</h3>
+            <ol>
+                <li><strong>Opening:</strong> Overall impression and dominant feature</li>
+                <li><strong>Details:</strong> Sensory information and atmosphere</li>
+                <li><strong>Atmosphere:</strong> Mood and feeling of the location</li>
+                <li><strong>Notable Features:</strong> Things players can interact with</li>
+            </ol>
+            
+            <h3>Example: Dark Forest</h3>
+            <div class="example-box">
+                <strong>❌ Bad Description:</strong>
+                <p class="bad-example">This is a dark forest. There are trees here. It's scary.</p>
+                
+                <strong>✅ Good Description:</strong>
+                <p class="good-example">The trees grow so close together here that barely any light reaches the forest floor. Strange sounds echo through the darkness - rustling leaves, snapping twigs, and distant howls. The air is cold and damp, heavy with the scent of moss and decay. Ancient oaks loom overhead like silent sentinels.</p>
+            </div>
+            
+            <h3>Tips for Descriptions</h3>
+            <ul>
+                <li>Use all five senses: sight, sound, smell, touch, taste</li>
+                <li>Show, don't tell: "cold wind bites your skin" > "it's cold"</li>
+                <li>Create atmosphere with word choice</li>
+                <li>Mention 2-3 examinable details in the description</li>
+                <li>Keep it between 2-4 sentences (50-100 words)</li>
+                <li>Match the tone to the location</li>
+            </ul>
+        </section>
+        
+        <section>
+            <h2>Room Types & Examples</h2>
+            
+            <div class="example-box">
+                <h3>🏰 City/Town Rooms</h3>
+                <strong>Example: Market Square</strong>
+                <p>The bustling market square is alive with activity. Vendors hawk their wares from colorful stalls, shouting prices and promises. The smell of fresh bread mingles with exotic spices, and the cobblestones are worn smooth by countless feet. A fountain burbles in the center, providing a meeting point for locals.</p>
+                <p><strong>Details to add:</strong> fountain, stalls, cobblestones, vendors</p>
+            </div>
+            
+            <div class="example-box">
+                <h3>🌲 Wilderness Rooms</h3>
+                <strong>Example: Mountain Pass</strong>
+                <p>A narrow path winds along the mountainside, with sheer cliffs rising on one side and a dizzying drop on the other. The wind howls through the pass, carrying snow even in summer. Far below, you can see the valley floor, tiny and distant. The air is thin and cold here.</p>
+                <p><strong>Details to add:</strong> cliff, valley, path, wind</p>
+            </div>
+            
+            <div class="example-box">
+                <h3>🏛️ Dungeon/Interior Rooms</h3>
+                <strong>Example: Ancient Crypt</strong>
+                <p>Dust thick as snow covers every surface in this burial chamber. Stone sarcophagi line the walls, their lids carved with forgotten kings and queens. The air is stale and cold, untouched for centuries. A single beam of light from a crack above illuminates the center of the room.</p>
+                <p><strong>Details to add:</strong> sarcophagi, carvings, light, dust</p>
+            </div>
+            
+            <div class="example-box">
+                <h3>🏪 Shop/Service Rooms</h3>
+                <strong>Example: Blacksmith's Forge</strong>
+                <p>The heat from the forge hits you like a physical force. A burly smith hammers away at glowing metal, sparks flying with each strike. Weapons and armor hang on the walls, ranging from simple daggers to ornate full plate. The smell of hot metal and coal fills the air.</p>
+                <p><strong>Details to add:</strong> forge, weapons, smith, anvil</p>
+            </div>
+        </section>
+        
+        <section>
+            <h2>Best Practices</h2>
+            
+            <div class="do-dont">
+                <div class="do">
+                    <h3>✅ DO</h3>
+                    <ul>
+                        <li>Create coherent areas (group related rooms)</li>
+                        <li>Think about logical geography</li>
+                        <li>Make two-way connections</li>
+                        <li>Write vivid, immersive descriptions</li>
+                        <li>Add interesting examinable details</li>
+                        <li>Consider the player experience</li>
+                        <li>Match the game's tone and lore</li>
+                        <li>Proofread before submitting</li>
+                    </ul>
+                </div>
+                
+                <div class="dont">
+                    <h3>❌ DON'T</h3>
+                    <ul>
+                        <li>Create disconnected random rooms</li>
+                        <li>Make one-way exits without good reason</li>
+                        <li>Copy descriptions from other sources</li>
+                        <li>Use modern references or anachronisms</li>
+                        <li>Create maze-like confusing layouts</li>
+                        <li>Add offensive or inappropriate content</li>
+                        <li>Make rooms just to increase room count</li>
+                        <li>Rush - take time to craft quality</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+        
+        <section>
+            <h2>Permissions & Restrictions</h2>
+            
+            <h3>What Builders CAN Do:</h3>
+            <ul>
+                <li>✅ Create unlimited new rooms</li>
+                <li>✅ Edit rooms they created</li>
+                <li>✅ Add exits to their own rooms</li>
+                <li>✅ Add details to their own rooms</li>
+                <li>✅ View all their created rooms</li>
+            </ul>
+            
+            <h3>What Builders CANNOT Do:</h3>
+            <ul>
+                <li>❌ Edit other players' rooms</li>
+                <li>❌ Add NPCs or monsters to rooms</li>
+                <li>❌ Add items to rooms</li>
+                <li>❌ Approve their own rooms</li>
+                <li>❌ Delete rooms once created</li>
+                <li>❌ Add exits to pending (unapproved) rooms</li>
+            </ul>
+            
+            <div class="info-box">
+                <strong>Need More?</strong> If you need to add NPCs, monsters, or items to your rooms, or make other advanced changes, ask an admin for help!
+            </div>
+        </section>
+        
+        <section>
+            <h2>Approval Process</h2>
+            
+            <h3>What Admins Review:</h3>
+            <ul>
+                <li><strong>Quality:</strong> Well-written, engaging descriptions</li>
+                <li><strong>Appropriateness:</strong> No offensive or rule-breaking content</li>
+                <li><strong>Coherence:</strong> Fits the game world and lore</li>
+                <li><strong>Balance:</strong> Not exploitative or game-breaking</li>
+                <li><strong>Spelling/Grammar:</strong> Clean, professional writing</li>
+            </ul>
+            
+            <h3>Timeline:</h3>
+            <ul>
+                <li>Most rooms reviewed within 24 hours</li>
+                <li>You'll receive an in-game notification</li>
+                <li>Approved rooms become immediately accessible</li>
+                <li>Rejected rooms are deleted with notification</li>
+            </ul>
+            
+            <h3>If Rejected:</h3>
+            <ul>
+                <li>Don't take it personally - admins want quality</li>
+                <li>Ask for feedback to improve</li>
+                <li>Revise and try again</li>
+                <li>Learn from approved examples</li>
+            </ul>
+        </section>
+        
+        <section>
+            <h2>Troubleshooting</h2>
+            
+            <h3>Common Issues:</h3>
+            
+            <div class="faq-item">
+                <strong>Q: "You need builder permissions"</strong>
+                <p>A: Ask an admin to run <code>makebuilder YourName</code></p>
+            </div>
+            
+            <div class="faq-item">
+                <strong>Q: "Room ID already exists"</strong>
+                <p>A: Choose a different, unique ID. Try adding numbers: cottage-1, cottage-2</p>
+            </div>
+            
+            <div class="faq-item">
+                <strong>Q: "Cannot add exits to pending rooms"</strong>
+                <p>A: Wait for admin approval first. Once approved, you can add exits.</p>
+            </div>
+            
+            <div class="faq-item">
+                <strong>Q: "You can only edit rooms you created"</strong>
+                <p>A: This is by design. You can only modify your own rooms. Ask an admin to edit others.</p>
+            </div>
+            
+            <div class="faq-item">
+                <strong>Q: "Target room doesn't exist"</strong>
+                <p>A: Check the room ID spelling. Use <code>builderrooms</code> to see your room IDs.</p>
+            </div>
+        </section>
+        
+        <section>
+            <h2>Builder Etiquette</h2>
+            
+            <ul>
+                <li><strong>Quality over Quantity:</strong> One great room > ten mediocre ones</li>
+                <li><strong>Respect the Lore:</strong> Stay true to the game's theme and world</li>
+                <li><strong>Collaborate:</strong> Talk to other builders, share ideas</li>
+                <li><strong>Accept Feedback:</strong> Learn from admin suggestions</li>
+                <li><strong>Give Credit:</strong> Acknowledge inspiration when appropriate</li>
+                <li><strong>Be Patient:</strong> Admins review in their spare time</li>
+                <li><strong>Have Fun:</strong> Building should be enjoyable!</li>
+            </ul>
+        </section>
+        
+        <section>
+            <h2>Quick Reference</h2>
+            
+            <table class="stat-table">
+                <tr>
+                    <th>Command</th>
+                    <th>What It Does</th>
+                </tr>
+                <tr>
+                    <td><code>buildroom [id] [name]</code></td>
+                    <td>Create new room</td>
+                </tr>
+                <tr>
+                    <td><code>editdesc [text]</code></td>
+                    <td>Change room description</td>
+                </tr>
+                <tr>
+                    <td><code>addexit [dir] [room]</code></td>
+                    <td>Connect to another room</td>
+                </tr>
+                <tr>
+                    <td><code>removeexit [dir]</code></td>
+                    <td>Delete an exit</td>
+                </tr>
+                <tr>
+                    <td><code>adddetail [word] [text]</code></td>
+                    <td>Add examinable detail</td>
+                </tr>
+                <tr>
+                    <td><code>builderrooms</code></td>
+                    <td>List your rooms</td>
+                </tr>
+            </table>
+        </section>
+        
+        <nav class="next-guides">
+            <h3>Continue Learning:</h3>
+            <a href="commands.html" class="guide-link">⌨️ Command Reference</a>
+            <a href="getting-started.html" class="guide-link">🎯 Getting Started</a>
+            <a href="tips-tricks.html" class="guide-link">💡 Tips & Tricks</a>
+        </nav>
+        
+        <footer>
+            <p><a href="index.html">← Back to All Guides</a></p>
+        </footer>
+    </div>
+    
+    <style>
+        .command-section {
+            background: #f5f5f5;
+            padding: 15px;
+            margin: 15px 0;
+            border-left: 4px solid #4CAF50;
+            border-radius: 4px;
+        }
+        
+        .command-section h3 {
+            margin-top: 0;
+            color: #2c5f2d;
+        }
+        
+        .code-block {
+            background: #2d2d2d;
+            color: #00ff41;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            margin: 10px 0;
+            overflow-x: auto;
+        }
+        
+        .step-box {
+            background: #e3f2fd;
+            padding: 15px;
+            margin: 15px 0;
+            border-left: 4px solid #2196F3;
+            border-radius: 4px;
+        }
+        
+        .step-box h3 {
+            margin-top: 0;
+            color: #1976D2;
+        }
+        
+        .example-box {
+            background: #fff3e0;
+            padding: 15px;
+            margin: 15px 0;
+            border-left: 4px solid #FF9800;
+            border-radius: 4px;
+        }
+        
+        .example-box h3 {
+            margin-top: 0;
+            color: #E65100;
+        }
+        
+        .bad-example {
+            background: #ffebee;
+            padding: 10px;
+            border-left: 3px solid #f44336;
+            font-style: italic;
+        }
+        
+        .good-example {
+            background: #e8f5e9;
+            padding: 10px;
+            border-left: 3px solid #4CAF50;
+            font-style: italic;
+        }
+        
+        .do-dont {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 20px 0;
+        }
+        
+        .do {
+            background: #e8f5e9;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        
+        .dont {
+            background: #ffebee;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        
+        .do h3 {
+            color: #2e7d32;
+            margin-top: 0;
+        }
+        
+        .dont h3 {
+            color: #c62828;
+            margin-top: 0;
+        }
+        
+        .faq-item {
+            background: #f5f5f5;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        
+        .faq-item strong {
+            color: #1976D2;
+            display: block;
+            margin-bottom: 5px;
+        }
+        
+        @media (max-width: 768px) {
+            .do-dont {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</body>
+</html>

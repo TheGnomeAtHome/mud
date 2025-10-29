@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Remove Invalid Item References</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .description {
+            color: #666;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="password"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 14px;
+        }
+        button {
+            background: #f44336;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #da190b;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        button.scan {
+            background: #2196F3;
+        }
+        button.scan:hover {
+            background: #0b7dda;
+        }
+        #output {
+            margin-top: 30px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 4px;
+            min-height: 100px;
+            max-height: 500px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+        .success { color: #4CAF50; }
+        .error { color: #f44336; }
+        .info { color: #2196F3; }
+        .warning { color: #ff9800; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Remove Invalid Item References</h1>
+        <p class="description">
+            This tool scans all rooms for item IDs that don't exist in the database and removes them.
+            <strong>This will fix any "unknown object" issues.</strong>
+        </p>
+
+        <div class="input-group">
+            <label for="apiKey">MySQL API Key:</label>
+            <input type="password" id="apiKey" placeholder="Enter your API key from api/config.php">
+        </div>
+
+        <button class="scan" onclick="scanForInvalidItems()">Scan for Invalid Items</button>
+        <button onclick="removeInvalidItems()" id="removeBtn" disabled>Remove Invalid Items</button>
+        
+        <div id="output"></div>
+    </div>
+
+    <script>
+        const API_URL = 'https://jphsoftware.com/api';
+        let invalidItemData = null;
+        
+        function log(message, type = 'info') {
+            const output = document.getElementById('output');
+            const line = document.createElement('div');
+            line.className = type;
+            line.textContent = message;
+            output.appendChild(line);
+            output.scrollTop = output.scrollHeight;
+        }
+
+        async function scanForInvalidItems() {
+            const apiKey = document.getElementById('apiKey').value.trim();
+            
+            if (!apiKey) {
+                alert('Please enter your API key');
+                return;
+            }
+
+            const output = document.getElementById('output');
+            output.innerHTML = '';
+            
+            log('=== Scanning for Invalid Item References ===', 'info');
+
+            try {
+                // Fetch all items
+                log('Fetching items...', 'info');
+                const itemsResponse = await fetch(`${API_URL}/items`);
+                if (!itemsResponse.ok) throw new Error('Failed to fetch items');
+                const itemsData = await itemsResponse.json();
+                const validItemIds = new Set(Object.keys(itemsData));
+                log(`Found ${validItemIds.size} valid items`, 'success');
+
+                // Fetch all rooms
+                log('Fetching rooms...', 'info');
+                const roomsResponse = await fetch(`${API_URL}/rooms`);
+                if (!roomsResponse.ok) throw new Error('Failed to fetch rooms');
+                const roomsData = await roomsResponse.json();
+                log(`Scanning ${Object.keys(roomsData).length} rooms...`, 'success');
+
+                // Find invalid items
+                const invalidRooms = {};
+                let totalInvalidRefs = 0;
+
+                for (const [roomId, room] of Object.entries(roomsData)) {
+                    const invalidItems = [];
+                    
+                    // Check if items is an array of strings or array of objects
+                    if (room.items && Array.isArray(room.items) && room.items.length > 0) {
+                        room.items.forEach(item => {
+                            let itemId;
+                            
+                            // Handle both string IDs and object format {id: "...", quantity: N}
+                            if (typeof item === 'string') {
+                                itemId = item;
+                            } else if (item && typeof item === 'object' && item.id) {
+                                itemId = item.id;
+                            }
+                            
+                            if (itemId && !validItemIds.has(itemId)) {
+                                invalidItems.push(item);
+                            }
+                        });
+                    }
+                    
+                    if (invalidItems.length > 0) {
+                        invalidRooms[roomId] = {
+                            room: room,
+                            invalidItems: invalidItems
+                        };
+                        totalInvalidRefs += invalidItems.length;
+                    }
+                }
+
+                invalidItemData = invalidRooms;
+
+                log('\n=== Scan Results ===', 'warning');
+                if (Object.keys(invalidRooms).length === 0) {
+                    log('✓ No invalid item references found!', 'success');
+                    document.getElementById('removeBtn').disabled = true;
+                } else {
+                    log(`Found ${totalInvalidRefs} invalid item references in ${Object.keys(invalidRooms).length} rooms:`, 'warning');
+                    log('', 'info');
+                    
+                    for (const [roomId, data] of Object.entries(invalidRooms)) {
+                        log(`  Room: ${roomId} (${data.room.name})`, 'info');
+                        data.invalidItems.forEach(item => {
+                            const itemId = typeof item === 'string' ? item : item.id;
+                            log(`    ✗ Invalid item: ${itemId}`, 'error');
+                        });
+                    }
+                    
+                    log('\nClick "Remove Invalid Items" to clean up these references.', 'warning');
+                    document.getElementById('removeBtn').disabled = false;
+                }
+
+            } catch (error) {
+                log(`✗ Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function removeInvalidItems() {
+            const apiKey = document.getElementById('apiKey').value.trim();
+            
+            if (!apiKey || !invalidItemData) {
+                alert('Please scan for invalid items first');
+                return;
+            }
+
+            if (!confirm(`Remove invalid item references from ${Object.keys(invalidItemData).length} rooms?`)) {
+                return;
+            }
+
+            log('\n=== Removing Invalid Item References ===', 'info');
+
+            let successCount = 0;
+            let errorCount = 0;
+
+            for (const [roomId, data] of Object.entries(invalidItemData)) {
+                try {
+                    // Filter out invalid items
+                    const validItems = data.room.items.filter(item => {
+                        const itemId = typeof item === 'string' ? item : item.id;
+                        return !data.invalidItems.some(invalid => {
+                            const invalidId = typeof invalid === 'string' ? invalid : invalid.id;
+                            return itemId === invalidId;
+                        });
+                    });
+                    
+                    // Update room
+                    const updatedRoom = { ...data.room, items: validItems };
+                    
+                    const response = await fetch(`${API_URL}/rooms/${roomId}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-API-Key': apiKey
+                        },
+                        body: JSON.stringify(updatedRoom)
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+
+                    log(`✓ Cleaned room: ${roomId} (removed ${data.invalidItems.length} invalid items)`, 'success');
+                    successCount++;
+                    
+                    // Small delay to avoid overwhelming the API
+                    await new Promise(resolve => setTimeout(resolve, 100));
+
+                } catch (error) {
+                    log(`✗ Failed to update room ${roomId}: ${error.message}`, 'error');
+                    errorCount++;
+                }
+            }
+
+            log('\n=== Complete ===', 'success');
+            log(`Successfully cleaned: ${successCount} rooms`, 'success');
+            if (errorCount > 0) {
+                log(`Failed: ${errorCount} rooms`, 'error');
+            }
+            log('\nRefresh your game page - the "unknown object" should be gone!', 'warning');
+            
+            document.getElementById('removeBtn').disabled = true;
+            invalidItemData = null;
+        }
+    </script>
+</body>
+</html>

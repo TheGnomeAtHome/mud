@@ -4917,7 +4917,6 @@ Examples:
                 
                 if (!shopkeeper) {
                     // Find any NPC with sells array in the room
-                    const currentRoom = gameWorld[currentPlayerRoomId];
                     const roomNpcIds = currentRoom?.npcs || [];
                     console.log('[List Command] Checking all NPCs in room:', roomNpcIds);
                     const npcsInRoom = roomNpcIds
@@ -9084,8 +9083,8 @@ Examples:
                     }
                     
                     // Show available quests from NPCs in the room
-                    const currentRoom = gameWorld[playerDataQuest.roomId];
-                    const npcIdsInRoom = currentRoom?.npcs || [];
+                    const questRoom = gameWorld[playerDataQuest.roomId];
+                    const npcIdsInRoom = questRoom?.npcs || [];
                     console.log(`[QUESTS DEBUG] NPCs in room:`, npcIdsInRoom);
                     console.log(`[QUESTS DEBUG] All quests:`, Object.keys(gameQuests));
                     const availableQuests = Object.values(gameQuests).filter(quest => {
@@ -9755,9 +9754,24 @@ Examples:
                 logToTerminal("Weather: 'weather' to check current conditions and your status.", "system");
                 logToTerminal("Accessibility: Type 'screenreader' to enable/disable screen reader mode for visually impaired players.", "system");
                 logToTerminal("Test AI: Type 'test ai' to check if AI is working.", "system");
+                if (gamePlayers[userId]?.isBuilder || gamePlayers[userId]?.isAdmin) {
+                    logToTerminal("--- Builder Commands ---", "system");
+                    logToTerminal("buildroom [id] [name] - Create a new room from your current location", "system");
+                    logToTerminal("editdesc [description] - Edit current room's description", "system");
+                    logToTerminal("addexit [direction] [room-id] - Add an exit to another room", "system");
+                    logToTerminal("removeexit [direction] - Remove an exit", "system");
+                    logToTerminal("adddetail [keyword] [description] - Add examinable detail to room", "system");
+                    logToTerminal("builderrooms - List all rooms you've built", "system");
+                }
                 if (gamePlayers[userId]?.isAdmin) {
                     logToTerminal("--- Admin Commands ---", "system");
                     logToTerminal("learn [spell name] - Learn any spell instantly", "system");
+                    logToTerminal("debug - Check current room for missing NPC/item/monster data", "system");
+                    logToTerminal("makebuilder [player name] - Grant builder permissions", "system");
+                    logToTerminal("removebuilder [player name] - Revoke builder permissions", "system");
+                    logToTerminal("reviewrooms - List pending rooms for approval", "system");
+                    logToTerminal("approveroom [room-id] - Approve a pending room", "system");
+                    logToTerminal("rejectroom [room-id] - Reject a pending room", "system");
                     logToTerminal("startbots [count] - Start bot system (default: 3 bots)", "system");
                     logToTerminal("stopbots - Stop bot system", "system");
                     logToTerminal("spawnbot - Manually spawn one bot", "system");
@@ -9868,6 +9882,622 @@ Examples:
                     logToTerminal(`Alias '${shortcutToRemove}' removed.`, "success");
                 } catch (error) {
                     logToTerminal(`Error removing alias: ${error.message}`, "error");
+                }
+                break;
+
+            case 'debug':
+                // Debug command to find data issues
+                if (!gamePlayers[userId]?.isAdmin) {
+                    logToTerminal("You don't have permission to use this command.", "error");
+                    break;
+                }
+                
+                const player = gamePlayers[userId];
+                const debugRoomId = player.roomId || player.currentRoom;
+                const debugRoom = gameWorld[debugRoomId];
+                
+                logToTerminal("═══ Room Debug Info ═══", "system");
+                logToTerminal(`Room ID: ${debugRoomId || 'UNDEFINED'}`, "game");
+                logToTerminal(`Room Name: ${debugRoom?.name || 'UNDEFINED'}`, "game");
+                logToTerminal(`Player Data: roomId=${player.roomId}, currentRoom=${player.currentRoom}`, "game");
+                
+                if (debugRoom?.npcs && debugRoom.npcs.length > 0) {
+                    logToTerminal("\nNPCs in this room:", "system");
+                    debugRoom.npcs.forEach(npcId => {
+                        const npcExists = gameNpcs[npcId];
+                        if (npcExists) {
+                            logToTerminal(`  ✓ ${npcId}: ${npcExists.name}`, "success");
+                        } else {
+                            logToTerminal(`  ✗ ${npcId}: MISSING NPC DATA`, "error");
+                        }
+                    });
+                } else {
+                    logToTerminal("No NPCs in this room.", "game");
+                }
+                
+                if (debugRoom?.monsters && debugRoom.monsters.length > 0) {
+                    logToTerminal("\nMonsters in this room:", "system");
+                    debugRoom.monsters.forEach(monsterId => {
+                        const monsterExists = gameMonsters[monsterId];
+                        if (monsterExists) {
+                            logToTerminal(`  ✓ ${monsterId}: ${monsterExists.name}`, "success");
+                        } else {
+                            logToTerminal(`  ✗ ${monsterId}: MISSING MONSTER DATA`, "error");
+                        }
+                    });
+                } else {
+                    logToTerminal("No monsters in this room.", "game");
+                }
+                
+                if (debugRoom?.items && debugRoom.items.length > 0) {
+                    logToTerminal("\nItems in this room:", "system");
+                    debugRoom.items.forEach(itemId => {
+                        const itemExists = gameItems[itemId];
+                        if (itemExists) {
+                            logToTerminal(`  ✓ ${itemId}: ${itemExists.name}`, "success");
+                        } else {
+                            logToTerminal(`  ✗ ${itemId}: MISSING ITEM DATA`, "error");
+                        }
+                    });
+                } else {
+                    logToTerminal("No items in this room.", "game");
+                }
+                break;
+            
+            case 'buildroom':
+                // Create a new room from current location
+                if (!gamePlayers[userId]?.isBuilder && !gamePlayers[userId]?.isAdmin) {
+                    logToTerminal("You need builder permissions to create rooms.", "error");
+                    logToTerminal("Ask an admin to grant you builder status.", "system");
+                    break;
+                }
+
+                if (!target) {
+                    logToTerminal("Usage: buildroom [room-id] [room name]", "system");
+                    logToTerminal("Example: buildroom my-cottage My Cozy Cottage", "system");
+                    break;
+                }
+
+                const buildParts = originalInput.match(/^buildroom\s+(\S+)\s+(.+)$/i);
+                if (!buildParts) {
+                    logToTerminal("Usage: buildroom [room-id] [room name]", "error");
+                    break;
+                }
+
+                const newRoomId = buildParts[1].toLowerCase();
+                const newRoomName = buildParts[2].trim();
+
+                // Check if room already exists
+                if (gameWorld[newRoomId]) {
+                    logToTerminal(`Room ID "${newRoomId}" already exists!`, "error");
+                    break;
+                }
+
+                // Validate room ID format (alphanumeric and hyphens only)
+                if (!/^[a-z0-9-]+$/.test(newRoomId)) {
+                    logToTerminal("Room ID must contain only lowercase letters, numbers, and hyphens.", "error");
+                    break;
+                }
+
+                try {
+                    const playerData = gamePlayers[userId];
+                    const currentRoomId = playerData.roomId;
+                    
+                    const newRoom = {
+                        id: newRoomId,
+                        name: newRoomName,
+                        description: "A newly created room. Use 'editdesc' to add a description.",
+                        exits: {},
+                        items: [],
+                        npcs: [],
+                        monsterSpawns: [],
+                        details: {},
+                        createdBy: userId,
+                        createdAt: Date.now(),
+                        pending: !gamePlayers[userId]?.isAdmin, // Admins' rooms auto-approve
+                        isIndoor: false
+                    };
+
+                    // Save to MySQL via API
+                    const apiKey = 'cu4s2YmwWdpMGZ8PfLaJC6RTje1FNSbO'; // TODO: Move to config
+                    const response = await fetch('https://jphsoftware.com/api/rooms', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-API-Key': apiKey
+                        },
+                        body: JSON.stringify(newRoom)
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+
+                    // Add to local cache
+                    gameWorld[newRoomId] = newRoom;
+
+                    logToTerminal(`✓ Room created: ${newRoomName} (${newRoomId})`, "success");
+                    
+                    if (newRoom.pending) {
+                        logToTerminal("⏳ Room is pending admin approval.", "warning");
+                        logToTerminal("Once approved, you can connect it to other rooms.", "system");
+                    } else {
+                        logToTerminal("Use 'addexit' to connect this room to the world.", "system");
+                    }
+                    
+                    logToTerminal("Use 'editdesc' to add a description.", "system");
+
+                } catch (error) {
+                    logToTerminal(`Error creating room: ${error.message}`, "error");
+                }
+                break;
+
+            case 'editdesc':
+                // Edit current room description
+                if (!gamePlayers[userId]?.isBuilder && !gamePlayers[userId]?.isAdmin) {
+                    logToTerminal("You need builder permissions to edit rooms.", "error");
+                    break;
+                }
+
+                if (!target) {
+                    logToTerminal("Usage: editdesc [description]", "system");
+                    logToTerminal("Example: editdesc A cozy cottage with a warm fireplace.", "system");
+                    break;
+                }
+
+                const newDescription = originalInput.replace(/^editdesc\s+/i, '').trim();
+                const playerRoomId = gamePlayers[userId].roomId;
+                const roomToEdit = gameWorld[playerRoomId];
+
+                if (!roomToEdit) {
+                    logToTerminal("Current room not found.", "error");
+                    break;
+                }
+
+                // Check permissions - can only edit own rooms or if admin
+                if (roomToEdit.createdBy !== userId && !gamePlayers[userId]?.isAdmin) {
+                    logToTerminal("You can only edit rooms you created.", "error");
+                    break;
+                }
+
+                try {
+                    const apiKey = 'cu4s2YmwWdpMGZ8PfLaJC6RTje1FNSbO';
+                    const response = await fetch(`https://jphsoftware.com/api/rooms/${playerRoomId}`, {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-API-Key': apiKey
+                        },
+                        body: JSON.stringify({ description: newDescription })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+
+                    roomToEdit.description = newDescription;
+                    logToTerminal("✓ Room description updated!", "success");
+                    await showRoom(playerRoomId);
+
+                } catch (error) {
+                    logToTerminal(`Error updating description: ${error.message}`, "error");
+                }
+                break;
+
+            case 'addexit':
+                // Add exit to another room
+                if (!gamePlayers[userId]?.isBuilder && !gamePlayers[userId]?.isAdmin) {
+                    logToTerminal("You need builder permissions to add exits.", "error");
+                    break;
+                }
+
+                const exitParts = originalInput.match(/^addexit\s+(\w+)\s+(\S+)$/i);
+                if (!exitParts) {
+                    logToTerminal("Usage: addexit [direction] [room-id]", "error");
+                    logToTerminal("Example: addexit north forest-clearing", "system");
+                    logToTerminal("Valid directions: north, south, east, west, up, down, northeast, northwest, southeast, southwest", "system");
+                    break;
+                }
+
+                const exitDirection = exitParts[1].toLowerCase();
+                const exitTargetRoom = exitParts[2];
+
+                const validExitDirections = ['north', 'south', 'east', 'west', 'up', 'down', 'northeast', 'northwest', 'southeast', 'southwest', 'ne', 'nw', 'se', 'sw'];
+                if (!validExitDirections.includes(exitDirection)) {
+                    logToTerminal(`Invalid direction: ${exitDirection}`, "error");
+                    logToTerminal("Valid: north, south, east, west, up, down, ne, nw, se, sw", "system");
+                    break;
+                }
+
+                if (!gameWorld[exitTargetRoom]) {
+                    logToTerminal(`Target room "${exitTargetRoom}" doesn't exist.`, "error");
+                    break;
+                }
+
+                const currentRoomForExit = gameWorld[gamePlayers[userId].roomId];
+                
+                // Check permissions
+                if (currentRoomForExit.createdBy !== userId && !gamePlayers[userId]?.isAdmin) {
+                    logToTerminal("You can only add exits to rooms you created.", "error");
+                    break;
+                }
+
+                // Check if room is pending
+                if (currentRoomForExit.pending && !gamePlayers[userId]?.isAdmin) {
+                    logToTerminal("Cannot add exits to pending rooms. Wait for admin approval.", "error");
+                    break;
+                }
+
+                try {
+                    const apiKey = 'cu4s2YmwWdpMGZ8PfLaJC6RTje1FNSbO';
+                    const updatedExits = { ...currentRoomForExit.exits, [exitDirection]: exitTargetRoom };
+                    
+                    const response = await fetch(`https://jphsoftware.com/api/rooms/${gamePlayers[userId].roomId}`, {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-API-Key': apiKey
+                        },
+                        body: JSON.stringify({ exits: updatedExits })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+
+                    currentRoomForExit.exits = updatedExits;
+                    logToTerminal(`✓ Exit added: ${exitDirection} → ${gameWorld[exitTargetRoom].name}`, "success");
+                    await showRoom(gamePlayers[userId].roomId);
+
+                } catch (error) {
+                    logToTerminal(`Error adding exit: ${error.message}`, "error");
+                }
+                break;
+
+            case 'removeexit':
+                // Remove an exit
+                if (!gamePlayers[userId]?.isBuilder && !gamePlayers[userId]?.isAdmin) {
+                    logToTerminal("You need builder permissions to remove exits.", "error");
+                    break;
+                }
+
+                if (!target) {
+                    logToTerminal("Usage: removeexit [direction]", "error");
+                    break;
+                }
+
+                const directionToRemove = target.toLowerCase();
+                const roomForRemoveExit = gameWorld[gamePlayers[userId].roomId];
+                
+                if (roomForRemoveExit.createdBy !== userId && !gamePlayers[userId]?.isAdmin) {
+                    logToTerminal("You can only remove exits from rooms you created.", "error");
+                    break;
+                }
+
+                if (!roomForRemoveExit.exits || !roomForRemoveExit.exits[directionToRemove]) {
+                    logToTerminal(`No exit exists in direction: ${directionToRemove}`, "error");
+                    break;
+                }
+
+                try {
+                    const apiKey = 'cu4s2YmwWdpMGZ8PfLaJC6RTje1FNSbO';
+                    const updatedExits = { ...roomForRemoveExit.exits };
+                    delete updatedExits[directionToRemove];
+                    
+                    const response = await fetch(`https://jphsoftware.com/api/rooms/${gamePlayers[userId].roomId}`, {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-API-Key': apiKey
+                        },
+                        body: JSON.stringify({ exits: updatedExits })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+
+                    roomForRemoveExit.exits = updatedExits;
+                    logToTerminal(`✓ Exit removed: ${directionToRemove}`, "success");
+                    await showRoom(gamePlayers[userId].roomId);
+
+                } catch (error) {
+                    logToTerminal(`Error removing exit: ${error.message}`, "error");
+                }
+                break;
+
+            case 'adddetail':
+                // Add examinable detail to room
+                if (!gamePlayers[userId]?.isBuilder && !gamePlayers[userId]?.isAdmin) {
+                    logToTerminal("You need builder permissions to add details.", "error");
+                    break;
+                }
+
+                const detailParts = originalInput.match(/^adddetail\s+(\S+)\s+(.+)$/i);
+                if (!detailParts) {
+                    logToTerminal("Usage: adddetail [keyword] [description]", "error");
+                    logToTerminal("Example: adddetail fireplace A warm fire crackles invitingly.", "system");
+                    break;
+                }
+
+                const detailKeyword = detailParts[1].toLowerCase();
+                const detailDescription = detailParts[2].trim();
+                const roomForDetail = gameWorld[gamePlayers[userId].roomId];
+                
+                if (roomForDetail.createdBy !== userId && !gamePlayers[userId]?.isAdmin) {
+                    logToTerminal("You can only add details to rooms you created.", "error");
+                    break;
+                }
+
+                try {
+                    const apiKey = 'cu4s2YmwWdpMGZ8PfLaJC6RTje1FNSbO';
+                    const updatedDetails = { ...(roomForDetail.details || {}), [detailKeyword]: detailDescription };
+                    
+                    const response = await fetch(`https://jphsoftware.com/api/rooms/${gamePlayers[userId].roomId}`, {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-API-Key': apiKey
+                        },
+                        body: JSON.stringify({ details: updatedDetails })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+
+                    roomForDetail.details = updatedDetails;
+                    logToTerminal(`✓ Detail added: "${detailKeyword}"`, "success");
+                    logToTerminal(`Players can now examine the ${detailKeyword}.`, "system");
+
+                } catch (error) {
+                    logToTerminal(`Error adding detail: ${error.message}`, "error");
+                }
+                break;
+
+            case 'builderrooms':
+                // List rooms created by this builder
+                if (!gamePlayers[userId]?.isBuilder && !gamePlayers[userId]?.isAdmin) {
+                    logToTerminal("You need builder permissions to use this command.", "error");
+                    break;
+                }
+
+                const myRooms = Object.values(gameWorld).filter(room => room.createdBy === userId);
+                
+                if (myRooms.length === 0) {
+                    logToTerminal("You haven't created any rooms yet.", "system");
+                    logToTerminal("Use 'buildroom [id] [name]' to create your first room!", "system");
+                    break;
+                }
+
+                logToTerminal("═══ Your Rooms ═══", "system");
+                myRooms.forEach(room => {
+                    const status = room.pending ? "[PENDING]" : "[APPROVED]";
+                    const statusClass = room.pending ? "warning" : "success";
+                    logToTerminal(`${status} ${room.name} (${room.id})`, statusClass);
+                });
+                logToTerminal(`Total: ${myRooms.length} rooms`, "system");
+                break;
+
+            case 'makebuilder':
+                // Grant builder permissions (admin only)
+                if (!gamePlayers[userId]?.isAdmin) {
+                    logToTerminal("Admin only command.", "error");
+                    break;
+                }
+
+                if (!target) {
+                    logToTerminal("Usage: makebuilder [player name]", "error");
+                    break;
+                }
+
+                const playerToMakeBuilder = Object.values(gamePlayers).find(p => 
+                    p.username && p.username.toLowerCase() === target.toLowerCase()
+                );
+
+                if (!playerToMakeBuilder) {
+                    logToTerminal(`Player "${target}" not found.`, "error");
+                    break;
+                }
+
+                if (playerToMakeBuilder.isBuilder) {
+                    logToTerminal(`${playerToMakeBuilder.username} is already a builder.`, "warning");
+                    break;
+                }
+
+                try {
+                    const builderPlayerRef = doc(db, `/artifacts/${appId}/public/data/mud-players/${playerToMakeBuilder.userId}`);
+                    await updateDoc(builderPlayerRef, { isBuilder: true });
+                    playerToMakeBuilder.isBuilder = true;
+                    
+                    logToTerminal(`✓ Granted builder permissions to ${playerToMakeBuilder.username}`, "success");
+                    
+                    // Notify the player
+                    if (playerToMakeBuilder.roomId) {
+                        await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                            roomId: playerToMakeBuilder.roomId,
+                            message: `🛠️ You have been granted builder permissions! Type 'help' to see builder commands.`,
+                            timestamp: Date.now(),
+                            type: 'system'
+                        });
+                    }
+
+                } catch (error) {
+                    logToTerminal(`Error granting permissions: ${error.message}`, "error");
+                }
+                break;
+
+            case 'removebuilder':
+                // Revoke builder permissions (admin only)
+                if (!gamePlayers[userId]?.isAdmin) {
+                    logToTerminal("Admin only command.", "error");
+                    break;
+                }
+
+                if (!target) {
+                    logToTerminal("Usage: removebuilder [player name]", "error");
+                    break;
+                }
+
+                const playerToRemoveBuilder = Object.values(gamePlayers).find(p => 
+                    p.username && p.username.toLowerCase() === target.toLowerCase()
+                );
+
+                if (!playerToRemoveBuilder) {
+                    logToTerminal(`Player "${target}" not found.`, "error");
+                    break;
+                }
+
+                if (!playerToRemoveBuilder.isBuilder) {
+                    logToTerminal(`${playerToRemoveBuilder.username} is not a builder.`, "warning");
+                    break;
+                }
+
+                try {
+                    const removeBuilderPlayerRef = doc(db, `/artifacts/${appId}/public/data/mud-players/${playerToRemoveBuilder.userId}`);
+                    await updateDoc(removeBuilderPlayerRef, { isBuilder: false });
+                    playerToRemoveBuilder.isBuilder = false;
+                    
+                    logToTerminal(`✓ Revoked builder permissions from ${playerToRemoveBuilder.username}`, "success");
+
+                } catch (error) {
+                    logToTerminal(`Error revoking permissions: ${error.message}`, "error");
+                }
+                break;
+
+            case 'reviewrooms':
+                // List pending rooms for admin review
+                if (!gamePlayers[userId]?.isAdmin) {
+                    logToTerminal("Admin only command.", "error");
+                    break;
+                }
+
+                const pendingRooms = Object.values(gameWorld).filter(room => room.pending === true);
+                
+                if (pendingRooms.length === 0) {
+                    logToTerminal("No rooms pending approval.", "success");
+                    break;
+                }
+
+                logToTerminal("═══ Pending Rooms ═══", "system");
+                pendingRooms.forEach(room => {
+                    const creator = gamePlayers[room.createdBy];
+                    const creatorName = creator?.username || 'Unknown';
+                    logToTerminal(`${room.name} (${room.id})`, "warning");
+                    logToTerminal(`  Created by: ${creatorName}`, "info");
+                    logToTerminal(`  Description: ${room.description.substring(0, 80)}...`, "game");
+                    logToTerminal(`  Use: approveroom ${room.id} OR rejectroom ${room.id}`, "system");
+                    logToTerminal("", "info");
+                });
+                logToTerminal(`Total pending: ${pendingRooms.length}`, "system");
+                break;
+
+            case 'approveroom':
+                // Approve a pending room
+                if (!gamePlayers[userId]?.isAdmin) {
+                    logToTerminal("Admin only command.", "error");
+                    break;
+                }
+
+                if (!target) {
+                    logToTerminal("Usage: approveroom [room-id]", "error");
+                    break;
+                }
+
+                const roomToApprove = gameWorld[target];
+                
+                if (!roomToApprove) {
+                    logToTerminal(`Room "${target}" not found.`, "error");
+                    break;
+                }
+
+                if (!roomToApprove.pending) {
+                    logToTerminal("This room is already approved.", "warning");
+                    break;
+                }
+
+                try {
+                    const apiKey = 'cu4s2YmwWdpMGZ8PfLaJC6RTje1FNSbO';
+                    const response = await fetch(`https://jphsoftware.com/api/rooms/${target}`, {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-API-Key': apiKey
+                        },
+                        body: JSON.stringify({ pending: false, approvedBy: userId, approvedAt: Date.now() })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+
+                    roomToApprove.pending = false;
+                    logToTerminal(`✓ Approved: ${roomToApprove.name}`, "success");
+                    
+                    // Notify the creator
+                    const creator = gamePlayers[roomToApprove.createdBy];
+                    if (creator && creator.roomId) {
+                        await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                            roomId: creator.roomId,
+                            message: `🎉 Your room "${roomToApprove.name}" has been approved!`,
+                            timestamp: Date.now(),
+                            type: 'system'
+                        });
+                    }
+
+                } catch (error) {
+                    logToTerminal(`Error approving room: ${error.message}`, "error");
+                }
+                break;
+
+            case 'rejectroom':
+                // Reject a pending room
+                if (!gamePlayers[userId]?.isAdmin) {
+                    logToTerminal("Admin only command.", "error");
+                    break;
+                }
+
+                if (!target) {
+                    logToTerminal("Usage: rejectroom [room-id]", "error");
+                    break;
+                }
+
+                const roomToReject = gameWorld[target];
+                
+                if (!roomToReject) {
+                    logToTerminal(`Room "${target}" not found.`, "error");
+                    break;
+                }
+
+                try {
+                    const apiKey = 'cu4s2YmwWdpMGZ8PfLaJC6RTje1FNSbO';
+                    const response = await fetch(`https://jphsoftware.com/api/rooms/${target}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'X-API-Key': apiKey
+                        }
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+
+                    delete gameWorld[target];
+                    logToTerminal(`✓ Rejected and deleted: ${roomToReject.name}`, "success");
+                    
+                    // Notify the creator
+                    const creator = gamePlayers[roomToReject.createdBy];
+                    if (creator && creator.roomId) {
+                        await addDoc(collection(db, `/artifacts/${appId}/public/data/mud-messages`), {
+                            roomId: creator.roomId,
+                            message: `❌ Your room "${roomToReject.name}" was not approved.`,
+                            timestamp: Date.now(),
+                            type: 'system'
+                        });
+                    }
+
+                } catch (error) {
+                    logToTerminal(`Error rejecting room: ${error.message}`, "error");
                 }
                 break;
             
@@ -10039,16 +10669,6 @@ Examples:
                 } else {
                     logToTerminal("✅ AI is working correctly!", "system");
                 }
-                break;
-            case 'forceadmin':
-                logToTerminal("Forcing admin panel visibility.", "system");
-                const adminToggleBtn = document.getElementById('admin-toggle-btn');
-                const appContainer = document.getElementById('app-container');
-                const adminPanel = document.getElementById('admin-panel');
-                adminToggleBtn.classList.remove('hidden');
-                appContainer.classList.add('hidden');
-                adminPanel.classList.remove('hidden');
-                adminPanel.classList.add('flex');
                 break;
             case 'spawnbot':
                 // Admin command to spawn a bot
@@ -10619,7 +11239,6 @@ Examples:
                 
                 try {
                     // Get current room and all connected rooms
-                    const currentRoom = gameWorld[currentPlayerRoomId];
                     const nearbyRoomIds = [currentPlayerRoomId];
                     
                     // Add all rooms connected to current room

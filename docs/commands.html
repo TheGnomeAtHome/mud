@@ -350,6 +350,92 @@
         </section>
         
         <section>
+            <h2>Builder Commands</h2>
+            <div class="info-box">
+                <p><strong>Note:</strong> Builder commands require special permissions granted by admins. Builders can help create and expand the game world!</p>
+            </div>
+            <table class="stat-table">
+                <tr>
+                    <th>Command</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>buildroom [id] [name]</code></td>
+                    <td>Create a new room (requires approval)</td>
+                </tr>
+                <tr>
+                    <td><code>editdesc [description]</code></td>
+                    <td>Edit current room's description</td>
+                </tr>
+                <tr>
+                    <td><code>addexit [dir] [room-id]</code></td>
+                    <td>Add exit to another room (n/s/e/w/up/down)</td>
+                </tr>
+                <tr>
+                    <td><code>removeexit [direction]</code></td>
+                    <td>Remove an exit from current room</td>
+                </tr>
+                <tr>
+                    <td><code>adddetail [keyword] [desc]</code></td>
+                    <td>Add examinable detail to room</td>
+                </tr>
+                <tr>
+                    <td><code>builderrooms</code></td>
+                    <td>List all rooms you've created</td>
+                </tr>
+            </table>
+        </section>
+        
+        <section>
+            <h2>Admin Commands</h2>
+            <div class="warning-box">
+                <p><strong>Admin Only:</strong> These commands are only available to game administrators.</p>
+            </div>
+            <table class="stat-table">
+                <tr>
+                    <th>Command</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>makebuilder [player]</code></td>
+                    <td>Grant builder permissions to a player</td>
+                </tr>
+                <tr>
+                    <td><code>removebuilder [player]</code></td>
+                    <td>Revoke builder permissions</td>
+                </tr>
+                <tr>
+                    <td><code>reviewrooms</code></td>
+                    <td>List pending rooms awaiting approval</td>
+                </tr>
+                <tr>
+                    <td><code>approveroom [room-id]</code></td>
+                    <td>Approve a pending room</td>
+                </tr>
+                <tr>
+                    <td><code>rejectroom [room-id]</code></td>
+                    <td>Reject and delete a pending room</td>
+                </tr>
+                <tr>
+                    <td><code>debug</code></td>
+                    <td>Check current room for data issues</td>
+                </tr>
+                <tr>
+                    <td><code>kick [player]</code></td>
+                    <td>Kick a player from the game</td>
+                </tr>
+                <tr>
+                    <td><code>mute [player] [minutes]</code></td>
+                    <td>Mute a player temporarily</td>
+                </tr>
+                <tr>
+                    <td><code>unmute [player]</code></td>
+                    <td>Remove mute from a player</td>
+                </tr>
+            </table>
+        </section>
+        
+        <section>
             <h2>💡 Command Tips</h2>
             <ul>
                 <li>Commands are case-insensitive (<code>NORTH</code> = <code>north</code>)</li>
