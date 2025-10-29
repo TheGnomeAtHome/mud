@@ -128,25 +128,26 @@ export function initializePlayerPersistence(firebase, appId) {
             console.log(`[PlayerPersistence] Creating Firebase session for ${userId}...`);
             
             // Session data: frequently changing data PLUS key permanent fields for display
+            // Filter out undefined values to avoid Firebase errors
             const sessionData = {
                 // Identity (needed for admin panel and display)
-                name: characterData.name,
-                race: characterData.race,
-                class: characterData.class,
-                gender: characterData.gender,
-                age: characterData.age,
-                description: characterData.description,
+                name: characterData.name || 'Unnamed',
+                race: characterData.race || 'Human',
+                class: characterData.class || 'Adventurer',
+                gender: characterData.gender || 'Other',
+                age: characterData.age || 25,
+                description: characterData.description || 'A mysterious adventurer.',
                 
-                // Stats (for display and calculations)
+                // Stats (for display and calculations) - with defaults
                 level: characterData.level || 1,
                 maxHp: characterData.maxHp || 100,
                 maxMp: characterData.maxMp || 100,
-                str: characterData.str,
-                dex: characterData.dex,
-                con: characterData.con,
-                int: characterData.int,
-                wis: characterData.wis,
-                cha: characterData.cha,
+                str: characterData.str || 10,
+                dex: characterData.dex || 10,
+                con: characterData.con || 10,
+                int: characterData.int || 10,
+                wis: characterData.wis || 10,
+                cha: characterData.cha || 10,
                 
                 // Permissions
                 isAdmin: characterData.isAdmin || false,
@@ -164,6 +165,13 @@ export function initializePlayerPersistence(firebase, appId) {
                 poisonInterval: null,
                 lastPoisonTick: null
             };
+            
+            // Remove any remaining undefined values (defensive)
+            Object.keys(sessionData).forEach(key => {
+                if (sessionData[key] === undefined) {
+                    delete sessionData[key];
+                }
+            });
             
             const playerRef = doc(db, `/artifacts/${appId}/public/data/mud-players/${userId}`);
             await setDoc(playerRef, sessionData, { merge: true });
