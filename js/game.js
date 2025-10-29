@@ -9751,6 +9751,7 @@ Examples:
                 logToTerminal("Emotes: wave, dance, laugh, smile, nod, bow, clap, cheer, cry, sigh, shrug, grin, frown, wink, yawn, stretch, jump, sit, stand, kneel, salute, think, ponder, scratch.", "system");
                 logToTerminal("Or use 'emote [action]' for custom actions!", "system");
                 logToTerminal("Special: 'examine frame' to view the leaderboard!", "system");
+                logToTerminal("Aliases: 'alias [shortcut] [command]' to create shortcuts, 'aliases' to list, 'unalias [shortcut]' to remove.", "system");
                 logToTerminal("Weather: 'weather' to check current conditions and your status.", "system");
                 logToTerminal("Accessibility: Type 'screenreader' to enable/disable screen reader mode for visually impaired players.", "system");
                 logToTerminal("Test AI: Type 'test ai' to check if AI is working.", "system");
@@ -9778,6 +9779,95 @@ Examples:
                     logToTerminal("setweather [type] - Change weather (sunny/rainy/snowy/stormy/foggy/hot/cold/cloudy)", "system");
                     logToTerminal("resetroom [room id] - Reset a room's pushable objects and revealed items", "system");
                     logToTerminal("refreshcache [collection] - Reload game data from MySQL (all or specific: rooms, items, npcs, monsters, classes, spells, quests)", "system");
+                }
+                break;
+            
+            case 'alias':
+                // Create a command alias: alias [shortcut] [full command]
+                if (!target) {
+                    logToTerminal("Usage: alias [shortcut] [full command]", "system");
+                    logToTerminal("Example: alias gg goto graveyard", "system");
+                    logToTerminal("Use 'aliases' to see all your aliases, or 'unalias [shortcut]' to remove one.", "system");
+                    break;
+                }
+                
+                // Parse: target is the shortcut, everything after is the full command
+                const aliasMatch = originalInput.match(/^alias\s+(\w+)\s+(.+)$/i);
+                if (!aliasMatch) {
+                    logToTerminal("Usage: alias [shortcut] [full command]", "error");
+                    break;
+                }
+                
+                const aliasShortcut = aliasMatch[1].toLowerCase();
+                const aliasCommand = aliasMatch[2].trim();
+                
+                // Don't allow overriding core commands
+                const coreCommands = ['look', 'go', 'get', 'drop', 'inventory', 'i', 'inv', 'examine', 'attack', 
+                    'help', 'quit', 'say', 'score', 'stats', 'who', 'alias', 'aliases', 'unalias', 'cast', 
+                    'spells', 'quests', 'party', 'guild', 'trade', 'buy', 'sell', 'equip', 'unequip'];
+                
+                if (coreCommands.includes(aliasShortcut)) {
+                    logToTerminal(`Cannot create alias '${aliasShortcut}' - it conflicts with a core command.`, "error");
+                    break;
+                }
+                
+                try {
+                    const playerRef = doc(db, `/artifacts/${appId}/public/data/mud-players/${userId}`);
+                    const currentAliases = gamePlayers[userId]?.aliases || {};
+                    currentAliases[aliasShortcut] = aliasCommand;
+                    
+                    await updateDoc(playerRef, { aliases: currentAliases });
+                    gamePlayers[userId].aliases = currentAliases;
+                    
+                    logToTerminal(`Alias created: '${aliasShortcut}' → '${aliasCommand}'`, "success");
+                } catch (error) {
+                    logToTerminal(`Error creating alias: ${error.message}`, "error");
+                }
+                break;
+            
+            case 'aliases':
+                // List all player aliases
+                const playerAliases = gamePlayers[userId]?.aliases || {};
+                const aliasKeys = Object.keys(playerAliases);
+                
+                if (aliasKeys.length === 0) {
+                    logToTerminal("You have no aliases set.", "system");
+                    logToTerminal("Use 'alias [shortcut] [command]' to create one.", "system");
+                    logToTerminal("Example: alias gg goto graveyard", "system");
+                    break;
+                }
+                
+                logToTerminal("═══ Your Command Aliases ═══", "system");
+                aliasKeys.forEach(shortcut => {
+                    logToTerminal(`  ${shortcut} → ${playerAliases[shortcut]}`, "game");
+                });
+                logToTerminal(`Total: ${aliasKeys.length} alias${aliasKeys.length !== 1 ? 'es' : ''}`, "system");
+                break;
+            
+            case 'unalias':
+                // Remove an alias
+                if (!target) {
+                    logToTerminal("Usage: unalias [shortcut]", "system");
+                    break;
+                }
+                
+                const shortcutToRemove = target.toLowerCase();
+                const currentPlayerAliases = gamePlayers[userId]?.aliases || {};
+                
+                if (!currentPlayerAliases[shortcutToRemove]) {
+                    logToTerminal(`No alias found for '${shortcutToRemove}'.`, "error");
+                    break;
+                }
+                
+                try {
+                    delete currentPlayerAliases[shortcutToRemove];
+                    const playerRef = doc(db, `/artifacts/${appId}/public/data/mud-players/${userId}`);
+                    await updateDoc(playerRef, { aliases: currentPlayerAliases });
+                    gamePlayers[userId].aliases = currentPlayerAliases;
+                    
+                    logToTerminal(`Alias '${shortcutToRemove}' removed.`, "success");
+                } catch (error) {
+                    logToTerminal(`Error removing alias: ${error.message}`, "error");
                 }
                 break;
             

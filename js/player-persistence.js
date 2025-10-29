@@ -91,7 +91,8 @@ export function initializePlayerPersistence(firebase, appId) {
                 isAdmin: characterData.isAdmin || false,
                 monstersKilled: characterData.monstersKilled || 0,
                 deaths: characterData.deaths || 0,
-                createdAt: characterData.createdAt || Date.now()
+                createdAt: characterData.createdAt || Date.now(),
+                aliases: characterData.aliases || {}
             };
             
             const response = await fetch(`${MYSQL_API_URL}/players/${userId}`, {
@@ -163,7 +164,10 @@ export function initializePlayerPersistence(firebase, appId) {
                 poisonedUntil: null,
                 poisonDamage: null,
                 poisonInterval: null,
-                lastPoisonTick: null
+                lastPoisonTick: null,
+                
+                // Player customization
+                aliases: characterData.aliases || {}
             };
             
             // Remove any remaining undefined values (defensive)

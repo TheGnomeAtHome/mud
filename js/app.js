@@ -964,6 +964,15 @@ export async function initializeApp() {
                     expandedCmdText = 'inventory';
                 }
                 
+                // Check for player aliases and expand
+                const firstWord = expandedCmdText.split(' ')[0].toLowerCase();
+                const playerAliases = gamePlayers[userId]?.aliases || {};
+                if (playerAliases[firstWord]) {
+                    const restOfCommand = expandedCmdText.split(' ').slice(1).join(' ');
+                    expandedCmdText = playerAliases[firstWord] + (restOfCommand ? ' ' + restOfCommand : '');
+                    logToTerminal(`[Alias: ${firstWord} → ${playerAliases[firstWord]}]`, 'system');
+                }
+                
                 logToTerminal(`> ${cmdText}`, 'chat');
                 
                 const simpleCommands = ['help', 'inventory', 'i', 'inv', 'score', 'stats', 'news', 'who', 'logout', 'forceadmin', 'look', 'testai', 'test ai', 'listmodels', 'list models', 'listbots', 'killbots', 'spawnbot', 'stopbots', 'rooms', 'invis', 'invisible', 'shout', 'screenreader'];
