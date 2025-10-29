@@ -80,6 +80,61 @@ body {
 .combat-log { color: #ff6347; } /* Tomato red for combat */
 .loot-log { color: #ffd700; } /* Gold for loot */
 
+/* Message Type Colors - Enhanced for readability */
+.game { color: #88dd88; } /* Soft green for general game text */
+.system { color: #00d4ff; } /* Bright cyan for system messages */
+.error { color: #ff4444; } /* Bright red for errors */
+.success { color: #44ff44; } /* Bright green for success */
+.npc { color: #ffaa44; } /* Orange for NPC speech */
+.chat { color: #ff88ff; } /* Pink for player speech */
+.action { color: #ffff88; } /* Yellow for actions/emotes */
+.party { color: #88ddff; } /* Light blue for party chat */
+.combat { color: #ff6666; } /* Red for combat actions */
+
+/* Player name highlighting */
+.player-name { 
+    color: #00ffff; /* Cyan */
+    font-weight: bold;
+    text-shadow: 0 0 3px rgba(0, 255, 255, 0.5);
+}
+
+/* Speech/dialogue highlighting */
+.speech {
+    color: #ffcc99; /* Warm peach for speech */
+    font-style: italic;
+}
+
+/* Item names */
+.item-name {
+    color: #ffd700; /* Gold */
+    font-weight: bold;
+}
+
+/* NPC names */
+.npc-name {
+    color: #ffaa44; /* Orange */
+    font-weight: bold;
+    text-shadow: 0 0 3px rgba(255, 170, 68, 0.5);
+}
+
+/* Guild chat */
+.guild {
+    color: #cc99ff; /* Light purple */
+}
+
+/* Room/location names */
+.location-name {
+    color: #66ff99; /* Mint green */
+    font-weight: bold;
+    text-shadow: 0 0 3px rgba(102, 255, 153, 0.5);
+}
+
+/* Command input echo */
+.command-echo {
+    color: #aaaaaa; /* Gray */
+    font-style: italic;
+}
+
 /* Critical hit styling */
 .critical-damage {
     color: #ff0000;

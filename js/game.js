@@ -851,13 +851,13 @@ export function initializeGameLogic(dependencies) {
 
         currentPlayerRoomId = roomId;
 
-        logToTerminal(`\n<span class="text-white text-xl font-bold">${room.name}</span>`, 'game');
+        logToTerminal(`\n<span class="location-name">${room.name}</span>`, 'game');
         logToTerminal(room.description, 'game');
         
         // Show weather information for outdoor rooms
         if (typeof weatherSystem !== 'undefined' && !room.isIndoor) {
             const weather = weatherSystem.getCurrentWeather();
-            logToTerminal(`<span class="text-yellow-400">⛅ ${weather.description}</span>`, 'game');
+            logToTerminal(`⛅ ${weather.description}`, 'system');
         }
         
         // Collect all items: regular room items + revealed items from pushables
@@ -889,12 +889,12 @@ export function initializeGameLogic(dependencies) {
                 const itemName = addArticle(item.name);
                 return quantity > 1 ? `${itemName} (x${quantity})` : itemName;
             }).join(', ');
-            logToTerminal(`You see here: <span class="text-yellow-300">${itemNames}</span>.`, 'game');
+            logToTerminal(`You see here: <span class="item-name">${itemNames}</span>.`, 'game');
         }
         
         if (room.npcs && room.npcs.length > 0) {
             const npcNames = room.npcs.map(npcId => gameNpcs[npcId]?.name || 'a mysterious figure').join(', ');
-            logToTerminal(`You see <span class="text-lime-300">${npcNames}</span> here.`, 'game');
+            logToTerminal(`You see <span class="npc-name">${npcNames}</span> here.`, 'game');
         }
         
         const monstersInRoom = Object.values(activeMonsters).filter(m => m.roomId === roomId);

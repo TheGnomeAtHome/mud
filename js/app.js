@@ -279,7 +279,7 @@ export async function initializeApp() {
                     
                     // Special handling for NPC conversations - always show if in same room and new
                     if (msg.isNpcConversation && msg.roomId === myCurrentRoomId && messageTime >= sessionStartTime) {
-                        logToTerminal(`<span class="text-lime-300">${msg.username}</span> says, "${msg.text}"`, 'game');
+                        logToTerminal(`<span class="npc-name">${msg.username}</span> says, <span class="speech">"${msg.text}"</span>`, 'npc');
                         return; // Skip the normal message processing
                     }
                     
@@ -288,19 +288,19 @@ export async function initializeApp() {
                         // Check if message starts with pronouns like "He", "She", etc. (action descriptions)
                         const startsWithPronoun = /^(he|she|they|it)\s+/i.test(msg.text.trim());
                         if (startsWithPronoun) {
-                            // Replace pronoun with NPC name and wrap entire message in lime color
-                            const textWithName = msg.text.trim().replace(/^(he|she|they|it)\s+/i, `${msg.username} `);
-                            logToTerminal(`<span class="text-lime-300">${textWithName}</span>`, 'game');
+                            // Replace pronoun with NPC name and wrap as action
+                            const textWithName = msg.text.trim().replace(/^(he|she|they|it)\s+/i, `<span class="npc-name">${msg.username}</span> `);
+                            logToTerminal(textWithName, 'action');
                         } else {
-                            // Direct dialogue or action, show as-is with lime color
-                            logToTerminal(`<span class="text-lime-300">${msg.text}</span>`, 'game');
+                            // Direct dialogue or action, show as NPC speech
+                            logToTerminal(`<span class="npc-name">${msg.username}</span>: ${msg.text}`, 'npc');
                         }
                         return; // Skip the normal message processing
                     }
                     
                     // Special handling for NPC responses to room chat - always show if in same room and new
                     if (msg.isNpcResponse && msg.roomId === myCurrentRoomId && messageTime >= sessionStartTime) {
-                        logToTerminal(`<span class="text-lime-300">${msg.username}</span> says, "${msg.text}"`, 'game');
+                        logToTerminal(`<span class="npc-name">${msg.username}</span> says, <span class="speech">"${msg.text}"</span>`, 'npc');
                         return; // Skip the normal message processing
                     }
                     
@@ -325,7 +325,7 @@ export async function initializeApp() {
                         const myPlayer = gamePlayers[userId];
                         if (myPlayer && myPlayer.guildId === msg.guildId && messageTime >= sessionStartTime) {
                             const sender = msg.senderId === userId ? "You" : msg.senderName;
-                            logToTerminal(`[Guild] ${sender}: ${msg.text}`, 'system');
+                            logToTerminal(`[Guild] ${sender}: ${msg.text}`, 'guild');
                         }
                         return; // Skip normal processing
                     }
@@ -347,9 +347,9 @@ export async function initializeApp() {
                         } else if (msg.text.includes(' leaves ') || msg.text.includes(' arrives')) {
                             logToTerminal(msg.text, 'system');
                         } else {
-                            const sender = msg.senderId === userId ? "You" : `<span class="text-fuchsia-400">${msg.senderName}</span>`;
+                            const sender = msg.senderId === userId ? "You" : `<span class="player-name">${msg.senderName}</span>`;
                             const verb = msg.senderId === userId ? "say" : "says";
-                            logToTerminal(`${sender} ${verb}, "${msg.text}"`, 'chat');
+                            logToTerminal(`${sender} ${verb}, <span class="speech">"${msg.text}"</span>`, 'chat');
                         }
                     }
                 }
